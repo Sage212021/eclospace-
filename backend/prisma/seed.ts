@@ -3336,6 +3336,14 @@ async function main() {
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
     {
+      slug: "2026-11-impression-repere-vers-rubrique-fabrication",
+      version: "2026.11",
+      title: "Nouveauté — Impression : un repère vers le devis et le bon de commande",
+      body: "Petite aide à l'écran : à l'étape Impression, l'encadré « Lancement de l'impression — double validation » rappelle désormais où se prépare le travail concret. Un repère « 💡 Avant de valider : préparez le devis et le bon de commande dans la rubrique “Impression et fabrication” (plus bas sur cette fiche) » évite de confondre le feu vert (la double signature qui autorise l'impression) avec la préparation du devis, du bon de commande et de la réception des exemplaires, qui se font dans la rubrique dédiée.",
+      permissionModules: ["printing"],
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-impression-bon-commande-fiche-technique-consignes",
       version: "2026.11",
       title: "Nouveauté — Bon de commande imprimeur : fiche technique automatique + consignes",

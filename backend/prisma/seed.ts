@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-correction-regroupee-par-responsable",
+      version: "2026.11",
+      title: "Nouveauté — Correction éditoriale : les manuscrits rangés par responsable",
+      body: "Fini la longue liste mélangée dans « Correction éditoriale » : chaque manuscrit est maintenant rangé dans un dossier (accordéon) au nom de son responsable. Vous choisissez l'axe en haut de page : « Par infographe » (le responsable de production) ou « Par correcteur » (la personne qui corrige). Sous chaque nom : le nombre de dossiers, l'avancement moyen et une petite barre de progression ; un clic déplie la liste de ses manuscrits (titre, auteur, dates de réception et de début de correction, % d'avancement, points bloquants, retard), un deuxième clic la replie. Tout en haut, une rubrique « Nouveaux manuscrits à affecter » reçoit automatiquement les dossiers pas encore confiés : la Direction éditoriale peut y affecter (ou réaffecter) directement depuis la liste ; une fois affecté, le dossier rejoint le portefeuille du responsable (il ne reste jamais dans les deux à la fois). Un filtre permet d'afficher tout le monde ou une seule personne, et la recherche porte aussi sur l'auteur. L'affectation du correcteur par manuscrit reste disponible comme avant.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "INFOG", "DG"],
+    },
+    {
       slug: "2026-10-relecture-blocage-lecture-incomplete",
       version: "2026.10",
       title: "Nouveauté — Relecture BAT1/BAT2 : plus jamais un rapport sur une lecture partielle",

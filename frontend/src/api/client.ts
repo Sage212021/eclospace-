@@ -1571,13 +1571,19 @@ export interface CorrectionManuscript {
   id: string;
   manuscript_number: string;
   title: string;
+  author: string | null;
   received_at: string;
+  correction_started_at: string | null;
   sub_state: CorrectionSubState;
   tasks_total: number;
   tasks_done: number;
   blocking: number;
   progress_pct: number;
   en_retard: boolean;
+  infographe_id: string | null;
+  infographe_name: string | null;
+  correcteur_id: string | null;
+  correcteur_name: string | null;
 }
 export interface CorrectionDashboard {
   en_correction: number;

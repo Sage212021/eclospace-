@@ -3273,12 +3273,21 @@ export interface PurchaseOrder {
   } | null };
   deliveryLocation?: { label: string } | null;
   printerInstructions?: string | null;
+  establishedByName?: string | null;
+  establishedByFunction?: string | null;
   goodsReceipts?: GoodsReceipt[];
 }
 
+// Libellé lisible de la fonction qui a établi le bon.
+export const BON_FUNCTION_LABELS: Record<string, string> = {
+  impression: "Responsable Impression",
+  stock: "Responsable Stock & magasin",
+  daf: "DAF",
+};
+
 // Références + fiche technique + consignes d'un bon de commande, prêtes à être
 // rendues (aperçu HTML comme PDF). Source UNIQUE pour éviter toute divergence.
-export function purchaseOrderExtras(po: PurchaseOrder): { author: string | null; isbn: string | null; specRows: [string, string][]; instructions: string | null } {
+export function purchaseOrderExtras(po: PurchaseOrder): { author: string | null; isbn: string | null; specRows: [string, string][]; instructions: string | null; establishedBy: string | null } {
   const ms = po.quote?.manuscript;
   const contrib = ms?.workContributors?.[0]?.partner;
   const author = contrib ? (contrib.penName?.trim() || `${contrib.firstName} ${contrib.lastName}`.trim() || null) : null;
@@ -3295,10 +3304,13 @@ export function purchaseOrderExtras(po: PurchaseOrder): { author: string | null;
     add("Finition / pelliculage", s.lamination);
     add("Dos", s.spineWidthMm ? `${s.spineWidthMm} mm` : null);
   }
-  return { author, isbn, specRows, instructions: (po.printerInstructions ?? "").trim() || null };
+  const fn = po.establishedByFunction ? (BON_FUNCTION_LABELS[po.establishedByFunction] ?? po.establishedByFunction) : null;
+  const name = (po.establishedByName ?? "").trim() || null;
+  const establishedBy = name ? (fn ? `${name} (${fn})` : name) : null;
+  return { author, isbn, specRows, instructions: (po.printerInstructions ?? "").trim() || null, establishedBy };
 }
 
-export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number; printer_instructions?: string }) {
+export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number; printer_instructions?: string; established_by_function?: string }) {
   return request<PurchaseOrder>(`/api/v1/print-quotes/${quoteId}/purchase-order`, { method: "POST", body: JSON.stringify(input) });
 }
 

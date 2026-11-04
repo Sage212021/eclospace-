@@ -17,6 +17,7 @@ describe("Bon de commande — consignes + fiche technique auto", () => {
   let adminId: string;
   let msId: string;
   let poId: string;
+  let printerId: string;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -38,7 +39,7 @@ describe("Bon de commande — consignes + fiche technique auto", () => {
 
     // Imprimeur + devis sélectionné + bon de commande (créés directement).
     const printer = await app.inject({ method: "POST", url: "/api/v1/printers/quick", headers: { cookie }, payload: { name: `Impr ${rnd()}` } });
-    const printerId = printer.json().id;
+    printerId = printer.json().id;
     const quote = await prisma.printQuote.create({
       data: { manuscriptId: msId, printerId, quantities: [500, 1000], amounts: { "500": 120000 }, status: "selected", selectedQuantity: 500 },
     });
@@ -73,5 +74,21 @@ describe("Bon de commande — consignes + fiche technique auto", () => {
     const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${msId}/purchase-orders`, headers: { cookie } });
     const po = res.json().find((p: { id: string }) => p.id === poId);
     expect(po.printerInstructions).toContain("Pantone 185 C");
+  });
+
+  it("établit le bon via la route et trace qui l'a établi (nom + fonction)", async () => {
+    // Un devis sélectionné, puis génération du bon au titre du « stock ».
+    const quote = await prisma.printQuote.create({
+      data: { manuscriptId: msId, printerId, quantities: [300], amounts: { "300": 90000 }, status: "selected", selectedQuantity: 300 },
+    });
+    const gen = await app.inject({
+      method: "POST", url: `/api/v1/print-quotes/${quote.id}/purchase-order`, headers: { cookie },
+      payload: { established_by_function: "stock" },
+    });
+    expect(gen.statusCode).toBe(201);
+
+    const fresh = await prisma.purchaseOrder.findUniqueOrThrow({ where: { id: gen.json().id } });
+    expect(fresh.establishedByName).toBe("admin"); // instantané du nom de l'établisseur
+    expect(fresh.establishedByFunction).toBe("stock");
   });
 });

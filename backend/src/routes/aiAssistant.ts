@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { runConversationReply, extractUploadAttachment, type UploadAttachment } from "../lib/aiAssistant.js";
+import { buildSageDocx } from "../lib/sageDocx.js";
 import { runLearningAnalysis } from "../lib/aiLearning.js";
 import { runCatalogueAudit } from "../lib/catalogueAudit.js";
 
@@ -50,6 +51,29 @@ export default async function aiAssistantRoutes(fastify: FastifyInstance) {
     if (!conv) return reply.code(404).send({ code: "not_found", message: "Conversation introuvable." });
     const messages = await prisma.aiConversationMessage.findMany({ where: { conversationId: id, deletedAt: null }, orderBy: { createdAt: "asc" } });
     return reply.send({ id: conv.id, title: conv.title, messages: messages.map(messageView) });
+  });
+
+  // Export Word (.docx) d'un message de SAGE (un document rédigé : contrat,
+  // rapport, note…). Réservé au propriétaire de la conversation. Le fichier est
+  // signé « Le Service éditorial — Éditions Éclosion », sans aucune mention d'IA
+  // (règle d'or des documents LIVRÉS). Le PDF équivalent est produit côté
+  // navigateur (sageAnswerPdf) ; ici c'est la version Word modifiable.
+  fastify.get("/api/v1/sage/conversations/:id/messages/:messageId/export.docx", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
+    const { id, messageId } = request.params as { id: string; messageId: string };
+    const conv = await prisma.aiConversation.findFirst({ where: { id, ownerId: request.user!.id, archivedAt: null }, select: { id: true } });
+    if (!conv) return reply.code(404).send({ code: "not_found", message: "Conversation introuvable." });
+    const message = await prisma.aiConversationMessage.findFirst({ where: { id: messageId, conversationId: id, deletedAt: null }, select: { role: true, content: true, status: true, createdAt: true } });
+    if (!message || message.role !== "assistant" || message.status !== "done" || !message.content.trim()) {
+      return reply.code(404).send({ code: "not_found", message: "Document introuvable." });
+    }
+    const buffer = await buildSageDocx(message.content, { dateIso: message.createdAt.toISOString() });
+    const stamp = message.createdAt.toISOString().slice(0, 10).replace(/-/g, "");
+    const filename = `Document-editorial-Eclosion-${stamp}.docx`;
+    await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "ai_conversation_message", entityId: messageId, newValues: { format: "docx" }, ipAddress: request.ip });
+    return reply
+      .header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+      .header("Content-Disposition", `attachment; filename="${filename}"`)
+      .send(buffer);
   });
 
   // Créer une conversation ; un premier message peut être envoyé dans la foulée.

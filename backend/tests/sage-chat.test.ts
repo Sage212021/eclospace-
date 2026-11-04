@@ -190,6 +190,41 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     }
   });
 
+  it("exporte un document de SAGE en Word (.docx), réservé au propriétaire", async () => {
+    longDoc = true;
+    longDocStep = 0;
+    let convId = "";
+    let messageId = "";
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+      convId = created.json().id as string;
+      const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${convId}/messages`, headers: { cookie: dgCookie }, payload: { content: "Rédige un contrat d'édition complet." } });
+      const assistant = await waitMessage(msg.json().assistant_message_id);
+      expect(assistant.status).toBe("done");
+      messageId = assistant.id;
+    } finally {
+      longDoc = false;
+    }
+
+    const dl = await app.inject({ method: "GET", url: `/api/v1/sage/conversations/${convId}/messages/${messageId}/export.docx`, headers: { cookie: dgCookie } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.headers["content-type"]).toContain("wordprocessingml.document");
+    expect(String(dl.headers["content-disposition"])).toContain(".docx");
+    // Un .docx est une archive ZIP : signature « PK ».
+    expect(dl.rawPayload.slice(0, 2).toString("latin1")).toBe("PK");
+    expect(dl.rawPayload.length).toBeGreaterThan(1000);
+
+    // Un autre DG ne peut pas exporter le document d'un collègue (404).
+    const other = await createUserWithRole(`dg_docx_${rnd()}`, "DIR_GENERAL", "DgDocx123!");
+    const otherCookie = await login(other.username, "DgDocx123!");
+    const forbidden = await app.inject({ method: "GET", url: `/api/v1/sage/conversations/${convId}/messages/${messageId}/export.docx`, headers: { cookie: otherCookie } });
+    expect(forbidden.statusCode).toBe(404);
+
+    // Un message inexistant renvoie 404.
+    const missing = await app.inject({ method: "GET", url: `/api/v1/sage/conversations/${convId}/messages/00000000-0000-0000-0000-000000000000/export.docx`, headers: { cookie: dgCookie } });
+    expect(missing.statusCode).toBe(404);
+  });
+
   it("le premier message peut être envoyé dès la création, et sert de titre par défaut", async () => {
     const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: { content: "Réflexion sur une collection jeunesse illustrée" } });
     expect(created.statusCode).toBe(201);

@@ -1499,6 +1499,13 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-export-word",
+      version: "2026.11",
+      title: "Nouveauté — Télécharger les documents de SAGE en Word",
+      body: "En plus du PDF, vous pouvez désormais télécharger un document rédigé par SAGE (contrat, rapport, note…) au format Word (.docx) : un fichier modifiable, à l'en-tête des Éditions Éclosion, pour continuer le travail ou le faire signer. Le bouton « Télécharger en Word » apparaît sous chaque réponse de SAGE, à côté de « Télécharger en PDF ». Titres, articles, listes, tableaux et espace de signature sont conservés. Le document est présenté au nom du Service éditorial, sans aucune mention technique.",
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-sage-documents-longs-sans-coupure",
       version: "2026.11",
       title: "Nouveauté — SAGE rédige les documents longs jusqu'au bout",

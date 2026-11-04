@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-reecriture-livrables-telechargeables",
+      version: "2026.11",
+      title: "Nouveauté — Réécritures de SAGE : des livrables Word et PDF",
+      body: "Dans l'atelier de réécriture, chaque proposition de SAGE peut désormais être téléchargée comme un vrai document, au lieu de rester seulement à l'écran. Sous chaque réécriture terminée, une rubrique « Livrables de réécriture » propose « Télécharger en Word » (modifiable) et « Télécharger en PDF ». Le document reprend le titre de l'ouvrage, le texte réécrit en entier, les observations éditoriales et le texte initial pour référence, à l'en-tête des Éditions Éclosion. Deuxième amélioration : quand vous demandez la réécriture complète d'un chapitre, SAGE va jusqu'au bout du texte au lieu de s'arrêter en cours de route — vous obtenez l'intégralité, pas un extrait.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "DG"],
+    },
+    {
       slug: "2026-11-sage-export-word",
       version: "2026.11",
       title: "Nouveauté — Télécharger les documents de SAGE en Word",

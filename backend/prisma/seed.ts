@@ -3336,6 +3336,14 @@ async function main() {
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
     {
+      slug: "2026-11-impression-bon-commande-fiche-technique-consignes",
+      version: "2026.11",
+      title: "Nouveauté — Bon de commande imprimeur : fiche technique automatique + consignes",
+      body: "Le bon de commande envoyé à l'imprimeur est maintenant complet. (1) La FICHE TECHNIQUE de l'ouvrage — format, nombre de pages, papier intérieur + grammage, papier de couverture, reliure, finition/pelliculage, largeur du dos — s'affiche automatiquement dans la rubrique « Impression et fabrication » et se reporte sur le bon de commande imprimé. Elle est RÉCUPÉRÉE de ce qui a déjà été saisi à l'étape Maquette : aucune double saisie (si elle est vide, l'écran invite à la compléter à la Maquette). (2) Un champ « Consignes à l'imprimeur » (texte libre) permet d'ajouter des précisions (couleurs Pantone, papier recyclé, pré-presse, conditionnement de livraison…) ; elles figurent aussi sur le bon de commande. Ainsi l'imprimeur reçoit toutes les spécifications à respecter, dans un seul document.",
+      permissionModules: ["printing"],
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-impression-carnet-imprimeurs-devis",
       version: "2026.11",
       title: "Nouveauté — Étape Impression : ajouter un imprimeur et lancer un devis",

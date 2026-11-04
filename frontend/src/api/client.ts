@@ -3264,13 +3264,19 @@ export interface PurchaseOrder {
   deliveryDue?: string | null;
   quantityTolerancePct?: string | null;
   printer?: { partner: { firstName: string; lastName: string } };
-  quote?: { manuscript?: { title: string; manuscriptNumber: string } | null };
+  // La fiche technique (productionSpecs) est RÉCUPÉRÉE automatiquement de la Maquette.
+  quote?: { manuscript?: { title: string; manuscriptNumber: string; productionSpecs?: ProductionSpecs | null } | null };
   deliveryLocation?: { label: string } | null;
+  printerInstructions?: string | null;
   goodsReceipts?: GoodsReceipt[];
 }
 
-export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number }) {
+export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number; printer_instructions?: string }) {
   return request<PurchaseOrder>(`/api/v1/print-quotes/${quoteId}/purchase-order`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updatePurchaseOrderInstructions(poId: string, text: string) {
+  return request<PurchaseOrder>(`/api/v1/purchase-orders/${poId}/instructions`, { method: "PATCH", body: JSON.stringify({ printer_instructions: text }) });
 }
 
 export function listPurchaseOrders(manuscriptId: string) {

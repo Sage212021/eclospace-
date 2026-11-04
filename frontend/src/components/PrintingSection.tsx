@@ -4,6 +4,7 @@ import {
   createGoodsReceiptClaim,
   createPurchaseOrder,
   createPrinterQuick,
+  getProductionSpecs,
   listPrintQuotes,
   listPrinters,
   listPurchaseOrders,
@@ -13,10 +14,12 @@ import {
   requestPrintQuote,
   selectPrintQuote,
   setGoodsReceiptQc,
+  updatePurchaseOrderInstructions,
   updatePurchaseOrderStatus,
   type GoodsReceipt,
   type PrintQuote,
   type Printer,
+  type ProductionSpecs,
   type PurchaseOrder,
   type QcChecklistEntry,
   type QcChecklistItem,
@@ -40,6 +43,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [qcItems, setQcItems] = useState<QcChecklistItem[]>([]);
+  const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Carnet d'imprimeurs (ajout rapide) + formulaire de demande de devis.
   const [showAddPrinter, setShowAddPrinter] = useState(false);
@@ -48,10 +52,14 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
   const [qtys, setQtys] = useState("500, 1000");
 
   const refresh = async () => {
-    const [printerList, quoteData, orderList] = await Promise.all([listPrinters(), listPrintQuotes(manuscriptId), listPurchaseOrders(manuscriptId)]);
+    const [printerList, quoteData, orderList, specsData] = await Promise.all([
+      listPrinters(), listPrintQuotes(manuscriptId), listPurchaseOrders(manuscriptId),
+      getProductionSpecs(manuscriptId).catch(() => null),
+    ]);
     setPrinters(printerList);
     setQuotes(quoteData.quotes);
     setOrders(orderList);
+    setSpecs(specsData);
   };
 
   useEffect(() => {
@@ -168,6 +176,30 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
     <CollapsibleSection title="Impression et fabrication" storageKey="fiche:impression">
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 
+      {/* Fiche technique de l'ouvrage — RÉCUPÉRÉE automatiquement de la Maquette
+          (lecture seule ici ; saisie à l'étape Maquette). Reprise au bon de commande. */}
+      <div style={{ marginBottom: 12, padding: 10, border: "1px solid var(--line)", borderRadius: 8 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Fiche technique de l'ouvrage <span style={{ color: "var(--muted)", fontWeight: 400 }}>— renseignée à la Maquette</span></div>
+        {(() => {
+          const rows: [string, string][] = [];
+          const add = (l: string, v: string | number | null | undefined, s = "") => { if (v !== null && v !== undefined && String(v).trim() !== "") rows.push([l, `${v}${s}`]); };
+          if (specs) {
+            add("Format", specs.trimFormat);
+            add("Pages", specs.finalPages);
+            add("Papier intérieur", [specs.paperInterior, specs.paperInteriorGsm ? `${specs.paperInteriorGsm} g/m²` : ""].filter(Boolean).join(" · ") || null);
+            add("Papier couverture", specs.paperCover);
+            add("Reliure", specs.binding);
+            add("Finition / pelliculage", specs.lamination);
+            add("Dos", specs.spineWidthMm ? `${specs.spineWidthMm} mm` : null);
+          }
+          return rows.length > 0
+            ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 16px", fontSize: 12.5 }}>
+                {rows.map(([k, v]) => <div key={k}><span style={{ color: "var(--muted)" }}>{k} : </span><strong>{v}</strong></div>)}
+              </div>
+            : <div style={{ fontSize: 12.5, color: "var(--warn, #B87400)" }}>Non renseignée. Complétez-la à l'étape <strong>Maquette / Mise en page</strong> (section Production) — elle apparaîtra ici et sur le bon de commande, sans ressaisie.</div>;
+        })()}
+      </div>
+
       {/* Carnet d'imprimeurs : sans imprimeur, impossible de demander un devis. */}
       {canManage && (
         <div style={{ marginBottom: 12, padding: 10, border: "1px solid var(--line)", borderRadius: 8, background: "var(--paper, #FAF8F2)" }}>
@@ -270,6 +302,8 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
             </button>
           )}
 
+          <PoInstructions po={po} canManage={canManage} onSaved={refresh} onError={setError} />
+
           {(po.goodsReceipts ?? []).length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
@@ -306,6 +340,40 @@ const secondaryButtonStyle: React.CSSProperties = {
 
 const fieldLabel: React.CSSProperties = { fontSize: 11.5, color: "var(--muted)", fontWeight: 600, display: "flex", flexDirection: "column", gap: 2 };
 const fieldInput: React.CSSProperties = { padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12.5, boxSizing: "border-box" };
+
+// Consignes libres à l'imprimeur pour un bon de commande (reprises à l'impression).
+function PoInstructions({ po, canManage, onSaved, onError }: { po: PurchaseOrder; canManage: boolean; onSaved: () => Promise<void>; onError: (m: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(po.printerInstructions ?? "");
+  const [busy, setBusy] = useState(false);
+  const current = (po.printerInstructions ?? "").trim();
+
+  async function save() {
+    setBusy(true);
+    try { await updatePurchaseOrderInstructions(po.id, text); await onSaved(); setEditing(false); }
+    catch (e) { onError(e instanceof Error ? e.message : "Enregistrement des consignes impossible."); }
+    finally { setBusy(false); }
+  }
+
+  if (!editing) {
+    return (
+      <div style={{ marginTop: 6, fontSize: 12.5 }}>
+        <span style={{ color: "var(--muted)" }}>Consignes à l'imprimeur : </span>
+        {current ? <span style={{ whiteSpace: "pre-wrap" }}>{current}</span> : <span style={{ color: "var(--muted)" }}>aucune</span>}
+        {canManage && <button onClick={() => { setText(po.printerInstructions ?? ""); setEditing(true); }} style={{ ...secondaryButtonStyle, marginTop: 0, marginLeft: 8, padding: "3px 10px" }}>{current ? "Modifier" : "+ Ajouter"}</button>}
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: 6 }}>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Ex. couleurs Pantone de la couverture, papier recyclé, pré-presse à notre charge, livraison en cartons de 20…" style={{ ...fieldInput, width: "100%", resize: "vertical" }} />
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        <button onClick={save} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", border: "none", fontWeight: 700 }}>Enregistrer</button>
+        <button onClick={() => setEditing(false)} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0 }}>Annuler</button>
+      </div>
+    </div>
+  );
+}
 
 // Charte Éclospace : or = conforme (positif), orange = réserves, rouge = critique.
 const VERDICTS: { value: QcVerdict; label: string; color: string }[] = [

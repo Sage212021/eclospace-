@@ -17,6 +17,13 @@ let readRef = "";
 // Quand non vide, le faux modèle déclenche l'outil « restituer_document » sur cette
 // référence (pour tester la livraison d'un document UNIQUEMENT sur demande du DG).
 let docRef = "";
+// Quand vrai, le faux modèle simule un DOCUMENT LONG coupé par la limite de jetons :
+// il renvoie une 1ʳᵉ partie avec stop_reason « max_tokens », puis chaque relance de
+// continuation (dernier message = assistant) ajoute l'article suivant, jusqu'à une
+// dernière partie « end_turn ». Sert à vérifier que SAGE poursuit la rédaction au
+// lieu de s'arrêter au 1ᵉʳ article.
+let longDoc = false;
+let longDocStep = 0;
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
@@ -31,6 +38,22 @@ vi.mock("@anthropic-ai/sdk", () => {
         const msgs = args.messages ?? [];
         const last = msgs[msgs.length - 1];
         const lastIsToolResult = !!last && Array.isArray(last.content) && (last.content as Array<{ type?: string }>).some((c) => c?.type === "tool_result");
+        if (longDoc) {
+          const isContinuation = !!last && last.role === "assistant";
+          if (!isContinuation) {
+            longDocStep = 0;
+            return { model: "claude-sonnet-5", stop_reason: "max_tokens", usage: { input_tokens: 80, output_tokens: 200 },
+              content: [{ type: "text", text: "ARTICLE 1 — Objet du contrat. " }] };
+          }
+          longDocStep += 1;
+          const parts = ["ARTICLE 2 — Durée. ", "ARTICLE 3 — Rémunération. ", "ARTICLE 4 — Obligations. "];
+          if (longDocStep <= parts.length) {
+            return { model: "claude-sonnet-5", stop_reason: "max_tokens", usage: { input_tokens: 80, output_tokens: 200 },
+              content: [{ type: "text", text: parts[longDocStep - 1] }] };
+          }
+          return { model: "claude-sonnet-5", stop_reason: "end_turn", usage: { input_tokens: 80, output_tokens: 120 },
+            content: [{ type: "text", text: "ARTICLE 5 — Signatures. Fait à Yaoundé." }] };
+        }
         if (hasWeb && webRef && !lastIsToolResult) {
           return { model: "claude-sonnet-5", stop_reason: "end_turn", usage: { input_tokens: 80, output_tokens: 90 },
             content: [
@@ -139,6 +162,32 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(system).toContain("COMPÉTENCES DE DIRECTION ÉDITORIALE");
     expect(system).toContain("LIGNE ÉDITORIALE");
     expect(system).toContain("POLITIQUE D'ACQUISITION");
+  });
+
+  it("rédige un document long SANS s'arrêter au 1ᵉʳ article (continuation après coupure de jetons)", async () => {
+    longDoc = true;
+    longDocStep = 0;
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+      const convId = created.json().id as string;
+      const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${convId}/messages`, headers: { cookie: dgCookie }, payload: { content: "Rédige un contrat d'édition complet." } });
+      expect(msg.statusCode).toBe(202);
+      const assistant = await waitMessage(msg.json().assistant_message_id);
+      expect(assistant.status).toBe("done");
+      // Le document est allé jusqu'au bout : tous les articles et les signatures,
+      // pas seulement l'article 1 produit avant la coupure.
+      expect(assistant.content).toContain("ARTICLE 1");
+      expect(assistant.content).toContain("ARTICLE 2");
+      expect(assistant.content).toContain("ARTICLE 3");
+      expect(assistant.content).toContain("ARTICLE 4");
+      expect(assistant.content).toContain("ARTICLE 5");
+      expect(assistant.content).toContain("Signatures");
+      // La consigne de complétude est transmise au modèle.
+      const system = calls[calls.length - 1]?.system ?? "";
+      expect(system).toContain("DOCUMENTS COMPLETS");
+    } finally {
+      longDoc = false;
+    }
   });
 
   it("le premier message peut être envoyé dès la création, et sert de titre par défaut", async () => {

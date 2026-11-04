@@ -1499,6 +1499,13 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-documents-longs-sans-coupure",
+      version: "2026.11",
+      title: "Nouveauté — SAGE rédige les documents longs jusqu'au bout",
+      body: "SAGE ne s'arrête plus en plein milieu d'un document. Jusqu'ici, quand vous lui demandiez un contrat ou un rapport, il pouvait écrire quelques articles puis s'interrompre (souvent vers l'article 4) : c'était une limite technique de longueur, pas une fin réelle. Désormais, dès qu'un document dépasse ce qu'une seule rédaction peut contenir, SAGE poursuit automatiquement là où il s'était arrêté, sans se répéter ni sauter de passage, jusqu'au dernier article, aux annexes et aux espaces de signature. Une demande de contrat donne donc un véritable contrat complet, et non un aperçu de quelques articles. (L'export Word/PDF de ces documents arrive dans une prochaine mise à jour.)",
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-correction-regroupee-par-responsable",
       version: "2026.11",
       title: "Nouveauté — Correction éditoriale : les manuscrits rangés par responsable",

@@ -418,6 +418,24 @@ async function executeTool(name: string, input: Record<string, unknown>, docs: M
   }
 }
 
+// Rédaction longue : budget de jetons par appel (une génération « normale »
+// tient dedans ; un document long est complété par continuation ci-dessous) et
+// nombre maximal de relances de continuation (bornage anti-boucle). Huit
+// relances couvrent largement un contrat d'une quinzaine d'articles ou un
+// rapport de plusieurs pages.
+const SAGE_MAX_TOKENS = 8192;
+const CONTINUATION_LIMIT = 8;
+
+// Consigne de COMPLÉTUDE (Lot « SAGE — documents longs ») : un document demandé
+// est rédigé EN ENTIER, jamais écourté ni résumé. Ajoutée au système pour que
+// SAGE comprenne qu'une demande de contrat/rapport appelle le document complet.
+const DOCUMENT_COMPLETENESS = [
+  "DOCUMENTS COMPLETS — RIEN D'ÉCOURTÉ : quand le DG demande un document (contrat d'édition ou de cession de droits, convention, rapport, note, règlement, procédure…), tu le rédiges INTÉGRALEMENT, de la première à la dernière partie, et non un aperçu de quelques articles.",
+  "La longueur est dictée par la matière à traiter, jamais par une limite : un contrat comporte TOUS ses articles numérotés sans trou ni saut (1, 2, 3, … jusqu'au dernier), ses annexes annoncées et ses espaces de signature ; un rapport va jusqu'à sa conclusion rédigée en entier.",
+  "Tu ne t'arrêtes pas en milieu de document et tu ne laisses jamais entendre qu'il est terminé alors que des articles, des annexes ou les signatures manquent. Si la place vient à manquer dans une génération, tu poursuis la rédaction là où elle s'est arrêtée, sans te répéter ni sauter de partie.",
+  "Aucune mention technique de ce fonctionnement ne figure dans le document : il se lit comme un document achevé du Service éditorial.",
+].join(" ");
+
 // Exécution (longue) en arrière-plan : remplit le message « assistant » en
 // attente à partir de l'historique de la conversation. Ne lève JAMAIS : toute
 // erreur est consignée sur le message.
@@ -467,7 +485,7 @@ export async function runConversationReply(assistantMessageId: string): Promise<
       buildCatalogueContext().catch(() => ""),
       buildKnowledgeContext().catch(() => ""),
     ]);
-    const system = [ASSISTANT_SYSTEM, knowledge, catalogue].filter(Boolean).join("\n\n");
+    const system = [ASSISTANT_SYSTEM, DOCUMENT_COMPLETENESS, knowledge, catalogue].filter(Boolean).join("\n\n");
 
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
@@ -505,23 +523,56 @@ export async function runConversationReply(assistantMessageId: string): Promise<
     const callModel = async (): Promise<{ content: unknown[]; stop_reason?: string | null }> => {
       const tools = webEnabled ? [...SAGE_TOOLS, WEB_SEARCH_TOOL] : SAGE_TOOLS;
       try {
-        return await client.messages.create({ model: modelId, max_tokens: 4096, system, tools: tools as never, messages: convo as never });
+        return await client.messages.create({ model: modelId, max_tokens: SAGE_MAX_TOKENS, system, tools: tools as never, messages: convo as never });
       } catch (err) {
-        if (webEnabled) { webEnabled = false; return await client.messages.create({ model: modelId, max_tokens: 4096, system, tools: SAGE_TOOLS as never, messages: convo as never }); }
+        if (webEnabled) { webEnabled = false; return await client.messages.create({ model: modelId, max_tokens: SAGE_MAX_TOKENS, system, tools: SAGE_TOOLS as never, messages: convo as never }); }
         throw err;
       }
     };
+    const textOfBlocks = (content: unknown): string =>
+      (content as Array<{ type: string; text?: string }> | undefined ?? [])
+        .filter((b) => b.type === "text")
+        .map((b) => b.text ?? "")
+        .join("\n");
+
     let finalText = "";
     for (let step = 0; step < 8; step++) {
       const resp = await callModel();
       const blocks = resp.content as Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown>; content?: unknown }>;
-      finalText = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
       // Recherche web serveur longue : la réponse peut être « en pause » → on la
       // relance en ré-empilant le contenu partiel (aucun outil client à exécuter).
       if (resp.stop_reason === "pause_turn") { convo.push({ role: "assistant", content: resp.content }); continue; }
       // On n'exécute QUE nos outils client (les outils serveur sont déjà traités).
       const toolUses = blocks.filter((b) => b.type === "tool_use" && toolNames.has(b.name ?? ""));
-      if (toolUses.length === 0) break;
+      if (toolUses.length === 0) {
+        // RÉPONSE FINALE. Si elle a été coupée par la limite de jetons
+        // (stop_reason « max_tokens »), on POURSUIT la rédaction par « préfixe
+        // assistant » : on redonne à l'IA son propre texte partiel comme début de
+        // réponse et elle le continue exactement là où il s'est arrêté (même
+        // rédaction, aucun séparateur). On accumule jusqu'à la fin naturelle.
+        // C'est ce qui permet à un contrat de 15 articles d'aller jusqu'au bout
+        // au lieu de s'arrêter vers l'article 4. Bornage à CONTINUATION_LIMIT.
+        finalText = textOfBlocks(resp.content).trim();
+        let stop: string | null = resp.stop_reason ?? null;
+        for (let c = 0; c < CONTINUATION_LIMIT && stop === "max_tokens"; c++) {
+          let cont: { content: unknown[]; stop_reason?: string | null };
+          try {
+            cont = await client.messages.create({
+              model: modelId,
+              max_tokens: SAGE_MAX_TOKENS,
+              system,
+              messages: [...convo, { role: "assistant", content: finalText }] as never,
+            });
+          } catch {
+            break; // une continuation qui échoue ne doit pas perdre le texte déjà produit
+          }
+          stop = cont.stop_reason ?? null;
+          const more = textOfBlocks(cont.content);
+          if (!more) break;
+          finalText += more;
+        }
+        break;
+      }
       convo.push({ role: "assistant", content: resp.content });
       const results = [];
       for (const tu of toolUses) {

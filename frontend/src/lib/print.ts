@@ -6,6 +6,7 @@
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
 import type { AuthorReceiptDetail, AuthorWithdrawalVoucher, BookReceiptVoucher, ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, PurchaseOrderVoucher, RoyaltyStatementDetail } from "../api/client";
+import { purchaseOrderExtras } from "../api/client";
 import { isReportDisclaimer } from "./tidyProse";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
@@ -854,27 +855,18 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
   const tolerance = po.quantityTolerancePct != null && po.quantityTolerancePct !== "" ? `± ${Number(po.quantityTolerancePct)} %` : "—";
   const location = po.deliveryLocation?.label ?? "—";
 
-  // Fiche technique RÉCUPÉRÉE AUTOMATIQUEMENT de la Maquette (production_specs) :
-  // ce que l'imprimeur doit respecter. On n'affiche que les champs renseignés.
-  const specs = po.quote?.manuscript?.productionSpecs ?? null;
-  const specRows: [string, string][] = [];
-  if (specs) {
-    const add = (label: string, v: string | number | null | undefined, suffix = "") => { if (v !== null && v !== undefined && String(v).trim() !== "") specRows.push([label, `${v}${suffix}`]); };
-    add(tr("Format", "Trim size"), specs.trimFormat);
-    add(tr("Pages", "Pages"), specs.finalPages);
-    add(tr("Papier intérieur", "Interior paper"), [specs.paperInterior, specs.paperInteriorGsm ? `${specs.paperInteriorGsm} g/m²` : ""].filter(Boolean).join(" · ") || null);
-    add(tr("Papier couverture", "Cover paper"), specs.paperCover);
-    add(tr("Reliure", "Binding"), specs.binding);
-    add(tr("Finition / pelliculage", "Lamination"), specs.lamination);
-    add(tr("Dos", "Spine"), specs.spineWidthMm ? `${specs.spineWidthMm} mm` : null);
-  }
+  // Références de l'ouvrage (auteur, ISBN) + fiche technique (Maquette) + consignes
+  // — source UNIQUE (purchaseOrderExtras) pour l'aperçu comme le PDF.
+  const { author, isbn, specRows, instructions } = purchaseOrderExtras(po);
+  const refsHtml = (author || isbn)
+    ? `<div class="meta" style="margin-top:6px">${author ? `<span>${tr("Auteur", "Author")} : <b>${escapeHtml(author)}</b></span>` : ""}${isbn ? `<span>ISBN : <b>${escapeHtml(isbn)}</b></span>` : ""}</div>`
+    : "";
   const specsHtml = specRows.length > 0
     ? `<div class="meta" style="margin-top:14px"><b>${tr("Fiche technique (à respecter)", "Technical sheet (to comply with)")}</b></div>
        <table class="lines" style="margin-top:4px"><tbody>${specRows.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="r"><b>${escapeHtml(v)}</b></td></tr>`).join("")}</tbody></table>`
     : `<div class="meta" style="margin-top:14px"><span style="color:#6b7280">${tr("Fiche technique non renseignée (à compléter à la Maquette).", "Technical sheet not filled in (complete it at layout stage).")}</span></div>`;
-  const instr = (po.printerInstructions ?? "").trim();
-  const instrHtml = instr
-    ? `<div class="meta" style="margin-top:14px"><b>${tr("Consignes à l'imprimeur", "Instructions to the printer")}</b></div><p style="margin:4px 0;font-size:12px;white-space:pre-wrap">${escapeHtml(instr)}</p>`
+  const instrHtml = instructions
+    ? `<div class="meta" style="margin-top:14px"><b>${tr("Consignes à l'imprimeur", "Instructions to the printer")}</b></div><p style="margin:4px 0;font-size:12px;white-space:pre-wrap">${escapeHtml(instructions)}</p>`
     : "";
 
   const body = `
@@ -888,6 +880,7 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
       <div class="party__label">${tr("Fournisseur (imprimeur)", "Supplier (printer)")}</div>
       <div class="party__name">${escapeHtml(printer)}</div>
     </div>
+    ${refsHtml}
     <table class="lines">
       <thead><tr><th>${tr("Désignation", "Description")}</th><th class="r">${tr("Quantité", "Quantity")}</th><th class="r">${tr("Montant", "Amount")}</th></tr></thead>
       <tbody>

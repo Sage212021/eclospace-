@@ -26,7 +26,8 @@ import {
   type QcVerdict,
 } from "../api/client";
 import { printPurchaseOrder } from "../lib/print";
-import { downloadPurchaseOrderPdf } from "../lib/financePdf";
+import { downloadPurchaseOrderPdf, purchaseOrderPdfFile } from "../lib/financePdf";
+import { TransferDocDialog } from "./TransferDocDialog";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { CollapsibleSection } from "./CollapsibleSection";
 
@@ -44,6 +45,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [qcItems, setQcItems] = useState<QcChecklistItem[]>([]);
   const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
+  const [transferPo, setTransferPo] = useState<PurchaseOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Carnet d'imprimeurs (ajout rapide) + formulaire de demande de devis.
   const [showAddPrinter, setShowAddPrinter] = useState(false);
@@ -290,7 +292,10 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
           <div>
             {po.status} — {po.orderedQuantity} ex. — {po.amount}
           </div>
-          <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o)} onDownloadPdf={() => downloadPurchaseOrderPdf(po)} />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o)} onDownloadPdf={() => downloadPurchaseOrderPdf(po)} />
+            <button onClick={() => setTransferPo(po)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>↗ Transférer</button>
+          </div>
           {canValidate && ["draft", "approved", "sent", "in_production"].includes(po.status) && (
             <button onClick={() => handleAdvancePo(po)} style={secondaryButtonStyle}>
               Faire avancer →
@@ -324,6 +329,18 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
           )}
         </div>
       ))}
+
+      {transferPo && (
+        <TransferDocDialog
+          title={`Bon de commande ${transferPo.poNumber}`}
+          fileName={`Bon-de-commande-${transferPo.poNumber}.pdf`}
+          subject="Bon de commande"
+          getFile={() => purchaseOrderPdfFile(transferPo)}
+          partnerWhatsapp={null}
+          onClose={() => setTransferPo(null)}
+          onError={setError}
+        />
+      )}
     </CollapsibleSection>
   );
 }

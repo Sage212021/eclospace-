@@ -828,6 +828,20 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
           />
         )}
 
+        {/* À l'étape Impression : la rubrique opérationnelle « Impression et
+            fabrication » (devis, bon de commande, réception) est présentée ICI,
+            juste au-dessus du feu vert « Valider l'impression » (demande opérateur). */}
+        {manuscript.status.code === "IMPRESSION" && permissions.has("printing:consultation") && (
+          <div style={{ marginTop: 12 }}>
+            <ImpressionHandoffBlock manuscriptId={manuscript.id} />
+            <PrintingSection
+              manuscriptId={manuscript.id}
+              canManage={permissions.has("printing:saisie")}
+              canValidate={permissions.has("printing:validation")}
+            />
+          </div>
+        )}
+
         {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code)
           // Étapes à DOUBLE validation (BAT Final, Impression) : l'opérateur de
           // production habilité (bat:saisie / printing:saisie) voit le panneau
@@ -1080,7 +1094,10 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         </>
       )}
 
-      {show("printing") && stageReached(["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
+      {/* À l'étape IMPRESSION, cette rubrique est déjà affichée plus haut (dans le
+          panneau d'étape, au-dessus de « Valider l'impression »). Ici, on la montre
+          aux étapes suivantes (Contrôle qualité…) pour le suivi/l'historique. */}
+      {show("printing") && stageReached(["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"]) && manuscript.status.code !== "IMPRESSION" && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
         <>
           <ImpressionHandoffBlock manuscriptId={manuscript.id} />
           <PrintingSection

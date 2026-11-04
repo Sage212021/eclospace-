@@ -403,9 +403,13 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           milestones: true,
           goodsReceipts: { include: { claims: { orderBy: { createdAt: "desc" } } }, orderBy: { receivedAt: "desc" } },
           printer: { include: { partner: true } },
-          // Fiche technique de l'ouvrage (format, papier, reliure, finition, dos)
-          // RÉCUPÉRÉE AUTOMATIQUEMENT (saisie à la Maquette) — jamais ressaisie ici.
-          quote: { include: { manuscript: { select: { title: true, manuscriptNumber: true, productionSpecs: true } } } },
+          // Fiche technique (Maquette) + RÉFÉRENCES de l'ouvrage (ISBN, auteur)
+          // reprises sur le bon de commande — récupérées automatiquement.
+          quote: { include: { manuscript: { select: {
+            title: true, manuscriptNumber: true, productionSpecs: true,
+            isbns: { select: { isbn13: true }, orderBy: { createdAt: "desc" } },
+            workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, include: { partner: { select: { firstName: true, lastName: true, penName: true } } } },
+          } } } },
           deliveryLocation: { select: { label: true } },
         },
         orderBy: { createdAt: "desc" },

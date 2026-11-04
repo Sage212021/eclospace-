@@ -3264,11 +3264,38 @@ export interface PurchaseOrder {
   deliveryDue?: string | null;
   quantityTolerancePct?: string | null;
   printer?: { partner: { firstName: string; lastName: string } };
-  // La fiche technique (productionSpecs) est RÉCUPÉRÉE automatiquement de la Maquette.
-  quote?: { manuscript?: { title: string; manuscriptNumber: string; productionSpecs?: ProductionSpecs | null } | null };
+  // Fiche technique (productionSpecs) + références (ISBN, auteur) RÉCUPÉRÉES
+  // automatiquement de la Maquette / de la fiche de l'ouvrage.
+  quote?: { manuscript?: {
+    title: string; manuscriptNumber: string; productionSpecs?: ProductionSpecs | null;
+    isbns?: { isbn13: string }[];
+    workContributors?: { partner: { firstName: string; lastName: string; penName: string | null } }[];
+  } | null };
   deliveryLocation?: { label: string } | null;
   printerInstructions?: string | null;
   goodsReceipts?: GoodsReceipt[];
+}
+
+// Références + fiche technique + consignes d'un bon de commande, prêtes à être
+// rendues (aperçu HTML comme PDF). Source UNIQUE pour éviter toute divergence.
+export function purchaseOrderExtras(po: PurchaseOrder): { author: string | null; isbn: string | null; specRows: [string, string][]; instructions: string | null } {
+  const ms = po.quote?.manuscript;
+  const contrib = ms?.workContributors?.[0]?.partner;
+  const author = contrib ? (contrib.penName?.trim() || `${contrib.firstName} ${contrib.lastName}`.trim() || null) : null;
+  const isbn = ms?.isbns?.[0]?.isbn13 ?? null;
+  const s = ms?.productionSpecs ?? null;
+  const specRows: [string, string][] = [];
+  const add = (l: string, v: string | number | null | undefined, suf = "") => { if (v !== null && v !== undefined && String(v).trim() !== "") specRows.push([l, `${v}${suf}`]); };
+  if (s) {
+    add("Format", s.trimFormat);
+    add("Pages", s.finalPages);
+    add("Papier intérieur", [s.paperInterior, s.paperInteriorGsm ? `${s.paperInteriorGsm} g/m²` : ""].filter(Boolean).join(" · ") || null);
+    add("Papier couverture", s.paperCover);
+    add("Reliure", s.binding);
+    add("Finition / pelliculage", s.lamination);
+    add("Dos", s.spineWidthMm ? `${s.spineWidthMm} mm` : null);
+  }
+  return { author, isbn, specRows, instructions: (po.printerInstructions ?? "").trim() || null };
 }
 
 export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number; printer_instructions?: string }) {

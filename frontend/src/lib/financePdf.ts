@@ -3,6 +3,7 @@ import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO } from "./payslipAssets";
 import { drawWatermark } from "./pdfWatermark";
 import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData } from "./print";
 import type { InvoiceDetail, EditorialQuote, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
+import { purchaseOrderExtras } from "../api/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Génération de PDF VECTORIELS (jsPDF) pour les documents Finance & commercial.
@@ -541,6 +542,22 @@ export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
   const location = po.deliveryLocation?.label ?? "—";
   const desc = `Impression — ${book?.title ?? "Ouvrage"}${book?.manuscriptNumber ? ` (${book.manuscriptNumber})` : ""}`;
 
+  // Références de l'ouvrage + fiche technique (Maquette) + consignes — MÊME source
+  // que l'aperçu/impression (purchaseOrderExtras), pour un document identique.
+  const { author, isbn, specRows, instructions } = purchaseOrderExtras(po);
+  const infoLines: string[] = [];
+  if (author) infoLines.push(`Auteur : ${author}`);
+  if (isbn) infoLines.push(`ISBN : ${isbn}`);
+  infoLines.push(`Lieu de livraison : ${location}`, `Tolérance de quantité : ${tolerance}`);
+  if (specRows.length > 0) {
+    infoLines.push("— Fiche technique (à respecter) —");
+    for (const [k, v] of specRows) infoLines.push(`${k} : ${v}`);
+  }
+  if (instructions) {
+    infoLines.push("— Consignes à l'imprimeur —");
+    for (const line of instructions.split("\n")) infoLines.push(line);
+  }
+
   return renderHouseDoc({
     docName: "Bon de commande",
     fileName: `Bon de commande ${po.poNumber}`,
@@ -555,10 +572,15 @@ export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
       { label: "Montant", width: CONTENT_W - 118 - 24, align: "right" },
     ],
     rows: [[desc, String(po.orderedQuantity), money(po.amount, cur)]],
-    infoLines: [`Lieu de livraison : ${location}`, `Tolérance de quantité : ${tolerance}`],
+    infoLines,
     totals: [{ label: "Total commande", value: money(po.amount, cur), strong: true }],
     signatureFor: HOUSE.legalName,
   });
+}
+
+// Bon de commande en PDF, renvoyé comme fichier (pour le transfert messagerie/WhatsApp).
+export function purchaseOrderPdfFile(po: PurchaseOrder): File {
+  return new File([purchaseOrderPdf(po).output("blob")], `Bon-de-commande-${po.poNumber}.pdf`, { type: "application/pdf" });
 }
 export function downloadPurchaseOrderPdf(po: PurchaseOrder): void {
   purchaseOrderPdf(po).save(`Bon-de-commande-${po.poNumber}.pdf`);

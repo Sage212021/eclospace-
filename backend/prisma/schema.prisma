@@ -3467,6 +3467,10 @@ model PurchaseOrder {
   status               PurchaseOrderStatus @default(draft)
   approvedBy           String?             @map("approved_by")
   filesHashReference   String?             @map("files_hash_reference")
+  // Consignes libres à l'imprimeur (reprises dans le bon de commande imprimé).
+  // La fiche technique (format, papier, reliure…) n'est PAS dupliquée ici : elle
+  // est lue automatiquement depuis ProductionSpecs de l'ouvrage (saisie Maquette).
+  printerInstructions  String?             @map("printer_instructions")
   reprintNumber        Int                 @default(0) @map("reprint_number")
 
   createdAt DateTime @default(now()) @map("created_at")

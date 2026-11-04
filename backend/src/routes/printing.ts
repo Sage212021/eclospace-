@@ -51,6 +51,7 @@ const purchaseOrderSchema = z.object({
   delivery_due: z.string().datetime().optional(),
   delivery_location_id: z.string().uuid().optional(),
   quantity_tolerance_pct: z.number().nonnegative().optional(),
+  printer_instructions: z.string().max(2000).optional(),
 });
 
 const poStatusSchema = z.object({ status: z.nativeEnum(PurchaseOrderStatus) });
@@ -372,6 +373,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           deliveryDue: parsed.data.delivery_due ? new Date(parsed.data.delivery_due) : undefined,
           deliveryLocationId: parsed.data.delivery_location_id,
           quantityTolerancePct: parsed.data.quantity_tolerance_pct,
+          printerInstructions: parsed.data.printer_instructions ?? undefined,
           filesHashReference,
           createdBy: request.user!.id,
         },
@@ -401,12 +403,35 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           milestones: true,
           goodsReceipts: { include: { claims: { orderBy: { createdAt: "desc" } } }, orderBy: { receivedAt: "desc" } },
           printer: { include: { partner: true } },
-          quote: { include: { manuscript: { select: { title: true, manuscriptNumber: true } } } },
+          // Fiche technique de l'ouvrage (format, papier, reliure, finition, dos)
+          // RÉCUPÉRÉE AUTOMATIQUEMENT (saisie à la Maquette) — jamais ressaisie ici.
+          quote: { include: { manuscript: { select: { title: true, manuscriptNumber: true, productionSpecs: true } } } },
           deliveryLocation: { select: { label: true } },
         },
         orderBy: { createdAt: "desc" },
       });
       return reply.send(orders);
+    },
+  );
+
+  // Consignes libres à l'imprimeur sur un bon de commande (texte repris à l'impression).
+  fastify.patch(
+    "/api/v1/purchase-orders/:id/instructions",
+    { preHandler: requirePermission("printing", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ printer_instructions: z.string().max(2000) }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const po = await prisma.purchaseOrder.findUnique({ where: { id }, select: { id: true } });
+      if (!po) return reply.code(404).send({ code: "not_found", message: "Bon de commande introuvable." });
+      const updated = await prisma.purchaseOrder.update({
+        where: { id },
+        data: { printerInstructions: parsed.data.printer_instructions.trim() || null },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "purchase_order", entityId: id, newValues: { instructions_updated: true }, ipAddress: request.ip });
+      return reply.send(updated);
     },
   );
 

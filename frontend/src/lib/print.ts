@@ -854,6 +854,29 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
   const tolerance = po.quantityTolerancePct != null && po.quantityTolerancePct !== "" ? `± ${Number(po.quantityTolerancePct)} %` : "—";
   const location = po.deliveryLocation?.label ?? "—";
 
+  // Fiche technique RÉCUPÉRÉE AUTOMATIQUEMENT de la Maquette (production_specs) :
+  // ce que l'imprimeur doit respecter. On n'affiche que les champs renseignés.
+  const specs = po.quote?.manuscript?.productionSpecs ?? null;
+  const specRows: [string, string][] = [];
+  if (specs) {
+    const add = (label: string, v: string | number | null | undefined, suffix = "") => { if (v !== null && v !== undefined && String(v).trim() !== "") specRows.push([label, `${v}${suffix}`]); };
+    add(tr("Format", "Trim size"), specs.trimFormat);
+    add(tr("Pages", "Pages"), specs.finalPages);
+    add(tr("Papier intérieur", "Interior paper"), [specs.paperInterior, specs.paperInteriorGsm ? `${specs.paperInteriorGsm} g/m²` : ""].filter(Boolean).join(" · ") || null);
+    add(tr("Papier couverture", "Cover paper"), specs.paperCover);
+    add(tr("Reliure", "Binding"), specs.binding);
+    add(tr("Finition / pelliculage", "Lamination"), specs.lamination);
+    add(tr("Dos", "Spine"), specs.spineWidthMm ? `${specs.spineWidthMm} mm` : null);
+  }
+  const specsHtml = specRows.length > 0
+    ? `<div class="meta" style="margin-top:14px"><b>${tr("Fiche technique (à respecter)", "Technical sheet (to comply with)")}</b></div>
+       <table class="lines" style="margin-top:4px"><tbody>${specRows.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="r"><b>${escapeHtml(v)}</b></td></tr>`).join("")}</tbody></table>`
+    : `<div class="meta" style="margin-top:14px"><span style="color:#6b7280">${tr("Fiche technique non renseignée (à compléter à la Maquette).", "Technical sheet not filled in (complete it at layout stage).")}</span></div>`;
+  const instr = (po.printerInstructions ?? "").trim();
+  const instrHtml = instr
+    ? `<div class="meta" style="margin-top:14px"><b>${tr("Consignes à l'imprimeur", "Instructions to the printer")}</b></div><p style="margin:4px 0;font-size:12px;white-space:pre-wrap">${escapeHtml(instr)}</p>`
+    : "";
+
   const body = `
     <div class="doc__title">${tr("Bon de commande", "Purchase order")}</div>
     <div class="meta">
@@ -875,6 +898,8 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
         </tr>
       </tbody>
     </table>
+    ${specsHtml}
+    ${instrHtml}
     <div class="meta" style="margin-top:14px">
       <span>${tr("Lieu de livraison", "Delivery location")} : <b>${escapeHtml(location)}</b></span>
       <span>${tr("Tolérance de quantité", "Quantity tolerance")} : <b>${escapeHtml(tolerance)}</b></span>

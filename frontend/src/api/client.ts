@@ -3052,6 +3052,10 @@ export interface SageMessage {
 export function sageAttachmentUrl(downloadPath: string): string {
   return `${API_BASE}${downloadPath}`;
 }
+// URL de téléchargement Word (.docx) d'un message de SAGE (document rédigé).
+export function sageMessageDocxUrl(conversationId: string, messageId: string): string {
+  return `${API_BASE}/api/v1/sage/conversations/${conversationId}/messages/${messageId}/export.docx`;
+}
 export interface SageDossier {
   id: string;
   title: string;

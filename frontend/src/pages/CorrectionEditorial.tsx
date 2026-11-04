@@ -13,16 +13,18 @@ import { GuidanceSteps } from "../components/GuidanceNote";
 import { AiReadingLauncher } from "../components/AiReadingLauncher";
 
 // Sous-module « Correction éditoriale » (refonte du pôle éditorial).
-// Les manuscrits en correction sont REGROUPÉS par responsable, en accordéons :
-// un accordéon par personne (son nom, le nombre de dossiers, l'avancement moyen
-// et une barre de progression) + une rubrique « Nouveaux manuscrits à affecter »
-// qui reçoit automatiquement les manuscrits pas encore affectés. L'axe de
-// regroupement est COMMUTABLE : par infographe (responsable de production) ou
-// par correcteur (responsable de l'étape). Un manuscrit n'apparaît jamais à la
-// fois dans « à affecter » et dans un portefeuille : une seule affectation
-// active par axe. La saisie (dépôt du manuscrit corrigé, points bloquants,
-// validation) se fait dans la fiche du manuscrit, ouverte d'un clic. Additif :
-// ne modifie aucun autre module.
+// Les manuscrits en correction sont REGROUPÉS en accordéons, selon un axe
+// COMMUTABLE (le « bouton » de classement) : par infographe, par éditeur
+// (correcteur de l'étape) ou par STATUT de traitement. Chaque groupe affiche le
+// nombre de dossiers, l'avancement moyen et une barre de progression.
+// L'avancement de chaque manuscrit est l'avancement RÉEL, calculé côté serveur
+// sur les 8 phases du circuit réellement déposées (texte : 1re correction,
+// version intégrée, 2e correction, VCF ; couverture : 4 phases) — jamais sur des
+// « tâches ». Les axes « responsable » ont une rubrique « Nouveaux à affecter »
+// (sans responsable) ; l'axe « statut » sépare nouveaux à corriger (non affectés
+// / à démarrer), en cours, 2e correction et entièrement corrigés. La saisie
+// (dépôt des fichiers, points bloquants, validation) se fait dans la fiche du
+// manuscrit, ouverte d'un clic. Additif : ne modifie aucun autre module.
 
 interface Props {
   onOpenManuscript: (id: string) => void;
@@ -30,23 +32,41 @@ interface Props {
   canAssign?: boolean;
 }
 
-type Axis = "infographe" | "correcteur";
+// Axe de classement commutable (le « bouton » demandé) : par infographe, par
+// éditeur/correcteur, ou par statut de traitement.
+type Axis = "infographe" | "correcteur" | "statut";
 
 interface Group {
-  key: string; // id du responsable, ou "__none__" pour « à affecter »
+  key: string; // id du responsable, "__none__" pour « à affecter », ou clé de statut
   name: string | null;
   items: CorrectionManuscript[];
   avg: number;
   blocking: number;
   late: number;
+  order: number; // ordre d'affichage (axe statut)
+  hint: string | null; // sous-titre explicatif (axe statut)
 }
 
 const NONE = "__none__";
 
-function respOf(m: CorrectionManuscript, axis: Axis): { id: string | null; name: string | null } {
-  return axis === "infographe"
-    ? { id: m.infographe_id, name: m.infographe_name }
-    : { id: m.correcteur_id, name: m.correcteur_name };
+// Classement par STATUT de traitement (état réel dans le circuit de correction).
+function statusBucket(m: CorrectionManuscript): { key: string; label: string; order: number; hint: string } {
+  if (m.sub_state === "prets_a_valider") return { key: "prets", label: "Entièrement corrigés — prêts à valider", order: 5, hint: "Les 8 phases du circuit (texte + couverture) sont déposées : l'ouvrage peut être validé et transmis à la mise en page." };
+  if (m.sub_state === "a_affecter") return { key: "a_affecter", label: "Nouveaux à corriger — non affectés", order: 1, hint: "Transmis à la correction, aucun correcteur affecté, travail pas commencé." };
+  if (m.sub_state === "a_demarrer") return { key: "a_demarrer", label: "Affectés — correction à démarrer", order: 2, hint: "Un correcteur est affecté mais aucune phase n'a encore été déposée." };
+  if (m.in_second_correction) return { key: "deuxieme", label: "2e correction (relecture)", order: 4, hint: "La 1re correction et la version intégrée sont faites ; la 2e correction est en jeu." };
+  return { key: "en_cours", label: "Correction en cours", order: 3, hint: "Au moins une phase déposée, circuit non terminé." };
+}
+
+// Clé/nom de groupe selon l'axe. Pour les axes « responsable », les manuscrits
+// sans responsable tombent dans le groupe « à affecter » (NONE).
+function groupKeyOf(m: CorrectionManuscript, axis: Axis): { key: string; name: string | null; order: number; hint: string | null } {
+  if (axis === "statut") {
+    const b = statusBucket(m);
+    return { key: b.key, name: b.label, order: b.order, hint: b.hint };
+  }
+  const r = axis === "infographe" ? { id: m.infographe_id, name: m.infographe_name } : { id: m.correcteur_id, name: m.correcteur_name };
+  return { key: r.id ?? NONE, name: r.id ? r.name : null, order: r.id ? 1 : 0, hint: null };
 }
 
 export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Props) {
@@ -90,18 +110,17 @@ export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Pro
     [query],
   );
 
-  // Regroupement par responsable de l'axe sélectionné.
+  // Regroupement selon l'axe sélectionné (infographe, correcteur ou statut).
   const groups = useMemo<Group[]>(() => {
     if (!data) return [];
     const map = new Map<string, Group>();
     for (const m of data.manuscripts) {
       if (!matches(m)) continue;
-      const r = respOf(m, axis);
-      const key = r.id ?? NONE;
-      let g = map.get(key);
+      const gk = groupKeyOf(m, axis);
+      let g = map.get(gk.key);
       if (!g) {
-        g = { key, name: r.id ? r.name : null, items: [], avg: 0, blocking: 0, late: 0 };
-        map.set(key, g);
+        g = { key: gk.key, name: gk.name, items: [], avg: 0, blocking: 0, late: 0, order: gk.order, hint: gk.hint };
+        map.set(gk.key, g);
       }
       g.items.push(m);
       g.blocking += m.blocking;
@@ -110,9 +129,13 @@ export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Pro
     for (const g of map.values()) {
       g.avg = g.items.length ? Math.round(g.items.reduce((s, m) => s + m.progress_pct, 0) / g.items.length) : 0;
     }
-    // Ordre : « à affecter » toujours en tête, puis par nom.
+    const all = [...map.values()];
+    if (axis === "statut") {
+      return all.sort((a, b) => a.order - b.order);
+    }
+    // Axes « responsable » : « à affecter » toujours en tête, puis par nom.
     const none = map.get(NONE);
-    const named = [...map.values()].filter((g) => g.key !== NONE).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "fr"));
+    const named = all.filter((g) => g.key !== NONE).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "fr"));
     return none ? [none, ...named] : named;
   }, [data, axis, matches]);
 
@@ -125,7 +148,12 @@ export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Pro
     setOpen({});
   };
 
-  const axisLabel = axis === "infographe" ? "infographe" : "correcteur";
+  const axisLabel = axis === "infographe" ? "infographe" : axis === "correcteur" ? "correcteur" : "statut";
+  const AXES: { key: Axis; label: string }[] = [
+    { key: "infographe", label: "Par infographe" },
+    { key: "correcteur", label: "Par éditeur" },
+    { key: "statut", label: "Par statut" },
+  ];
 
   return (
     <div style={{ padding: "clamp(16px, 4vw, 32px)" }}>
@@ -134,9 +162,9 @@ export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Pro
       <GuidanceSteps
         title="Correction éditoriale — dans l'ordre"
         steps={[
-          "Les manuscrits sont regroupés sous le nom de leur responsable. Choisissez l'axe : par infographe (production) ou par correcteur (étape).",
-          "« Nouveaux manuscrits à affecter » : les dossiers pas encore confiés. Ouvrez la fiche ou affectez directement, puis le dossier rejoint le portefeuille du responsable.",
-          "Dépliez un responsable pour voir ses dossiers, l'avancement de chacun et lever les points bloquants. Un dossier terminé et sans point bloquant se valide depuis sa fiche.",
+          "Choisissez le classement avec le bouton en haut : par infographe, par éditeur, ou par statut de traitement. Chaque groupe affiche son avancement moyen.",
+          "L'avancement de chaque manuscrit est calculé sur les phases réellement déposées : texte (1re correction, version intégrée, 2e correction, VCF) et couverture (4 phases) — 8 au total.",
+          "« Par statut » sépare les nouveaux à corriger (non affectés / à démarrer), ceux en cours, en 2e correction, et les entièrement corrigés. Ouvrez un manuscrit pour sa fiche de suivi détaillée.",
         ]}
       />
       {error && <p style={{ color: "var(--alert)", fontSize: 13 }}>{error}</p>}
@@ -146,32 +174,32 @@ export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Pro
       {/* Barre d'outils : axe de regroupement + filtre responsable + recherche. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", margin: "16px 0 10px" }}>
         <div style={{ display: "inline-flex", border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" }}>
-          {(["infographe", "correcteur"] as Axis[]).map((a) => (
+          {AXES.map((a) => (
             <button
-              key={a}
-              onClick={() => onAxis(a)}
+              key={a.key}
+              onClick={() => onAxis(a.key)}
               style={{
                 border: "none",
                 padding: "7px 14px",
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
-                background: axis === a ? "var(--eclosion)" : "#fff",
-                color: axis === a ? "#0B0B0C" : "var(--muted)",
+                background: axis === a.key ? "var(--eclosion)" : "#fff",
+                color: axis === a.key ? "#0B0B0C" : "var(--muted)",
               }}
             >
-              {a === "infographe" ? "Par infographe" : "Par correcteur"}
+              {a.label}
             </button>
           ))}
         </div>
 
         <label style={{ fontSize: 13, color: "var(--muted)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          Afficher&nbsp;:
+          Filtrer&nbsp;:
           <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ fontSize: 13, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, background: "#fff" }}>
-            <option value="">Tous les {axisLabel}s</option>
+            <option value="">{axis === "statut" ? "Tous les statuts" : `Tous les ${axisLabel}s`}</option>
             {groups.map((g) => (
               <option key={g.key} value={g.key}>
-                {g.key === NONE ? "Nouveaux manuscrits à affecter" : g.name} ({g.items.length})
+                {axis !== "statut" && g.key === NONE ? "Nouveaux manuscrits à affecter" : g.name} ({g.items.length})
               </option>
             ))}
           </select>
@@ -191,7 +219,7 @@ export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Pro
           <p style={{ fontSize: 13, color: "var(--muted)" }}>Aucun manuscrit en correction{query.trim() ? " ne correspond à la recherche" : ""}.</p>
         )}
         {visibleGroups.map((g) => {
-          const isNone = g.key === NONE;
+          const isNone = axis !== "statut" && g.key === NONE;
           return (
             <GroupSection
               key={g.key}
@@ -199,6 +227,7 @@ export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Pro
               onToggle={() => setOpen((o) => ({ ...o, [g.key]: !o[g.key] }))}
               group={g}
               isNone={isNone}
+              isStatus={axis === "statut"}
               axisLabel={axisLabel}
             >
               <CorrectionTable
@@ -221,13 +250,16 @@ export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Pro
 
 function CorrectionStats({ data }: { data: CorrectionDashboard | null }) {
   if (!data) return null;
-  const tiles: { label: string; value: number; tone?: "warn" | "crit" }[] = [
+  const tiles: { label: string; value: number; suffix?: string; tone?: "warn" | "crit" }[] = [
     { label: "En correction", value: data.en_correction },
-    { label: "À démarrer", value: data.a_demarrer },
+    { label: "Nouveaux à corriger", value: data.nouveaux_a_traiter },
     { label: "En cours", value: data.en_cours },
-    { label: "Prêts à valider", value: data.prets_a_valider },
+    { label: "2e correction", value: data.deuxieme_correction },
+    { label: "En attente de retour", value: data.en_attente_retour },
+    { label: "Entièrement corrigés", value: data.prets_a_valider },
+    { label: "Taux moyen du pôle", value: data.taux_moyen, suffix: " %" },
     { label: "Points bloquants", value: data.points_bloquants_total, tone: data.points_bloquants_total > 0 ? "crit" : undefined },
-    { label: "Dossiers en retard", value: data.en_retard, tone: data.en_retard > 0 ? "warn" : undefined },
+    { label: "En retard", value: data.en_retard, tone: data.en_retard > 0 ? "warn" : undefined },
   ];
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
@@ -236,7 +268,7 @@ function CorrectionStats({ data }: { data: CorrectionDashboard | null }) {
         const bg = t.tone === "crit" ? "#F6D9D3" : t.tone === "warn" ? "var(--amber-soft, #F6E7D2)" : "var(--eclosion-soft)";
         return (
           <div key={t.label} style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", background: bg }}>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color, lineHeight: 1.1 }}>{t.value}</div>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color, lineHeight: 1.1 }}>{t.value}{t.suffix ?? ""}</div>
             <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>{t.label}</div>
           </div>
         );
@@ -252,6 +284,7 @@ function GroupSection({
   onToggle,
   group,
   isNone,
+  isStatus,
   axisLabel,
   children,
 }: {
@@ -259,17 +292,20 @@ function GroupSection({
   onToggle: () => void;
   group: Group;
   isNone: boolean;
+  isStatus: boolean;
   axisLabel: string;
   children: React.ReactNode;
 }) {
   const title = isNone ? "Nouveaux manuscrits à affecter" : (group.name ?? `(${axisLabel} inconnu)`);
+  const icon = isNone ? "📥" : isStatus ? "📂" : "👤";
+  const highlight = isNone;
   return (
-    <div style={{ border: isNone ? "1px solid var(--eclosion)" : "1px solid var(--line)", borderRadius: 10, background: "var(--card)", overflow: "hidden" }}>
+    <div style={{ border: highlight ? "1px solid var(--eclosion)" : "1px solid var(--line)", borderRadius: 10, background: "var(--card)", overflow: "hidden" }}>
       <button
         onClick={onToggle}
-        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: open ? "var(--eclosion-soft)" : isNone ? "var(--eclosion-soft)" : "#fff", border: "none", padding: "12px 14px", cursor: "pointer" }}
+        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: open ? "var(--eclosion-soft)" : highlight ? "var(--eclosion-soft)" : "#fff", border: "none", padding: "12px 14px", cursor: "pointer" }}
       >
-        <span style={{ fontSize: 18 }}>{isNone ? "📥" : "👤"}</span>
+        <span style={{ fontSize: 18 }}>{icon}</span>
         <span style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>{title}</span>
           {!isNone && (
@@ -279,6 +315,7 @@ function GroupSection({
               {group.late > 0 ? ` · ${group.late} en retard` : ""}
             </span>
           )}
+          {isStatus && group.hint && <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{group.hint}</span>}
           {isNone && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Reçoit automatiquement les manuscrits en correction pas encore confiés à un {axisLabel}.</span>}
         </span>
         {!isNone && (
@@ -288,7 +325,7 @@ function GroupSection({
             </span>
           </span>
         )}
-        <span style={{ background: isNone ? "var(--eclosion)" : "var(--eclosion-soft)", color: isNone ? "#0B0B0C" : "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 10px", fontSize: 12, fontFamily: "var(--font-mono)", flexShrink: 0 }}>{group.items.length}</span>
+        <span style={{ background: highlight ? "var(--eclosion)" : "var(--eclosion-soft)", color: highlight ? "#0B0B0C" : "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 10px", fontSize: 12, fontFamily: "var(--font-mono)", flexShrink: 0 }}>{group.items.length}</span>
         <span style={{ color: "var(--muted)", display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s", flexShrink: 0 }}>▸</span>
       </button>
       {open && <div style={{ padding: 14, borderTop: "1px solid var(--line)" }}>{children}</div>}
@@ -326,9 +363,10 @@ function CorrectionTable({
   // par manuscrit ouvre les lanceurs, sans ouvrir la fiche complète.
   const [aiOpen, setAiOpen] = useState<string | null>(null);
   if (items.length === 0) return <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{empty}</p>;
-  // Colonne d'affectation = l'axe de regroupement (pour confier / réaffecter).
-  const assignLabel = axis === "infographe" ? "Infographe" : "Correcteur";
-  const colCount = 10;
+  // Colonne d'affectation = l'axe de regroupement (pour confier / réaffecter) ;
+  // sur l'axe « statut », on montre les deux responsables en lecture seule.
+  const assignLabel = axis === "infographe" ? "Infographe" : axis === "correcteur" ? "Correcteur" : "Responsables";
+  const colCount = 11;
   return (
     <div style={{ overflowX: "auto" }}>
       <table className="ecl-table">
@@ -340,6 +378,7 @@ function CorrectionTable({
             <th>Réception</th>
             <th>Début correction</th>
             <th>Avancement</th>
+            <th>Phases</th>
             <th>Points bloquants</th>
             <th>Retard</th>
             <th>{assignLabel}</th>
@@ -355,7 +394,19 @@ function CorrectionTable({
                 <td>{m.author ?? <span style={{ color: "var(--muted)" }}>—</span>}</td>
                 <td className="mono">{fmtDate(m.received_at)}</td>
                 <td className="mono">{fmtDate(m.correction_started_at)}</td>
-                <td className="mono">{m.progress_pct} %</td>
+                <td style={{ minWidth: 120 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ display: "block", flex: 1, height: 6, background: "var(--line)", borderRadius: 999, overflow: "hidden", minWidth: 50 }}>
+                      <span style={{ display: "block", height: "100%", width: `${m.progress_pct}%`, background: m.progress_pct >= 100 ? "var(--valid, #2F7D4A)" : "var(--eclosion)" }} />
+                    </span>
+                    <span className="mono" style={{ fontSize: 12 }}>{m.progress_pct}%</span>
+                  </div>
+                  {m.in_second_correction && <span style={{ fontSize: 10, color: "var(--eclosion-dark, #9a7a12)" }}>2e correction</span>}
+                  {m.waiting_return && <span style={{ fontSize: 10, color: "var(--amber, #B87400)" }}>en attente de retour</span>}
+                </td>
+                <td className="mono" title="Phases déposées — texte / couverture">
+                  <span style={{ whiteSpace: "nowrap" }}>T {m.text_done}/4 · C {m.cover_done}/4</span>
+                </td>
                 <td>
                   {m.blocking > 0 ? (
                     <span style={{ background: "#F6D9D3", color: "var(--alert, #B23A2E)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>
@@ -383,8 +434,12 @@ function CorrectionTable({
                       onChanged={onChanged}
                       emphasize={emphasizeAssign}
                     />
-                  ) : (
+                  ) : axis === "correcteur" ? (
                     <CorrectorCell manuscriptId={m.id} canAssign={!!canAssign} onChanged={onChanged} emphasize={emphasizeAssign} />
+                  ) : (
+                    <span style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap" }}>
+                      Info. : {m.infographe_name ?? "—"}<br />Corr. : {m.correcteur_name ?? "—"}
+                    </span>
                   )}
                 </td>
                 <td>

@@ -3336,6 +3336,14 @@ async function main() {
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
     {
+      slug: "2026-11-impression-rubrique-remontee-references-transfert-bon",
+      version: "2026.11",
+      title: "Nouveauté — Impression : rubrique remontée + bon de commande enrichi et transférable",
+      body: "Trois améliorations à l'étape Impression. (1) La rubrique « Impression et fabrication » (devis, bon de commande, réception) s'affiche désormais JUSTE AU-DESSUS du bouton « Valider l'impression » quand on ouvre la fiche à cette étape — plus besoin de la chercher plus bas. (2) Le bon de commande identifie complètement l'ouvrage : en plus du titre et du numéro, il porte l'AUTEUR et l'ISBN, récupérés automatiquement. (3) Le bon de commande est partageable : en plus de l'aperçu et du téléchargement PDF, un bouton « ↗ Transférer » l'envoie dans la messagerie interne ou par WhatsApp, comme les contrats. L'aperçu, le PDF téléchargé et la version transférée sont identiques (fiche technique + consignes comprises).",
+      permissionModules: ["printing"],
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-impression-repere-vers-rubrique-fabrication",
       version: "2026.11",
       title: "Nouveauté — Impression : un repère vers le devis et le bon de commande",

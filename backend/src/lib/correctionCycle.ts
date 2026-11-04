@@ -147,6 +147,75 @@ export async function textReportReceived(manuscriptId: string): Promise<boolean>
   return state.some((p) => (p.key === "rapport_1" || p.key === "relecture_2") && p.has_file);
 }
 
+// AVANCEMENT RÉEL d'un lot de manuscrits, calculé sur les phases du circuit
+// (fichiers réellement déposés), en UNE seule requête. Base du pourcentage par
+// manuscrit du pôle Correction éditoriale : le travail n'est PAS suivi par des
+// « tâches » mais par ces 8 livrables (texte : 4 ; couverture : 4).
+const TEXT_PHASE_KEYS = CORRECTION_PHASES.map((p) => p.key);
+const COVER_PHASE_KEYS_ORDERED = COVER_CORRECTION_PHASES.map((p) => p.key);
+
+export interface CorrectionProgress {
+  textPhases: string[];       // clés de phases TEXTE réellement déposées
+  coverPhases: string[];      // clés de phases COUVERTURE réellement déposées
+  textDone: number;           // 0..4
+  coverDone: number;          // 0..4
+  phasesDone: number;         // 0..8
+  phasesTotal: number;        // 8
+  pct: number;                // 0..100 (phasesDone / 8)
+  nextTextActor: CorrectionActor | "termine";   // à qui la main sur le texte
+  started: boolean;           // au moins une phase déposée
+  inSecondCorrection: boolean; // 1re correction + version intégrée faites, 2e en jeu
+}
+
+function emptyProgress(): CorrectionProgress {
+  return { textPhases: [], coverPhases: [], textDone: 0, coverDone: 0, phasesDone: 0, phasesTotal: 8, pct: 0, nextTextActor: "correcteur", started: false, inSecondCorrection: false };
+}
+
+export async function correctionProgressBatch(manuscriptIds: string[]): Promise<Map<string, CorrectionProgress>> {
+  const result = new Map<string, CorrectionProgress>();
+  if (manuscriptIds.length === 0) return result;
+  const docs = await prisma.document.findMany({
+    where: { entityType: "manuscript", entityId: { in: manuscriptIds }, category: "piece_etape", deletedAt: null, title: { startsWith: PREFIX } },
+    select: { entityId: true, title: true, versions: { take: 1, select: { id: true } } },
+  });
+  // Clés de phase réellement présentes (un fichier déposé) par manuscrit.
+  const present = new Map<string, Set<string>>();
+  for (const d of docs) {
+    if (!d.versions.length) continue; // pas de fichier = phase non déposée
+    const key = parseCorrectionPhaseKey(d.title);
+    if (!key) continue;
+    let set = present.get(d.entityId);
+    if (!set) { set = new Set(); present.set(d.entityId, set); }
+    set.add(key);
+  }
+  for (const id of manuscriptIds) {
+    const set = present.get(id);
+    if (!set) { result.set(id, emptyProgress()); continue; }
+    const textPhases = TEXT_PHASE_KEYS.filter((k) => set.has(k));
+    const coverPhases = COVER_PHASE_KEYS_ORDERED.filter((k) => set.has(k));
+    const phasesDone = textPhases.length + coverPhases.length;
+    // À qui la main sur le texte : 1re phase texte dont le fichier manque.
+    let nextTextActor: CorrectionActor | "termine" = "termine";
+    for (const phase of CORRECTION_PHASES) {
+      if (!set.has(phase.key)) { nextTextActor = phase.actor; break; }
+    }
+    const inSecondCorrection = set.has("rapport_1") && set.has("integration_1") && !set.has("integration_finale");
+    result.set(id, {
+      textPhases,
+      coverPhases,
+      textDone: textPhases.length,
+      coverDone: coverPhases.length,
+      phasesDone,
+      phasesTotal: 8,
+      pct: Math.round((phasesDone / 8) * 100),
+      nextTextActor,
+      started: phasesDone > 0,
+      inSecondCorrection,
+    });
+  }
+  return result;
+}
+
 // « À qui la main » : premier maillon du relais dont le fichier manque encore.
 // Correcteur → Intégrateur → Correcteur → Intégrateur → terminé.
 export async function currentCorrectionActor(manuscriptId: string): Promise<CorrectionActor | "termine"> {

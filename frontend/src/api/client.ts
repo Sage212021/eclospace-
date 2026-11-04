@@ -1566,7 +1566,7 @@ export function getEditorialDecisionDashboard() {
 // Tableau de bord du sous-module « Correction éditoriale » (refonte éditoriale) :
 // manuscrits en correction regroupés par sous-état + indicateurs. Réservé côté
 // serveur aux rôles éditorial/direction (403 sinon).
-export type CorrectionSubState = "points_bloquants" | "a_demarrer" | "en_cours" | "prets_a_valider";
+export type CorrectionSubState = "a_affecter" | "a_demarrer" | "en_cours" | "prets_a_valider";
 export interface CorrectionManuscript {
   id: string;
   manuscript_number: string;
@@ -1575,10 +1575,15 @@ export interface CorrectionManuscript {
   received_at: string;
   correction_started_at: string | null;
   sub_state: CorrectionSubState;
-  tasks_total: number;
-  tasks_done: number;
-  blocking: number;
   progress_pct: number;
+  phases_done: number;
+  phases_total: number;
+  text_done: number;
+  cover_done: number;
+  started: boolean;
+  in_second_correction: boolean;
+  waiting_return: boolean;
+  blocking: number;
   en_retard: boolean;
   infographe_id: string | null;
   infographe_name: string | null;
@@ -1587,12 +1592,17 @@ export interface CorrectionManuscript {
 }
 export interface CorrectionDashboard {
   en_correction: number;
+  a_affecter: number;
   a_demarrer: number;
   en_cours: number;
-  points_bloquants: number;
   prets_a_valider: number;
+  nouveaux_a_traiter: number;
+  deuxieme_correction: number;
+  en_attente_retour: number;
+  points_bloquants: number;
   points_bloquants_total: number;
   en_retard: number;
+  taux_moyen: number;
   manuscripts: CorrectionManuscript[];
 }
 export function getCorrectionDashboard() {

@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-correction-avancement-reel-et-classement",
+      version: "2026.11",
+      title: "Nouveauté — Correction éditoriale : avancement réel et classement par infographe / éditeur / statut",
+      body: "La page « Correction éditoriale » (Direction éditoriale) a été reliée au vrai circuit de correction. Deux changements importants. 1) Le pourcentage d'avancement de chaque manuscrit est désormais calculé automatiquement sur les 8 phases réellement déposées — texte : 1re correction, version intégrée, 2e correction, version corrigée finale ; couverture : rapport 1re, retour d'intégration, rapport 2e, couverture finale. Fini le « 0 % » partout : l'avancement reflète le travail réel. 2) Un bouton de classement permet de regrouper les manuscrits « Par infographe », « Par éditeur » ou « Par statut » (nouveaux à corriger non affectés, affectés à démarrer, en cours, 2e correction, entièrement corrigés). Chaque groupe affiche son nombre de dossiers et son avancement moyen ; le tableau de bord en tête donne le taux moyen du pôle, les nouveaux à traiter, ceux en 2e correction et ceux en attente de retour. La fiche de suivi détaillée reste sur chaque manuscrit (phases, fichiers, retours, historique). Rappel : ce classement est sur l'onglet « Correction éditoriale », distinct de « Mes corrections » (liste personnelle du correcteur).",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "INFOG", "DG"],
+    },
+    {
       slug: "2026-11-reecriture-livrables-telechargeables",
       version: "2026.11",
       title: "Nouveauté — Réécritures de SAGE : des livrables Word et PDF",

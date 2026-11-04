@@ -544,11 +544,12 @@ export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
 
   // Références de l'ouvrage + fiche technique (Maquette) + consignes — MÊME source
   // que l'aperçu/impression (purchaseOrderExtras), pour un document identique.
-  const { author, isbn, specRows, instructions } = purchaseOrderExtras(po);
+  const { author, isbn, specRows, instructions, establishedBy } = purchaseOrderExtras(po);
   const infoLines: string[] = [];
   if (author) infoLines.push(`Auteur : ${author}`);
   if (isbn) infoLines.push(`ISBN : ${isbn}`);
   infoLines.push(`Lieu de livraison : ${location}`, `Tolérance de quantité : ${tolerance}`);
+  if (establishedBy) infoLines.push(`Établi par : ${establishedBy}`);
   if (specRows.length > 0) {
     infoLines.push("— Fiche technique (à respecter) —");
     for (const [k, v] of specRows) infoLines.push(`${k} : ${v}`);

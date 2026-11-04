@@ -3336,6 +3336,14 @@ async function main() {
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
     {
+      slug: "2026-11-bon-commande-etabli-par-trois-fonctions",
+      version: "2026.11",
+      title: "Nouveauté — Bon de commande : établi par l'Impression, le Stock ou le DAF",
+      body: "L'établissement du BON DE COMMANDE n'est plus réservé au seul responsable Impression : le responsable Stock & magasin et le DAF peuvent eux aussi l'établir, le modifier (consignes), le télécharger, le prévisualiser et le transférer. Ils travaillent sur le MÊME écran et le MÊME bon de commande de l'ouvrage en cours (même donnée partagée) : le responsable Impression peut donc « passer la main » au Stock ou au DAF, qui reprennent exactement là où on en est. Les devis et les imprimeurs restent pilotés par le responsable Impression. Pour la traçabilité, au moment de générer le bon, on choisit à quel titre on l'établit (Impression / Stock / DAF), et le bon affiche « Établi par [nom] (fonction) » — à l'écran comme sur le document imprimé/transféré. Réservé à ces trois fonctions.",
+      permissionModules: ["printing"],
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-impression-rubrique-remontee-references-transfert-bon",
       version: "2026.11",
       title: "Nouveauté — Impression : rubrique remontée + bon de commande enrichi et transférable",

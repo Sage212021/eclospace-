@@ -212,6 +212,14 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
 
   const canValidate = permissions.has("manuscripts:validation");
   const canEditFiche = permissions.has("manuscripts:saisie");
+  // Bon de commande (Impression) — ouvert à 3 fonctions : Impression, Stock &
+  // magasin, DAF. Ces fonctions voient le MÊME écran/bon du manuscrit en cours.
+  const canSeePrinting = permissions.has("printing:consultation") || permissions.has("stock:consultation") || permissions.has("finance:consultation");
+  const bonFunctions = ([
+    permissions.has("printing:saisie") ? { value: "impression", label: "Responsable Impression" } : null,
+    permissions.has("stock:saisie") ? { value: "stock", label: "Responsable Stock & magasin" } : null,
+    permissions.has("finance:saisie") ? { value: "daf", label: "DAF" } : null,
+  ].filter(Boolean)) as { value: string; label: string }[];
   const canAssignReader = permissions.has("comite_lecture:saisie");
   const canCloseCommittee = permissions.has("comite_lecture:validation");
   const canDecide = permissions.has("decision_editoriale:validation");
@@ -831,13 +839,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         {/* À l'étape Impression : la rubrique opérationnelle « Impression et
             fabrication » (devis, bon de commande, réception) est présentée ICI,
             juste au-dessus du feu vert « Valider l'impression » (demande opérateur). */}
-        {manuscript.status.code === "IMPRESSION" && permissions.has("printing:consultation") && (
+        {manuscript.status.code === "IMPRESSION" && canSeePrinting && (
           <div style={{ marginTop: 12 }}>
             <ImpressionHandoffBlock manuscriptId={manuscript.id} />
             <PrintingSection
               manuscriptId={manuscript.id}
               canManage={permissions.has("printing:saisie")}
               canValidate={permissions.has("printing:validation")}
+              canManageBon={bonFunctions.length > 0}
+              bonFunctions={bonFunctions}
             />
           </div>
         )}
@@ -1097,13 +1107,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
       {/* À l'étape IMPRESSION, cette rubrique est déjà affichée plus haut (dans le
           panneau d'étape, au-dessus de « Valider l'impression »). Ici, on la montre
           aux étapes suivantes (Contrôle qualité…) pour le suivi/l'historique. */}
-      {show("printing") && stageReached(["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"]) && manuscript.status.code !== "IMPRESSION" && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
+      {show("printing") && stageReached(["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"]) && manuscript.status.code !== "IMPRESSION" && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && canSeePrinting && (
         <>
           <ImpressionHandoffBlock manuscriptId={manuscript.id} />
           <PrintingSection
             manuscriptId={manuscript.id}
             canManage={permissions.has("printing:saisie")}
             canValidate={permissions.has("printing:validation")}
+            canManageBon={bonFunctions.length > 0}
+            bonFunctions={bonFunctions}
           />
         </>
       )}

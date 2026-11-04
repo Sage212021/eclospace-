@@ -2,7 +2,21 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { PrintQuoteStatus, PurchaseOrderStatus, ProductionMilestoneType, QcVerdict, BatStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
+
+// L'ÉTABLISSEMENT du bon de commande (et ses consignes / sa consultation) est
+// ouvert à trois fonctions : responsable Impression, responsable Stock & magasin,
+// DAF. Les devis/imprimeurs restent pilotés par le responsable Impression.
+const BON_SAISIE = [
+  { module: "printing", action: "saisie" as const },
+  { module: "stock", action: "saisie" as const },
+  { module: "finance", action: "saisie" as const },
+];
+const BON_CONSULT = [
+  { module: "printing", action: "consultation" as const },
+  { module: "stock", action: "consultation" as const },
+  { module: "finance", action: "consultation" as const },
+];
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { nextPoNumber } from "../lib/poNumber.js";
@@ -52,6 +66,7 @@ const purchaseOrderSchema = z.object({
   delivery_location_id: z.string().uuid().optional(),
   quantity_tolerance_pct: z.number().nonnegative().optional(),
   printer_instructions: z.string().max(2000).optional(),
+  established_by_function: z.enum(["impression", "stock", "daf"]).optional(),
 });
 
 const poStatusSchema = z.object({ status: z.nativeEnum(PurchaseOrderStatus) });
@@ -339,7 +354,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
   // convenu, référence l'empreinte des fichiers verrouillés du BAT signé.
   fastify.post(
     "/api/v1/print-quotes/:id/purchase-order",
-    { preHandler: requirePermission("printing", "saisie") },
+    { preHandler: requireAnyPermission(BON_SAISIE) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = purchaseOrderSchema.safeParse(request.body ?? {});
@@ -374,6 +389,8 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           deliveryLocationId: parsed.data.delivery_location_id,
           quantityTolerancePct: parsed.data.quantity_tolerance_pct,
           printerInstructions: parsed.data.printer_instructions ?? undefined,
+          establishedByName: request.user!.username,
+          establishedByFunction: parsed.data.established_by_function ?? undefined,
           filesHashReference,
           createdBy: request.user!.id,
         },
@@ -394,7 +411,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
 
   fastify.get(
     "/api/v1/manuscripts/:id/purchase-orders",
-    { preHandler: requirePermission("printing", "consultation") },
+    { preHandler: requireAnyPermission(BON_CONSULT) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const orders = await prisma.purchaseOrder.findMany({
@@ -421,7 +438,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
   // Consignes libres à l'imprimeur sur un bon de commande (texte repris à l'impression).
   fastify.patch(
     "/api/v1/purchase-orders/:id/instructions",
-    { preHandler: requirePermission("printing", "saisie") },
+    { preHandler: requireAnyPermission(BON_SAISIE) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = z.object({ printer_instructions: z.string().max(2000) }).safeParse(request.body);

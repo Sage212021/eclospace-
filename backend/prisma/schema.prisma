@@ -3471,6 +3471,10 @@ model PurchaseOrder {
   // La fiche technique (format, papier, reliure…) n'est PAS dupliquée ici : elle
   // est lue automatiquement depuis ProductionSpecs de l'ouvrage (saisie Maquette).
   printerInstructions  String?             @map("printer_instructions")
+  // Qui a établi le bon : nom (instantané) + fonction choisie (impression / stock
+  // / daf) — l'établissement est ouvert à ces trois fonctions.
+  establishedByName    String?             @map("established_by_name")
+  establishedByFunction String?            @map("established_by_function")
   reprintNumber        Int                 @default(0) @map("reprint_number")
 
   createdAt DateTime @default(now()) @map("created_at")

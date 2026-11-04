@@ -857,7 +857,7 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
 
   // Références de l'ouvrage (auteur, ISBN) + fiche technique (Maquette) + consignes
   // — source UNIQUE (purchaseOrderExtras) pour l'aperçu comme le PDF.
-  const { author, isbn, specRows, instructions } = purchaseOrderExtras(po);
+  const { author, isbn, specRows, instructions, establishedBy } = purchaseOrderExtras(po);
   const refsHtml = (author || isbn)
     ? `<div class="meta" style="margin-top:6px">${author ? `<span>${tr("Auteur", "Author")} : <b>${escapeHtml(author)}</b></span>` : ""}${isbn ? `<span>ISBN : <b>${escapeHtml(isbn)}</b></span>` : ""}</div>`
     : "";
@@ -896,6 +896,7 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
     <div class="meta" style="margin-top:14px">
       <span>${tr("Lieu de livraison", "Delivery location")} : <b>${escapeHtml(location)}</b></span>
       <span>${tr("Tolérance de quantité", "Quantity tolerance")} : <b>${escapeHtml(tolerance)}</b></span>
+      ${establishedBy ? `<span>${tr("Établi par", "Issued by")} : <b>${escapeHtml(establishedBy)}</b></span>` : ""}
     </div>
     <div class="totals">
       <div class="ttc"><span>${tr("Total commande", "Order total")}</span><span class="num">${money(po.amount, cur)}</span></div>

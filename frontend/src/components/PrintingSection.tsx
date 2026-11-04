@@ -24,6 +24,7 @@ import {
   type QcChecklistEntry,
   type QcChecklistItem,
   type QcVerdict,
+  BON_FUNCTION_LABELS,
 } from "../api/client";
 import { printPurchaseOrder } from "../lib/print";
 import { downloadPurchaseOrderPdf, purchaseOrderPdfFile } from "../lib/financePdf";
@@ -33,13 +34,17 @@ import { CollapsibleSection } from "./CollapsibleSection";
 
 interface PrintingSectionProps {
   manuscriptId: string;
-  canManage: boolean;
+  canManage: boolean;   // pilotage devis/imprimeurs (responsable Impression)
   canValidate: boolean;
+  // Établissement du BON DE COMMANDE, ouvert à 3 fonctions (Impression / Stock /
+  // DAF). `bonFunctions` = les fonctions sous lesquelles l'utilisateur peut agir.
+  canManageBon?: boolean;
+  bonFunctions?: { value: string; label: string }[];
 }
 
 // Impression et fabrication (Ch. 15) : devis comparés, bon de commande,
 // suivi de fabrication jusqu'à la réception.
-export function PrintingSection({ manuscriptId, canManage, canValidate }: PrintingSectionProps) {
+export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, bonFunctions = [] }: PrintingSectionProps) {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -51,6 +56,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
   const [showAddPrinter, setShowAddPrinter] = useState(false);
   const [pf, setPf] = useState({ name: "", city: "", phone: "", email: "", specialties: "", payment_terms: "" });
   const [selPrinter, setSelPrinter] = useState("");
+  const [bonFn, setBonFn] = useState(bonFunctions[0]?.value ?? "");
   const [qtys, setQtys] = useState("500, 1000");
 
   const refresh = async () => {
@@ -141,7 +147,8 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
 
   async function handleCreatePurchaseOrder(quote: PrintQuote) {
     try {
-      await createPurchaseOrder(quote.id, {});
+      // Fonction au titre de laquelle le bon est établi (traçabilité).
+      await createPurchaseOrder(quote.id, bonFn ? { established_by_function: bonFn } : {});
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la génération du bon de commande.");
@@ -276,10 +283,19 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
               Sélectionner
             </button>
           )}
-          {canManage && quote.status === "selected" && (
-            <button onClick={() => handleCreatePurchaseOrder(quote)} style={secondaryButtonStyle}>
-              Générer le bon de commande
-            </button>
+          {canManageBon && quote.status === "selected" && (
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 6 }}>
+              {bonFunctions.length > 1 && (
+                <label style={fieldLabel}>Établi au titre de
+                  <select style={fieldInput} value={bonFn} onChange={(e) => setBonFn(e.target.value)}>
+                    {bonFunctions.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </label>
+              )}
+              <button onClick={() => handleCreatePurchaseOrder(quote)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>
+                Générer le bon de commande
+              </button>
+            </div>
           )}
         </div>
       ))}
@@ -292,6 +308,12 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
           <div>
             {po.status} — {po.orderedQuantity} ex. — {po.amount}
           </div>
+          {po.establishedByName && (
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+              Établi par <strong style={{ color: "var(--ink)" }}>{po.establishedByName}</strong>
+              {po.establishedByFunction && <> ({BON_FUNCTION_LABELS[po.establishedByFunction] ?? po.establishedByFunction})</>}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o)} onDownloadPdf={() => downloadPurchaseOrderPdf(po)} />
             <button onClick={() => setTransferPo(po)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>↗ Transférer</button>
@@ -307,7 +329,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
             </button>
           )}
 
-          <PoInstructions po={po} canManage={canManage} onSaved={refresh} onError={setError} />
+          <PoInstructions po={po} canManage={canManageBon} onSaved={refresh} onError={setError} />
 
           {(po.goodsReceipts ?? []).length > 0 && (
             <div style={{ marginTop: 8 }}>

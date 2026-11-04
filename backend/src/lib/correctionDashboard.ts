@@ -36,13 +36,20 @@ export interface CorrectionManuscript {
   id: string;
   manuscript_number: string;
   title: string;
+  author: string | null;
   received_at: string;
+  correction_started_at: string | null; // entrée à l'étape correction
   sub_state: CorrectionSubState;
   tasks_total: number;
   tasks_done: number;
   blocking: number; // points bloquants non résolus
   progress_pct: number; // avancement moyen des tâches de correction
   en_retard: boolean;
+  // Responsables (deux axes de regroupement possibles) :
+  infographe_id: string | null;   // responsable de production (coverIntegrator)
+  infographe_name: string | null;
+  correcteur_id: string | null;   // correcteur assigné à l'étape
+  correcteur_name: string | null;
 }
 
 export interface CorrectionDashboard {
@@ -61,7 +68,11 @@ export async function correctionDashboard(): Promise<CorrectionDashboard> {
   const [rows, tasks, setting] = await Promise.all([
     prisma.manuscript.findMany({
       where: { deletedAt: null, status: { code: CORRECTION_CODE } },
-      select: { id: true, manuscriptNumber: true, title: true, receivedAt: true },
+      select: {
+        id: true, manuscriptNumber: true, title: true, receivedAt: true, statusId: true,
+        coverIntegrator: { select: { id: true, username: true } },
+        workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true, penName: true } } } },
+      },
       orderBy: { receivedAt: "asc" },
     }),
     prisma.task.findMany({
@@ -88,6 +99,21 @@ export async function correctionDashboard(): Promise<CorrectionDashboard> {
     : [];
   const entryAt = new Map<string, Date>();
   for (const t of entryTransitions) if (!entryAt.has(t.manuscriptId)) entryAt.set(t.manuscriptId, t.occurredAt);
+
+  // Correcteur assigné à l'étape (ManuscriptStep.responsible pour le statut
+  // correction) — pour le regroupement « par correcteur ».
+  const correctionStatusId = rows[0]?.statusId;
+  const steps = ids.length && correctionStatusId
+    ? await prisma.manuscriptStep.findMany({
+        where: { manuscriptId: { in: ids }, statusId: correctionStatusId },
+        select: { manuscriptId: true, responsible: { select: { id: true, username: true } } },
+      })
+    : [];
+  const correcteurBy = new Map<string, { id: string; username: string } | null>();
+  for (const s of steps) correcteurBy.set(s.manuscriptId, s.responsible ?? null);
+
+  const authorName = (p: { firstName: string | null; lastName: string; penName: string | null }): string | null =>
+    (p.penName?.trim() || `${p.firstName ?? ""} ${p.lastName}`.trim()) || null;
 
   const targetDays = (setting?.value as Record<string, number> | undefined) ?? {};
   const correctionTarget = targetDays[CORRECTION_CODE];
@@ -135,17 +161,27 @@ export async function correctionDashboard(): Promise<CorrectionDashboard> {
       en_cours++;
     }
 
+    const author = m.workContributors[0]?.partner ? authorName(m.workContributors[0].partner) : null;
+    const entry = entryAt.get(m.id) ?? null;
+    const correcteur = correcteurBy.get(m.id) ?? null;
+
     return {
       id: m.id,
       manuscript_number: m.manuscriptNumber,
       title: m.title,
+      author,
       received_at: m.receivedAt.toISOString(),
+      correction_started_at: entry ? entry.toISOString() : null,
       sub_state,
       tasks_total,
       tasks_done,
       blocking,
       progress_pct,
       en_retard: late,
+      infographe_id: m.coverIntegrator?.id ?? null,
+      infographe_name: m.coverIntegrator?.username ?? null,
+      correcteur_id: correcteur?.id ?? null,
+      correcteur_name: correcteur?.username ?? null,
     };
   });
 

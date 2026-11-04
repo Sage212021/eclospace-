@@ -48,6 +48,24 @@ describe("tableau de bord du sous-module Correction éditoriale", () => {
     expect(b.a_demarrer + b.en_cours + b.points_bloquants + b.prets_a_valider).toBe(b.en_correction);
   });
 
+  it("expose les champs de regroupement par responsable (infographe / correcteur) et l'auteur", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/editorial/correction/dashboard", headers: { cookie: edCookie } });
+    expect(res.statusCode).toBe(200);
+    const b = res.json();
+    for (const m of b.manuscripts as Record<string, unknown>[]) {
+      // Chaque manuscrit porte l'axe infographe ET l'axe correcteur (id + nom),
+      // l'auteur et la date d'entrée en correction — pour les accordéons par
+      // responsable, sans jamais figurer à la fois en « à affecter » et dans un
+      // portefeuille (une seule affectation active par axe).
+      expect(m).toHaveProperty("author");
+      expect(m).toHaveProperty("correction_started_at");
+      expect(m).toHaveProperty("infographe_id");
+      expect(m).toHaveProperty("infographe_name");
+      expect(m).toHaveProperty("correcteur_id");
+      expect(m).toHaveProperty("correcteur_name");
+    }
+  });
+
   it("refuse un rôle non éditorial (juridique → 403)", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/editorial/correction/dashboard", headers: { cookie: jurCookie } });
     expect(res.statusCode).toBe(403);

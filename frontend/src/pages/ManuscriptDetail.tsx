@@ -2370,6 +2370,13 @@ function GenericStepValidation({
               <strong> En attente de la contre-validation de la Direction générale.</strong>
             </span>
           )}
+          {/* Repère : oriente vers la rubrique opérationnelle (devis, bon de
+              commande, réception) — distincte du feu vert « Valider l'impression ». */}
+          {isImpression && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #E7C98A" }}>
+              💡 Avant de valider : préparez le <strong>devis</strong> et le <strong>bon de commande</strong> dans la rubrique <strong>« Impression et fabrication »</strong> (plus bas sur cette fiche) — imprimeur, devis, bon de commande, puis réception des exemplaires.
+            </div>
+          )}
         </div>
       )}
       {/* État du BON À TIRER avant la 1re signature du BAT Final : fichier final

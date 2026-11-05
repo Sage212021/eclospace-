@@ -150,6 +150,9 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     expect(mine.evaluation.scores.length).toBeGreaterThan(0);
     expect(mine.evaluation.scores[0].criterion.label).toBeTruthy();
     expect(mine.reader.username).toBe("admin");
+    // L'infographe de production (désigné dès l'envoi en évaluation) est exposé
+    // sur la mission, pour l'afficher sur la carte « À évaluer » de Mes lectures.
+    expect("infographe" in mine).toBe(true);
   });
 
   it("le relecteur peut joindre un fichier de rapport de relecture, téléchargeable ensuite", async () => {

@@ -166,6 +166,10 @@ function AssignmentCard({
               {t("myr.deadline", "Échéance")} : {new Date(assignment.dueAt).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR")}
             </span>
             <StatusChip label={t(`myr.status.${assignment.status}`, STATUS_LABELS[assignment.status] ?? assignment.status)} />
+            {assignment.manuscript?.manuscriptNumber && (
+              <span style={{ fontFamily: "var(--font-mono)" }}>· {assignment.manuscript.manuscriptNumber}</span>
+            )}
+            <span>· {t("myr.infographe", "Infographe")} : {assignment.infographe ? assignment.infographe.name : t("myr.infographe_none", "non désigné")}</span>
           </div>
         </div>
         {(assignment.status === "pending" || assignment.status === "late") && (

@@ -1167,6 +1167,8 @@ export interface ReadingAssignment {
   submittedAt: string | null;
   status: "pending" | "submitted" | "late" | "cancelled";
   manuscript?: { id: string; manuscriptNumber: string; title: string };
+  // Infographe de production désigné (coverIntegrator), fixé dès l'envoi en évaluation.
+  infographe?: { id: string; name: string } | null;
   reader?: { username: string };
   evaluation?: ReadingEvaluation | null;
   hasReportFile?: boolean;

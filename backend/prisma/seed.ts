@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-correction-notification-a-chaque-depot",
+      version: "2026.11",
+      title: "Nouveauté — Une notification à chaque dépôt dans le cycle de correction",
+      body: "Dès qu'un fichier est déposé dans le cycle de correction — rapport de correction BAT1/BAT2 par le correcteur, version intégrée ou version corrigée finale par l'éditeur, couverture intégrée ou finale par l'infographe — une notification part automatiquement vers la personne qui doit prendre la suite. Elle s'affiche dans la cloche, dans la bande en temps réel et en notification sur le téléphone (même application fermée), avec le libellé exact de ce qui a été transmis (ex. « Nouveau dépôt — 1re correction », « Version corrigée finale (VCF) », « Couverture corrigée finale »). Nouveauté importante : le dépôt de la version corrigée finale du texte prévient désormais le correcteur que l'ouvrage est prêt à valider — avant, ce dépôt ne déclenchait aucune notification.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "INFOG", "DG"],
+    },
+    {
       slug: "2026-11-mes-corrections-avancement-reel-et-classement",
       version: "2026.11",
       title: "Nouveauté — « Mes corrections » : avancement réel et classement par infographe",

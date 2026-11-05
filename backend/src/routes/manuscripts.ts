@@ -1552,12 +1552,12 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           const correcteur = step?.responsibleId ?? null;
           coverRecipient = correcteur;
           if (correcteur && correcteur !== request.user!.id) {
-            await notifyUsers({ userIds: [correcteur], type: "affectation", priority: "medium", title: `Retour couverture — ${manuscript.manuscriptNumber}`, body: `L'infographe a déposé la couverture ${phase === "couverture_finale" ? "corrigée finale" : "intégrée (BAT2)"} — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
+            await notifyUsers({ userIds: [correcteur], type: "affectation", priority: "medium", title: `Couverture ${manuscript.manuscriptNumber} — ${label}`, body: `Nouveau dépôt « ${label} » par l'infographe — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
           }
         } else if (infographeId && infographeId !== request.user!.id) {
           // RAPPORT de couverture (déposé par le correcteur) → on notifie l'infographe.
           coverRecipient = infographeId;
-          await notifyUsers({ userIds: [infographeId], type: "affectation", priority: "medium", title: `Couverture à intégrer — ${manuscript.manuscriptNumber}`, body: `Un rapport de correction de couverture est disponible — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
+          await notifyUsers({ userIds: [infographeId], type: "affectation", priority: "medium", title: `Couverture ${manuscript.manuscriptNumber} — ${label}`, body: `Nouveau dépôt « ${label} » du correcteur, à intégrer — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
         }
         // Mouvement du cycle (branche couverture) — historisé UNIQUEMENT si un
         // cycle de correction est ouvert (sinon, dépôt infographie post-clôture :
@@ -1568,23 +1568,32 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
 
       // Relais : la balle passe à l'acteur de la phase suivante. Le correcteur
       // (responsable de l'étape) et l'intégrateur (Direction/Assistant éditorial)
-      // se renvoient le dossier ; chaque dépôt notifie l'autre.
+      // se renvoient le dossier ; CHAQUE dépôt notifie, avec le LIBELLÉ de ce qui
+      // a été transmis (cloche + bande temps réel + push téléphone). Y compris le
+      // dépôt de la version corrigée finale (dernière phase), qui prévient le
+      // correcteur que le texte est prêt à être validé.
       const nextActor = nextActorAfterPhase(phase);
       let textRecipient: string | null = null;
-      if (nextActor) {
+      {
         let targetId: string | null = null;
-        let message = "";
+        let action = "";
         if (nextActor === "integrateur") {
           targetId = manuscript.correctionIntegratorId ?? null;
-          message = phase === "rapport_1" ? "Corrections à intégrer (1er passage)" : "Dernières corrections à intégrer";
-        } else {
+          action = phase === "rapport_1" ? "à intégrer (1er passage)" : "à intégrer";
+        } else if (nextActor === "correcteur") {
           const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "CORRECTION" }, validatedAt: null }, select: { responsibleId: true } });
           targetId = step?.responsibleId ?? null;
-          message = "Version intégrée à relire (2e passage)";
+          action = "à relire (2e passage)";
+        } else {
+          // Dernière phase texte (version corrigée finale) : on prévient le
+          // correcteur (responsable de l'étape) que le texte est prêt à valider.
+          const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "CORRECTION" }, validatedAt: null }, select: { responsibleId: true } });
+          targetId = step?.responsibleId ?? null;
+          action = "— le texte est prêt, vous pouvez valider l'étape Correction";
         }
         textRecipient = targetId;
         if (targetId && targetId !== request.user!.id) {
-          await notifyUsers({ userIds: [targetId], type: "affectation", priority: "medium", title: `Correction — ${manuscript.manuscriptNumber}`, body: `${message} — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
+          await notifyUsers({ userIds: [targetId], type: "affectation", priority: "medium", title: `Correction ${manuscript.manuscriptNumber} — ${label}`, body: `Nouveau dépôt « ${label} » ${action} — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
         }
       }
       // Mouvement du cycle (branche texte) — historisé sur le cycle actif.

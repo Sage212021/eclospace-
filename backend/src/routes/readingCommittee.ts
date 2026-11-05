@@ -262,7 +262,9 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         ...(manuscript ? { manuscriptId: manuscript } : {}),
       },
       include: {
-        manuscript: { select: { id: true, manuscriptNumber: true, title: true } },
+        // On inclut l'infographe de production (coverIntegrator), désigné dès
+        // l'envoi en évaluation : le relecteur/comité voit qui en est responsable.
+        manuscript: { select: { id: true, manuscriptNumber: true, title: true, coverIntegrator: { select: { id: true, username: true } } } },
         // Le rapport d'évaluation soumis (null tant qu'il n'est pas remis) : sert
         // au relecteur à télécharger/imprimer son rapport, et au comité à le lire.
         reader: { select: { username: true } },
@@ -294,8 +296,10 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       // On expose l'existence du fichier joint (has_report_file) sans divulguer
       // le chemin de stockage interne.
       return reply.send(
-        assignments.map(({ reportFilePath, reportFileMime, ...rest }) => ({
+        assignments.map(({ reportFilePath, reportFileMime, manuscript, ...rest }) => ({
           ...rest,
+          manuscript: manuscript ? { id: manuscript.id, manuscriptNumber: manuscript.manuscriptNumber, title: manuscript.title } : undefined,
+          infographe: manuscript?.coverIntegrator ? { id: manuscript.coverIntegrator.id, name: manuscript.coverIntegrator.username } : null,
           hasReportFile: Boolean(reportFilePath),
           manuscriptHasFile: fileByManuscript.has(rest.manuscriptId),
           manuscriptFileTitle: fileByManuscript.get(rest.manuscriptId) ?? null,

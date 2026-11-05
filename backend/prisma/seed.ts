@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-mes-lectures-infographe-affiche",
+      version: "2026.11",
+      title: "Nouveauté — « Mes lectures » : l'infographe responsable est affiché",
+      body: "Sur vos missions d'évaluation (« À évaluer » dans Mes lectures), chaque carte indique désormais l'infographe de production responsable de l'ouvrage — celui désigné dès l'envoi en évaluation (c'est obligatoire à cette étape). On lit « Infographe : [nom] » à côté de l'échéance ; s'il n'a pas encore été désigné, c'est écrit « non désigné ». La donnée existait déjà, elle n'était simplement pas affichée sur cette page.",
+      permissionModules: ["comite_lecture"],
+      departmentCodes: ["COMLEC", "DIRED", "INFOG", "DG"],
+    },
+    {
       slug: "2026-11-recu-remplacement-montant-corrigeable",
       version: "2026.11",
       title: "Nouveauté — Reçu de remplacement : on saisit directement le bon montant",

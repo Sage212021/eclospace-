@@ -112,6 +112,29 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
 
     const me = request.user!.id;
     const now = new Date();
+
+    // GARDE ANTI-DOUBLON : un reçu identique (même manuscrit, auteur, type,
+    // montant, mode et date de paiement) émis dans les dernières minutes est très
+    // probablement un double-clic ou une double soumission. On le refuse pour ne
+    // jamais émettre de reçu en double. Un second paiement réellement distinct
+    // reste possible (plus tard, ou en changeant un élément : date, référence).
+    const recentDuplicate = await prisma.authorReceipt.findFirst({
+      where: {
+        manuscriptId: manuscript.id,
+        partnerId,
+        type: b.type,
+        amount: b.amount,
+        method: b.method,
+        paidAt,
+        status: { not: "annule" },
+        createdAt: { gte: new Date(now.getTime() - 5 * 60 * 1000) },
+      },
+      select: { receiptNumber: true },
+    });
+    if (recentDuplicate) {
+      return reply.code(409).send({ code: "duplicate_receipt", message: `Un reçu identique vient d'être émis (${recentDuplicate.receiptNumber}). Pour éviter un doublon, cet enregistrement a été bloqué. S'il s'agit d'un second paiement distinct, réessayez dans quelques minutes ou modifiez un élément (date, référence de transaction).` });
+    }
+
     const receiptNumber = await nextReceiptNumber();
     const receipt = await prisma.authorReceipt.create({
       data: {

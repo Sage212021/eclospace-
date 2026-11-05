@@ -66,12 +66,25 @@ describe("Paiements auteurs & Reçus", () => {
   });
 
   it("deux reçus ont des numéros différents et séquentiels", async () => {
+    // Montants distincts : deux reçus réellement différents (la garde anti-doublon
+    // ne bloque que des reçus strictement identiques émis coup sur coup).
     const a = (await create({ type: "frais_depot", amount: 5000 })).json() as { receipt_number: string };
-    const b = (await create({ type: "frais_depot", amount: 5000 })).json() as { receipt_number: string };
+    const b = (await create({ type: "frais_depot", amount: 5100 })).json() as { receipt_number: string };
     expect(a.receipt_number).not.toBe(b.receipt_number);
     const na = Number(a.receipt_number.split("-")[2]);
     const nb = Number(b.receipt_number.split("-")[2]);
     expect(nb).toBe(na + 1);
+  });
+
+  it("garde anti-doublon : un reçu strictement identique émis coup sur coup est refusé (409)", async () => {
+    const first = await create({ type: "frais_depot", amount: 4242, paid_at: "2026-09-26" });
+    expect(first.statusCode).toBe(201);
+    const dup = await create({ type: "frais_depot", amount: 4242, paid_at: "2026-09-26" });
+    expect(dup.statusCode).toBe(409);
+    expect(dup.json().code).toBe("duplicate_receipt");
+    // Un élément différent (date) → reçu légitime accepté.
+    const distinct = await create({ type: "frais_depot", amount: 4242, paid_at: "2026-09-27" });
+    expect(distinct.statusCode).toBe(201);
   });
 
   it("prestation éditoriale sans libellé → 400 ; mode de paiement inconnu → 400", async () => {

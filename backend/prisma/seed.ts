@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-recu-montant-milliers-et-anti-doublon",
+      version: "2026.11",
+      title: "Nouveauté — Reçus de paiement : montant en milliers fiable + anti-doublon",
+      body: "Deux corrections sur l'enregistrement des paiements/reçus (frais de dépôt, prestations éditoriales). 1) Le montant : en tapant « 50 000 » ou « 50.000 », le reçu enregistrait parfois 50 FCFA (le point était pris comme une virgule décimale). Désormais le montant est lu en francs CFA entiers : « 50 000 », « 50.000 » et « 50000 » valent tous 50 000, et le formulaire affiche en clair « = 50 000 FCFA » pour vérifier avant d'enregistrer. 2) Anti-doublon : un reçu strictement identique (même ouvrage, auteur, montant, mode et date) émis coup sur coup est désormais bloqué, et le bouton « Enregistrer » se désactive pendant l'enregistrement — fini les doublons par double-clic. Rappel : un reçu erroné ne se supprime pas (règle d'immuabilité comptable) mais s'ANNULE avec un motif, depuis sa fiche côté Finance, avec émission possible d'un reçu de remplacement.",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["FIN", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-correction-notification-a-chaque-depot",
       version: "2026.11",
       title: "Nouveauté — Une notification à chaque dépôt dans le cycle de correction",

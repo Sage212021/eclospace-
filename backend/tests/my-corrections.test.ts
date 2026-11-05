@@ -63,6 +63,33 @@ describe("Mes corrections — entrée/sortie du correcteur", () => {
     expect(mine).toBeTruthy();
     expect(mine.manuscriptHasFile).toBe(false);
     expect(mine.correctedHasFile).toBe(false);
+    // Avancement RÉEL (phases) exposé, à 0 tant qu'aucune phase n'est déposée.
+    expect(mine.phasesTotal).toBe(8);
+    expect(mine.correctionPct).toBe(0);
+    expect(mine.textDone).toBe(0);
+    expect(mine.coverDone).toBe(0);
+    expect("infographe" in mine).toBe(true);
+  });
+
+  it("l'avancement de « Mes corrections » suit les PHASES réellement déposées", async () => {
+    // On dépose une phase texte (1re correction) sur le manuscrit de la tâche.
+    const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
+    const doc = await prisma.document.create({
+      data: { entityType: "manuscript", entityId: task.manuscriptId, category: "piece_etape", title: `[correction:rapport_1] f-${rnd()}.docx`, createdBy: admin.id, updatedBy: admin.id },
+    });
+    await prisma.documentVersion.create({
+      data: { documentId: doc.id, versionNumber: 1, filePath: `/tmp/${rnd()}.docx`, fileSize: 10, mimeType: "application/octet-stream", sha256Hash: rnd().padEnd(64, "0"), uploadedBy: admin.id },
+    });
+
+    const res = await app.inject({ method: "GET", url: "/api/v1/my-corrections", headers: { cookie: corrCookie } });
+    const mine = res.json().find((t: { id: string }) => t.id === taskId);
+    expect(mine.textDone).toBe(1);
+    expect(mine.phasesDone).toBe(1);
+    expect(mine.correctionPct).toBe(Math.round((1 / 8) * 100)); // 13
+
+    await prisma.documentVersion.deleteMany({ where: { document: { entityId: task.manuscriptId } } }).catch(() => {});
+    await prisma.document.deleteMany({ where: { entityId: task.manuscriptId, category: "piece_etape" } }).catch(() => {});
   });
 
   it("404 explicite tant qu'aucun fichier manuscrit n'est déposé (correcteur affecté)", async () => {

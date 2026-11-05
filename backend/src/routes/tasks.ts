@@ -6,6 +6,7 @@ import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { notifyUsers } from "../lib/notify.js";
+import { correctionProgressBatch } from "../lib/correctionCycle.js";
 
 // Tâches relevant de la correction éditoriale (Ch. 10 §10.3) et titre réservé
 // au dépôt de la version corrigée (sortie du correcteur → entrée de la Maquette).
@@ -208,10 +209,14 @@ export default async function taskRoutes(fastify: FastifyInstance) {
           { status: { in: ["terminee", "validee"] } },
         ],
       },
-      include: { manuscript: { select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true } } } } },
+      include: { manuscript: { select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true } }, coverIntegrator: { select: { id: true, username: true } } } } },
       orderBy: { plannedEnd: "asc" },
     });
     const manuscriptIds = Array.from(new Set(tasks.map((t) => t.manuscriptId)));
+    // Avancement RÉEL de la correction (phases du circuit réellement déposées),
+    // pour afficher un vrai pourcentage dans « Mes corrections » (et non la
+    // progression manuelle de la tâche, souvent restée à 0).
+    const correctionProgress = await correctionProgressBatch(manuscriptIds);
     const docs = manuscriptIds.length
       ? await prisma.document.findMany({
           where: { entityType: "manuscript", entityId: { in: manuscriptIds }, category: "manuscrit", deletedAt: null },
@@ -239,18 +244,28 @@ export default async function taskRoutes(fastify: FastifyInstance) {
       : [];
     const correctionOpenSet = new Set(openSteps.map((s) => s.manuscriptId));
     return reply.send(
-      tasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        type: t.type,
-        status: t.status,
-        progressPct: t.progressPct,
-        plannedEnd: t.plannedEnd,
-        manuscript: { id: t.manuscript.id, manuscriptNumber: t.manuscript.manuscriptNumber, title: t.manuscript.title },
-        manuscriptHasFile: hasSource.has(t.manuscriptId),
-        correctedHasFile: hasCorrected.has(t.manuscriptId),
-        correctionOpen: correctionOpenSet.has(t.manuscriptId) || t.manuscript.status.code === "CORRECTION",
-      })),
+      tasks.map((t) => {
+        const prog = correctionProgress.get(t.manuscriptId);
+        return {
+          id: t.id,
+          title: t.title,
+          type: t.type,
+          status: t.status,
+          progressPct: t.progressPct,
+          // Avancement RÉEL (phases du circuit) + détail texte/couverture.
+          correctionPct: prog?.pct ?? 0,
+          textDone: prog?.textDone ?? 0,
+          coverDone: prog?.coverDone ?? 0,
+          phasesDone: prog?.phasesDone ?? 0,
+          phasesTotal: prog?.phasesTotal ?? 8,
+          plannedEnd: t.plannedEnd,
+          manuscript: { id: t.manuscript.id, manuscriptNumber: t.manuscript.manuscriptNumber, title: t.manuscript.title },
+          infographe: t.manuscript.coverIntegrator ? { id: t.manuscript.coverIntegrator.id, name: t.manuscript.coverIntegrator.username } : null,
+          manuscriptHasFile: hasSource.has(t.manuscriptId),
+          correctedHasFile: hasCorrected.has(t.manuscriptId),
+          correctionOpen: correctionOpenSet.has(t.manuscriptId) || t.manuscript.status.code === "CORRECTION",
+        };
+      }),
     );
   });
 

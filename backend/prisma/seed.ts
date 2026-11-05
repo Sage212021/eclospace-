@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-mes-corrections-avancement-reel-et-classement",
+      version: "2026.11",
+      title: "Nouveauté — « Mes corrections » : avancement réel et classement par infographe",
+      body: "Votre boîte « Mes corrections » affiche maintenant le vrai pourcentage d'avancement de chaque ouvrage, calculé sur les phases réellement déposées (texte + couverture) — fini le « 0 % » qui ne bougeait pas. Chaque carte montre aussi le détail « T x/4 · C y/4 » (phases de texte et de couverture déposées). Un bouton de classement permet de ranger vos corrections « Par statut » (à faire / en cours / terminées) ou « Par infographe » (regroupées sous le nom de l'infographe responsable, avec l'avancement moyen de chaque groupe).",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-correction-avancement-reel-et-classement",
       version: "2026.11",
       title: "Nouveauté — Correction éditoriale : avancement réel et classement par infographe / éditeur / statut",

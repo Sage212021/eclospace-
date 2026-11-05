@@ -47,6 +47,7 @@ export function MyCorrections() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [section, setSection] = useState<string>("a_faire");
+  const [axis, setAxis] = useState<"statut" | "infographe">("statut");
   const [bookTypes, setBookTypes] = useState<BookTypeOption[]>([]);
   const [supports, setSupports] = useState<SupportOption[]>([]);
 
@@ -104,22 +105,57 @@ export function MyCorrections() {
       )}
       {error && <p style={{ color: "var(--alert)", fontSize: 13 }}>{error}</p>}
 
+      {/* Bouton de classement : par statut d'avancement, ou par infographe. */}
+      <div style={{ display: "inline-flex", border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden", marginTop: 12 }}>
+        {([["statut", "Par statut"], ["infographe", "Par infographe"]] as const).map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => { setAxis(k); setSection(""); }}
+            style={{ border: "none", padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", background: axis === k ? "var(--eclosion)" : "#fff", color: axis === k ? "#0B0B0C" : "var(--muted)" }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-        {buckets.map((b) => {
-          const items = tasks.filter(b.match);
-          return (
-            <AccordionSection key={b.key} open={section === b.key} onToggle={() => setSection(section === b.key ? "" : b.key)} icon={b.icon} label={b.label} count={items.length}>
-              {items.length === 0 ? (
-                <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{b.empty}</p>
-              ) : (
-                items.map((task) => <CorrectionCard key={task.id} task={task} onDepose={depose} onRefresh={refresh} onMessage={setMessage} bookTypes={bookTypes} supports={supports} />)
-              )}
-            </AccordionSection>
-          );
-        })}
+        {axis === "statut"
+          ? buckets.map((b) => {
+              const items = tasks.filter(b.match);
+              return (
+                <AccordionSection key={b.key} open={section === b.key} onToggle={() => setSection(section === b.key ? "" : b.key)} icon={b.icon} label={b.label} count={items.length}>
+                  {items.length === 0 ? (
+                    <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{b.empty}</p>
+                  ) : (
+                    items.map((task) => <CorrectionCard key={task.id} task={task} onDepose={depose} onRefresh={refresh} onMessage={setMessage} bookTypes={bookTypes} supports={supports} />)
+                  )}
+                </AccordionSection>
+              );
+            })
+          : groupByInfographe(tasks).map((g) => (
+              <AccordionSection key={g.key} open={section === g.key} onToggle={() => setSection(section === g.key ? "" : g.key)} icon="👤" label={`${g.name} — avancement moyen ${g.avg} %`} count={g.items.length}>
+                {g.items.map((task) => <CorrectionCard key={task.id} task={task} onDepose={depose} onRefresh={refresh} onMessage={setMessage} bookTypes={bookTypes} supports={supports} />)}
+              </AccordionSection>
+            ))}
       </div>
     </div>
   );
+}
+
+// Regroupe les tâches par infographe responsable (« Sans infographe » en tête
+// si besoin), avec l'avancement moyen réel de chaque groupe.
+function groupByInfographe(tasks: MyCorrectionTask[]): { key: string; name: string; items: MyCorrectionTask[]; avg: number }[] {
+  const map = new Map<string, { key: string; name: string; items: MyCorrectionTask[] }>();
+  for (const t of tasks) {
+    const key = t.infographe?.id ?? "__none__";
+    let g = map.get(key);
+    if (!g) { g = { key, name: t.infographe?.name ?? "Sans infographe", items: [] }; map.set(key, g); }
+    g.items.push(t);
+  }
+  const none = map.get("__none__");
+  const named = [...map.values()].filter((g) => g.key !== "__none__").sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  const ordered = none ? [none, ...named] : named;
+  return ordered.map((g) => ({ ...g, avg: g.items.length ? Math.round(g.items.reduce((s, t) => s + t.correctionPct, 0) / g.items.length) : 0 }));
 }
 
 // Versions RENVOYÉES au correcteur : par l'intégrateur de texte (version intégrée,
@@ -228,7 +264,7 @@ function CorrectionCard({ task, onDepose, onRefresh, onMessage, bookTypes, suppo
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <span>{TYPE_LABELS[task.type] ?? task.type}</span>
             {task.plannedEnd && <span>· échéance {new Date(task.plannedEnd).toLocaleDateString("fr-FR")}</span>}
-            <span style={{ fontFamily: "var(--font-mono)" }}>· {task.progressPct} %</span>
+            <span style={{ fontFamily: "var(--font-mono)" }} title="Avancement réel — phases du circuit déposées (texte + couverture)">· {task.correctionPct} % · T {task.textDone}/4 · C {task.coverDone}/4</span>
           </div>
         </div>
         {done && reopened && <Button variant="subtle" size="sm" onClick={() => setReopened(false)}>Replier</Button>}

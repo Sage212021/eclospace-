@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-recu-remplacement-montant-corrigeable",
+      version: "2026.11",
+      title: "Nouveauté — Reçu de remplacement : on saisit directement le bon montant",
+      body: "Quand vous annulez un reçu et cochez « Émettre aussitôt un reçu de remplacement », un champ « Montant du reçu de remplacement » apparaît désormais, pré-rempli avec l'ancien montant mais entièrement modifiable (avec la confirmation « = 50 000 FCFA »). Vous corrigez donc le montant au moment du remplacement, au lieu de recopier l'ancien. Le reçu de remplacement mentionne la correction (« Montant corrigé : 50 000 FCFA au lieu de 50 »), pour une traçabilité claire. C'est la bonne façon de rattraper un reçu au montant erroné : on annule (avec motif) et on émet le remplacement au bon montant.",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["FIN", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-recu-montant-milliers-et-anti-doublon",
       version: "2026.11",
       title: "Nouveauté — Reçus de paiement : montant en milliers fiable + anti-doublon",

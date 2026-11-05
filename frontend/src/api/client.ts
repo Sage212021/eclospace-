@@ -8014,10 +8014,10 @@ export function getAuthorReceiptStats(filters: { from?: string; to?: string; typ
 }
 
 // — Annulation tracée + reçu de remplacement —
-export function cancelAuthorReceipt(id: string, reason: string, issueReplacement: boolean) {
+export function cancelAuthorReceipt(id: string, reason: string, issueReplacement: boolean, replacementAmount?: number) {
   return request<{ id: string; status: string; replacement: { id: string; receipt_number: string } | null }>(
     `/api/v1/author-receipts/${id}/cancel`,
-    { method: "POST", body: JSON.stringify({ reason, issue_replacement: issueReplacement }) },
+    { method: "POST", body: JSON.stringify({ reason, issue_replacement: issueReplacement, ...(issueReplacement && replacementAmount && replacementAmount > 0 ? { replacement_amount: replacementAmount } : {}) }) },
   );
 }
 

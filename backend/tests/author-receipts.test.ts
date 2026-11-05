@@ -185,6 +185,19 @@ describe("Paiements auteurs & Reçus", () => {
     expect(again.json().code).toBe("already_cancelled");
   });
 
+  it("annulation : le reçu de remplacement peut CORRIGER le montant (50 au lieu de 50 000)", async () => {
+    // Reçu erroné à 50 FCFA.
+    const { id } = (await create({ type: "frais_depot", amount: 50, paid_at: "2026-10-01" })).json() as { id: string };
+    // Annulation avec remplacement au bon montant : 50 000.
+    const res = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/cancel`, headers: { cookie }, payload: { reason: "Montant erroné : 50 au lieu de 50 000", issue_replacement: true, replacement_amount: 50000 } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { replacement: { id: string } | null };
+    expect(body.replacement).not.toBeNull();
+    const rep = (await app.inject({ method: "GET", url: `/api/v1/author-receipts/${body.replacement!.id}`, headers: { cookie } })).json();
+    expect(rep.amount).toBe(50000); // montant corrigé, pas recopié
+    expect(rep.status).toBe("enregistre");
+  });
+
   it("un reçu comptabilisé ne s'annule pas (régularisation comptable requise)", async () => {
     const { id } = (await create({ type: "frais_depot", amount: 4000 })).json() as { id: string };
     await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/control`, headers: { cookie }, payload: {} });

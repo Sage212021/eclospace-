@@ -328,6 +328,8 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelReplace, setCancelReplace] = useState(false);
+  // Montant du reçu de remplacement (corrigeable). Pré-rempli avec l'ancien.
+  const [replaceAmount, setReplaceAmount] = useState("");
   const line = (label: string, v: React.ReactNode) => <div style={{ fontSize: 13, margin: "3px 0" }}><span style={{ color: "var(--muted)" }}>{label} :</span> {v}</div>;
   const actor = (a: AuthorReceiptDetail["traceability"]["initiated"]) => a ? <>{a.name ?? "—"}{a.role ? ` — ${a.role}` : ""}{a.dept ? ` (${a.dept})` : ""}{a.at ? ` · ${fdatetime(a.at)}` : ""}</> : "—";
 
@@ -351,8 +353,10 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
   }
   async function doCancel() {
     if (cancelReason.trim().length < 3) { setErr("Indiquez le motif de l'annulation."); return; }
+    const repAmt = cancelReplace ? parseFcfaAmount(replaceAmount) : undefined;
+    if (cancelReplace && !(repAmt && repAmt > 0)) { setErr("Indiquez le montant du reçu de remplacement."); return; }
     setBusy(true); setErr(null);
-    try { await cancelAuthorReceipt(r.id, cancelReason.trim(), cancelReplace); setCancelOpen(false); await onChanged(); }
+    try { await cancelAuthorReceipt(r.id, cancelReason.trim(), cancelReplace, repAmt); setCancelOpen(false); await onChanged(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Annulation impossible."); }
     finally { setBusy(false); }
   }
@@ -410,9 +414,17 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
                 <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={2} placeholder="Ex. : montant erroné, doublon, mauvais auteur…" style={{ ...inp, resize: "vertical" }} />
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, marginBottom: 10, cursor: "pointer" }}>
-                <input type="checkbox" checked={cancelReplace} onChange={(e) => setCancelReplace(e.target.checked)} />
-                Émettre aussitôt un reçu de remplacement (copie corrigeable)
+                <input type="checkbox" checked={cancelReplace} onChange={(e) => { setCancelReplace(e.target.checked); if (e.target.checked && !replaceAmount) setReplaceAmount(String(Math.round(r.amount))); }} />
+                Émettre aussitôt un reçu de remplacement (montant corrigeable)
               </label>
+              {cancelReplace && (
+                <label style={{ ...lbl, marginBottom: 10 }}>Montant du reçu de remplacement (FCFA)
+                  <input type="text" inputMode="numeric" value={replaceAmount} onChange={(e) => setReplaceAmount(e.target.value)} placeholder="ex. 50 000" style={inp} />
+                  <span style={{ fontSize: 12, color: parseFcfaAmount(replaceAmount) > 0 ? "var(--eclosion-dark, #9a7a12)" : "var(--muted)", fontFamily: "var(--font-mono)" }}>
+                    {parseFcfaAmount(replaceAmount) > 0 ? `= ${parseFcfaAmount(replaceAmount).toLocaleString("fr-FR")} FCFA` : "Saisissez le bon montant (ex. 50 000)"}
+                  </span>
+                </label>
+              )}
               <div style={{ display: "flex", gap: 8 }}>
                 <Button variant="danger" size="sm" onClick={doCancel} disabled={busy}>{busy ? "…" : "Confirmer l'annulation"}</Button>
                 <Button variant="subtle" size="sm" onClick={() => { setCancelOpen(false); setErr(null); }} disabled={busy}>Renoncer</Button>

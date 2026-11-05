@@ -320,6 +320,9 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
   const cancelSchema = z.object({
     reason: z.string().min(3).max(500),
     issue_replacement: z.boolean().optional().default(false),
+    // Montant du reçu de remplacement : permet de CORRIGER le montant (ex. 50 000
+    // au lieu d'un 50 erroné). À défaut, le remplacement reprend l'ancien montant.
+    replacement_amount: z.number().positive().optional(),
   });
   fastify.post("/api/v1/author-receipts/:id/cancel", { preHandler: requirePermission("paiements_auteurs", "validation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -336,6 +339,9 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
       let replacement: { id: string; receiptNumber: string } | null = null;
       if (parsed.data.issue_replacement) {
         const receiptNumber = await nextReceiptNumber(tx);
+        // Montant du remplacement : celui saisi (correction) ou, à défaut, l'ancien.
+        const newAmount = parsed.data.replacement_amount ?? Number(r.amount);
+        const corrected = parsed.data.replacement_amount != null && parsed.data.replacement_amount !== Number(r.amount);
         const rep = await tx.authorReceipt.create({
           data: {
             receiptNumber,
@@ -344,12 +350,14 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
             partnerId: r.partnerId,
             manuscriptId: r.manuscriptId,
             serviceLabel: r.serviceLabel,
-            amount: r.amount,
+            amount: newAmount,
             currency: r.currency,
             method: r.method,
             paidAt: r.paidAt,
             txReference: r.txReference,
-            comment: `Reçu de remplacement du reçu ${r.receiptNumber} (annulé : ${parsed.data.reason.trim()}).` + (r.comment ? ` — ${r.comment}` : ""),
+            comment: `Reçu de remplacement du reçu ${r.receiptNumber} (annulé : ${parsed.data.reason.trim()}).`
+              + (corrected ? ` Montant corrigé : ${Math.round(newAmount).toLocaleString("fr-FR")} ${r.currency === "XAF" ? "FCFA" : r.currency} (au lieu de ${Math.round(Number(r.amount)).toLocaleString("fr-FR")}).` : "")
+              + (r.comment ? ` — ${r.comment}` : ""),
             initiatedBy: me,
             initiatedAt: now,
             generatedBy: me,

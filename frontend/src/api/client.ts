@@ -2373,8 +2373,16 @@ export interface MyCorrectionTask {
   type: string;
   status: TaskStatus;
   progressPct: number;
+  // Avancement RÉEL de la correction (phases du circuit réellement déposées).
+  correctionPct: number;
+  textDone: number;
+  coverDone: number;
+  phasesDone: number;
+  phasesTotal: number;
   plannedEnd: string | null;
   manuscript: { id: string; manuscriptNumber: string; title: string } | null;
+  // Infographe responsable (coverIntegrator) — pour le classement par infographe.
+  infographe: { id: string; name: string } | null;
   manuscriptHasFile: boolean;
   correctedHasFile: boolean;
   // Correction encore ouverte (manuscrit toujours à l'étape Correction) : une

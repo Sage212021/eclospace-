@@ -190,6 +190,16 @@ const PRESTATIONS = [
   "Publication à compte d'auteur",
 ];
 
+// Montant en FCFA = entier, SANS décimale. On accepte les séparateurs de
+// milliers que les utilisateurs saisissent naturellement (espace, point,
+// apostrophe, espace insécable) : « 50 000 », « 50.000 », « 50000 » valent tous
+// 50 000. On ne garde que les chiffres — ce qui évite le piège « 50.000 »
+// interprété comme 50 par un champ numérique (le point y est décimal).
+function parseFcfaAmount(input: string): number {
+  const digits = input.replace(/[^\d]/g, "");
+  return digits ? parseInt(digits, 10) : 0;
+}
+
 function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCreated: (printNow: boolean, id: string) => void }) {
   const [methods, setMethods] = useState<{ code: string; label: string }[]>([]);
   const [q, setQ] = useState("");
@@ -216,7 +226,7 @@ function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCre
     setErr(null);
     if (!selected) { setErr("Choisissez le manuscrit concerné."); return; }
     if (!selected.author) { setErr("Ce manuscrit n'a pas d'auteur enregistré."); return; }
-    const amt = Number(amount);
+    const amt = parseFcfaAmount(amount);
     if (!(amt > 0)) { setErr("Montant invalide."); return; }
     if (type === "prestation_editoriale" && !service.trim()) { setErr("Précisez la prestation éditoriale (choisissez une suggestion ou saisissez-la)."); return; }
     setBusy(true);
@@ -237,7 +247,7 @@ function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCre
     <Modal title="Enregistrer un paiement / Émettre un reçu" onClose={onClose} wide footer={
       <>
         <Button variant="subtle" size="sm" onClick={onClose}>Annuler</Button>
-        <Button variant="add" size="sm" onClick={submit}>{busy ? "…" : "Enregistrer & imprimer le reçu"}</Button>
+        <Button variant="add" size="sm" onClick={submit} disabled={busy}>{busy ? "…" : "Enregistrer & imprimer le reçu"}</Button>
       </>
     }>
       {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
@@ -291,7 +301,12 @@ function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCre
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <Field label="Montant (FCFA)"><input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+        <Field label="Montant (FCFA)">
+          <input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="ex. 50 000" />
+          <div style={{ fontSize: 12, color: parseFcfaAmount(amount) > 0 ? "var(--eclosion-dark, #9a7a12)" : "var(--muted)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
+            {parseFcfaAmount(amount) > 0 ? `= ${parseFcfaAmount(amount).toLocaleString("fr-FR")} FCFA` : "Montant en francs CFA (sans décimale)"}
+          </div>
+        </Field>
         <Field label="Mode de paiement">
           <select value={method} onChange={(e) => setMethod(e.target.value)}>{methods.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}</select>
         </Field>

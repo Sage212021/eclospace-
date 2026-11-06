@@ -2,7 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { AuthorReceiptType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
+
+// L'ANNULATION d'un reçu (correction d'une erreur, avant comptabilisation) est
+// ouverte à la Finance (validation) ET au Directeur éditorial — le pôle qui a
+// émis le reçu doit pouvoir corriger son erreur. Le CONTRÔLE et la
+// COMPTABILISATION restent, eux, réservés à la Finance (validation).
+const CANCEL_EDITORIAL_ROLES = ["DIR_EDITORIAL", "ADMIN_GENERAL"];
 import { writeAuditLog } from "../lib/audit.js";
 import { nextReceiptNumber } from "../lib/receiptNumber.js";
 import { notifyRole } from "../lib/notify.js";
@@ -324,8 +330,16 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
     // au lieu d'un 50 erroné). À défaut, le remplacement reprend l'ancien montant.
     replacement_amount: z.number().positive().optional(),
   });
-  fastify.post("/api/v1/author-receipts/:id/cancel", { preHandler: requirePermission("paiements_auteurs", "validation") }, async (request, reply) => {
+  fastify.post("/api/v1/author-receipts/:id/cancel", { preHandler: requireAnyPermission([{ module: "paiements_auteurs", action: "validation" }, { module: "paiements_auteurs", action: "saisie" }]) }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    // Autorisation fine de l'annulation : Finance (validation) OU Directeur
+    // éditorial. La permission `saisie` seule (ex. assistant éditorial) ne suffit
+    // pas — elle ne sert qu'à atteindre ce handler ; l'annulation reste contrôlée.
+    const u = request.user!;
+    const mayCancel = u.permissions.has("paiements_auteurs:validation") || u.roles.some((role) => CANCEL_EDITORIAL_ROLES.includes(role));
+    if (!mayCancel) {
+      return reply.code(403).send({ code: "not_authorized_cancel", message: "L'annulation d'un reçu est réservée à la Finance et au Directeur éditorial." });
+    }
     const parsed = cancelSchema.safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ code: "reason_required", message: "Indiquez le motif de l'annulation (au moins quelques mots)." });
     const r = await prisma.authorReceipt.findUnique({ where: { id } });

@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-annulation-recu-directeur-editorial",
+      version: "2026.11",
+      title: "Nouveauté — Le Directeur éditorial peut annuler un reçu",
+      body: "L'annulation d'un reçu de paiement n'est plus réservée à la Finance : le Directeur éditorial peut désormais annuler un reçu erroné (avec motif, et émission d'un reçu de remplacement au bon montant si besoin) directement depuis sa fiche. Le contrôle et la comptabilisation, eux, restent du ressort de la Finance. Un reçu déjà comptabilisé ne s'annule pas ici (régularisation comptable). L'assistant éditorial, qui peut enregistrer un reçu, ne peut pas l'annuler seul : l'annulation reste un acte contrôlé.",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["DIRED", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-mes-lectures-infographe-affiche",
       version: "2026.11",
       title: "Nouveauté — « Mes lectures » : l'infographe responsable est affiché",

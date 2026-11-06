@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie } from "./helpers.js";
+import { extractSessionCookie, createUserWithRole } from "./helpers.js";
 
 // PAIEMENTS AUTEURS & REÇUS — le reçu est l'opération centrale unique, numérotée,
 // tracée (initiateur figé). Auteur auto-dérivé du manuscrit ; validations métier.
@@ -196,6 +196,29 @@ describe("Paiements auteurs & Reçus", () => {
     const rep = (await app.inject({ method: "GET", url: `/api/v1/author-receipts/${body.replacement!.id}`, headers: { cookie } })).json();
     expect(rep.amount).toBe(50000); // montant corrigé, pas recopié
     expect(rep.status).toBe("enregistre");
+  });
+
+  it("annulation ouverte au Directeur éditorial ; refusée à l'assistant éditorial (saisie seule)", async () => {
+    const dir = await createUserWithRole(`dir_ed_${rnd()}`, "DIR_EDITORIAL", "DirEd123!");
+    const asst = await createUserWithRole(`asst_ed_${rnd()}`, "ASSISTANT_EDITORIAL", "Asst123!");
+    const login = async (u: string, p: string) => {
+      const r = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: u, password: p } });
+      return extractSessionCookie(r.cookies.map((c) => `${c.name}=${c.value}`));
+    };
+    const dirCookie = await login(dir.username, "DirEd123!");
+    const asstCookie = await login(asst.username, "Asst123!");
+
+    const { id } = (await create({ type: "frais_depot", amount: 3300, paid_at: "2026-10-05" })).json() as { id: string };
+
+    // Assistant éditorial (a `saisie` mais pas `validation` ni le rôle directeur) → refus explicite.
+    const forbidden = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/cancel`, headers: { cookie: asstCookie }, payload: { reason: "tentative assistant" } });
+    expect(forbidden.statusCode).toBe(403);
+    expect(forbidden.json().code).toBe("not_authorized_cancel");
+
+    // Directeur éditorial → autorisé.
+    const ok = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/cancel`, headers: { cookie: dirCookie }, payload: { reason: "Annulation par le directeur éditorial" } });
+    expect(ok.statusCode).toBe(200);
+    expect((ok.json() as { status: string }).status).toBe("annule");
   });
 
   it("un reçu comptabilisé ne s'annule pas (régularisation comptable requise)", async () => {

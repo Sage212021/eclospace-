@@ -28,7 +28,7 @@ const fdatetime = (s: string | null) => (s ? new Date(s).toLocaleString("fr-FR")
 // Écran « Paiements auteurs & Reçus » (pôle Éditorial) et sa vue miroir
 // « Encaissements éditoriaux » (pôle Finance) : MÊME donnée, filtres métier.
 // `financeView` change les libellés/l'accent ; `canCreate` ouvre l'enregistrement.
-export function AuthorReceiptsPage({ canCreate = false, canValidate = false, financeView = false }: { canCreate?: boolean; canValidate?: boolean; financeView?: boolean }) {
+export function AuthorReceiptsPage({ canCreate = false, canValidate = false, canCancel = false, financeView = false }: { canCreate?: boolean; canValidate?: boolean; canCancel?: boolean; financeView?: boolean }) {
   const [rows, setRows] = useState<AuthorReceiptRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<{ from: string; to: string; type: string; status: string; q: string }>({ from: "", to: "", type: "", status: "", q: "" });
@@ -165,7 +165,7 @@ export function AuthorReceiptsPage({ canCreate = false, canValidate = false, fin
       </Card>
 
       {creating && <CreateReceiptModal onClose={() => setCreating(false)} onCreated={(printNow, id) => { setCreating(false); refresh(); if (printNow) printOne(id); }} />}
-      {detail && <ReceiptDetailModal detail={detail} canValidate={canValidate} onClose={() => setDetail(null)} onPrint={() => printAuthorReceipt(detail)} onChanged={async () => { const d = await getAuthorReceipt(detail.id); setDetail(d); refresh(); }} />}
+      {detail && <ReceiptDetailModal detail={detail} canValidate={canValidate} canCancel={canCancel} onClose={() => setDetail(null)} onPrint={() => printAuthorReceipt(detail)} onChanged={async () => { const d = await getAuthorReceipt(detail.id); setDetail(d); refresh(); }} />}
     </div>
   );
 }
@@ -321,7 +321,7 @@ function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCre
   );
 }
 
-function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChanged }: { detail: AuthorReceiptDetail; canValidate: boolean; onClose: () => void; onPrint: () => void; onChanged: () => void | Promise<void> }) {
+function ReceiptDetailModal({ detail: r, canValidate, canCancel: canCancelReceipt, onClose, onPrint, onChanged }: { detail: AuthorReceiptDetail; canValidate: boolean; canCancel: boolean; onClose: () => void; onPrint: () => void; onChanged: () => void | Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [accRef, setAccRef] = useState("");
@@ -336,8 +336,9 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
   // Circuit Finance : contrôle puis intégration comptable, chaque étape tracée.
   const canControl = canValidate && (r.status === "enregistre" || r.status === "a_controler");
   const canAccount = canValidate && r.status === "controle";
-  // Annulation : possible tant que le reçu n'est ni annulé ni comptabilisé.
-  const canCancel = canValidate && r.status !== "annule" && r.status !== "comptabilise";
+  // Annulation : ouverte à la Finance (validation) et au Directeur éditorial
+  // (canCancelReceipt), tant que le reçu n'est ni annulé ni comptabilisé.
+  const canCancel = canCancelReceipt && r.status !== "annule" && r.status !== "comptabilise";
 
   async function doControl() {
     setBusy(true); setErr(null);

@@ -1523,6 +1523,14 @@ async function main() {
       departmentCodes: ["DIRED", "SECR", "DG"],
     },
     {
+      slug: "2026-11-mes-integrations-etapes-repliables",
+      version: "2026.11",
+      title: "Nouveauté — « Mes intégrations » : les étapes se replient",
+      body: "Sur « Mes intégrations de correction », chaque groupe d'étape (À intégrer, Reste le fichier final, Aucune correction retenue, Prêts à clore) est maintenant un accordéon : cliquez sur son en-tête pour le replier ou le déplier. Vous gardez ouvert ce sur quoi vous travaillez et vous repliez le reste pour un écran plus net. Par défaut, toutes les étapes sont dépliées.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "INFOG", "DG"],
+    },
+    {
       slug: "2026-11-mes-integrations-classees-par-etape",
       version: "2026.11",
       title: "Nouveauté — « Mes intégrations de correction » rangées par étape",

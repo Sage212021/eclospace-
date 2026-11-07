@@ -141,6 +141,8 @@ export function MyIntegrations({ focusManuscriptId, onFocusConsumed }: { focusMa
   const [openId, setOpenId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Étapes repliables (accordéon) : par défaut toutes dépliées ; une clé à true = repliée.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const refresh = () =>
     listMyCorrectionIntegrations()
@@ -291,18 +293,28 @@ export function MyIntegrations({ focusManuscriptId, onFocusConsumed }: { focusMa
         <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 10 }}>Aucun ouvrage à intégrer pour l'instant. Dès qu'un correcteur vous confie un manuscrit et accepte des corrections, il apparaîtra ici.</div>
       )}
 
-      <div style={{ display: "grid", gap: 16, marginTop: 12 }}>
-        {activeGroups.map((g) => (
-          <div key={g.key}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 8px" }}>
-              <span style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--ink)" }}>{g.label}</span>
-              <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{g.items.length}</span>
+      <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+        {activeGroups.map((g) => {
+          const isCollapsed = !!collapsed[g.key];
+          return (
+            <div key={g.key}>
+              <button
+                type="button"
+                onClick={() => setCollapsed((c) => ({ ...c, [g.key]: !c[g.key] }))}
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: isCollapsed ? "#fff" : "var(--eclosion-soft)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px", cursor: "pointer", margin: "0 0 8px" }}
+              >
+                <span style={{ color: "var(--muted)", display: "inline-block", transform: isCollapsed ? "none" : "rotate(90deg)", transition: "transform .15s" }}>▸</span>
+                <span style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--ink)", flex: 1 }}>{g.label}</span>
+                <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{g.items.length}</span>
+              </button>
+              {!isCollapsed && (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {g.items.map((m) => renderItem(m, false))}
+                </div>
+              )}
             </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {g.items.map((m) => renderItem(m, false))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Historique des intégrations closes — accordéon replié pour ne pas

@@ -10,6 +10,15 @@ import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { isMailConfigured, sendMail, senderIdentity } from "../lib/mailer.js";
 import { resolveLetterTemplates, composeLetter, letterEmailHtml, houseName, buildPointsBlock, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
 import { getBranding } from "../lib/branding.js";
+
+// Gestion des conditions d'acceptation : ouverte à la Direction éditoriale
+// (decision_editoriale:validation) ET à l'ASSISTANT ÉDITORIAL — le pôle qui
+// suit l'ouvrage peut lever/ajouter/retirer une condition. La DÉCISION
+// éditoriale elle-même (accepter / refuser) reste, elle, sur la validation.
+const CONDITION_EXTRA_ROLES = ["ASSISTANT_EDITORIAL", "ADMIN_GENERAL"];
+function mayManageConditions(u: { permissions: Set<string>; roles: string[] }): boolean {
+  return u.permissions.has("decision_editoriale:validation") || u.roles.some((r) => CONDITION_EXTRA_ROLES.includes(r));
+}
 import { readingCommitteeRules, DEFAULT_READING_COMMITTEE_RULES, READING_COMMITTEE_RULES_KEY } from "../lib/readingCommitteeRules.js";
 import { parseGrilleScores } from "../lib/aiEvaluationScores.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -1186,7 +1195,8 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
   });
 
   // Ajoute une condition à l'acceptation sous conditions en cours.
-  fastify.post("/api/v1/manuscripts/:id/acceptance-conditions", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+  fastify.post("/api/v1/manuscripts/:id/acceptance-conditions", { preHandler: requireAuth }, async (request, reply) => {
+    if (!mayManageConditions(request.user!)) return reply.code(403).send({ code: "forbidden", message: "Gestion des conditions réservée à la Direction éditoriale et à l'assistant éditorial." });
     const { id } = request.params as { id: string };
     const parsed = z.object({ label: z.string().min(1).max(500) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Intitulé de condition manquant." });
@@ -1204,7 +1214,8 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
   });
 
   // Lève une condition (elle est remplie) — datée et tracée.
-  fastify.post("/api/v1/acceptance-conditions/:condId/lift", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+  fastify.post("/api/v1/acceptance-conditions/:condId/lift", { preHandler: requireAuth }, async (request, reply) => {
+    if (!mayManageConditions(request.user!)) return reply.code(403).send({ code: "forbidden", message: "La levée d'une condition est réservée à la Direction éditoriale et à l'assistant éditorial." });
     const { condId } = request.params as { condId: string };
     const parsed = z.object({ note: z.string().max(1000).optional() }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
@@ -1217,7 +1228,8 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
   });
 
   // Rouvre une condition levée par erreur (règle d'or : réversible, tracé).
-  fastify.post("/api/v1/acceptance-conditions/:condId/reopen", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+  fastify.post("/api/v1/acceptance-conditions/:condId/reopen", { preHandler: requireAuth }, async (request, reply) => {
+    if (!mayManageConditions(request.user!)) return reply.code(403).send({ code: "forbidden", message: "Opération réservée à la Direction éditoriale et à l'assistant éditorial." });
     const { condId } = request.params as { condId: string };
     const cond = await prisma.editorialAcceptanceCondition.findFirst({ where: { id: condId, deletedAt: null } });
     if (!cond) return reply.code(404).send({ code: "not_found", message: "Condition introuvable." });
@@ -1228,7 +1240,8 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
   });
 
   // Retire une condition ajoutée par erreur (suppression logique, Modèle §13).
-  fastify.delete("/api/v1/acceptance-conditions/:condId", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+  fastify.delete("/api/v1/acceptance-conditions/:condId", { preHandler: requireAuth }, async (request, reply) => {
+    if (!mayManageConditions(request.user!)) return reply.code(403).send({ code: "forbidden", message: "Opération réservée à la Direction éditoriale et à l'assistant éditorial." });
     const { condId } = request.params as { condId: string };
     const cond = await prisma.editorialAcceptanceCondition.findFirst({ where: { id: condId, deletedAt: null } });
     if (!cond) return reply.code(404).send({ code: "not_found", message: "Condition introuvable." });

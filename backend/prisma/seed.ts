@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-evaluation-ia-consigne-et-langue",
+      version: "2026.11",
+      title: "Nouveauté — Évaluation IA : vos consignes (dont la langue) sont suivies à la lettre",
+      body: "La consigne particulière que vous saisissez avant de lancer un rapport (évaluation, relecture, couverture) est désormais une instruction PRIORITAIRE que l'IA suit strictement. En particulier la langue : Éclosion Édition édite en français ET en anglais (et a un service de traduction), donc si vous demandez le rapport « en anglais / in English », l'IA rédige l'intégralité du rapport en anglais — titres de rubriques, grille de notation, verdict compris — sans mélanger les langues. Par défaut, le rapport reste en français. L'IA ne peut toujours pas écrire de contrevérité ni sauter une rubrique obligatoire, mais pour tout le reste elle respecte votre consigne.",
+      permissionModules: ["manuscripts", "comite_lecture"],
+      departmentCodes: ["DIRED", "COMLEC", "CORR", "DG"],
+    },
+    {
       slug: "2026-11-mes-corrections-nom-infographe",
       version: "2026.11",
       title: "Nouveauté — « Mes corrections » affiche l'infographe responsable",

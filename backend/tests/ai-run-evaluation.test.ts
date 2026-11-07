@@ -162,6 +162,13 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(evalSystem).toContain("STRUCTURE IMPOSÉE");
     expect(evalSystem).toContain("A. Identification du manuscrit");
     expect(evalSystem).toContain("M. Avis final du relecteur");
+    // La consigne de l'éditeur est imposée comme PRIORITAIRE, et la règle de
+    // LANGUE (français / anglais + service de traduction) est transmise à l'IA :
+    // c'est ce qui lui permet de livrer le rapport en anglais quand on le demande.
+    expect(evalSystem).toContain("CONSIGNE DE L'ÉDITEUR");
+    expect(evalSystem).toContain("SUIS STRICTEMENT");
+    expect(evalSystem).toContain("LANGUE DU RAPPORT");
+    expect(evalSystem.toUpperCase()).toContain("ANGLAIS");
     // Les consignes de forme PROPRES au gabarit d'évaluation sont transmises,
     // et l'évaluation n'est PAS poussée vers des annotations de correction.
     expect(evalSystem).toContain("NON un rapport de correction");

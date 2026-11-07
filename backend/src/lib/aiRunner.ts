@@ -323,6 +323,16 @@ function fillTemplate(tpl: string, vars: Record<string, string>): string {
 // tout le job échoue — l'utilisateur reste alors sur l'ancien rapport tronqué.
 // La complétude A→M n'est PAS assurée par un gros budget (risqué), mais par la
 // boucle de complétion ci-dessous, qui enchaîne plusieurs appels au besoin.
+// Règle PRIORITAIRE, injectée au système pour TOUS les rapports : la consigne
+// particulière de l'éditeur doit être suivie à la lettre, et la LANGUE du
+// rapport suit cette consigne (Éclosion Édition publie en français ET en
+// anglais, et dispose d'un service de traduction). Ajoutée en CODE pour
+// s'appliquer toujours, même si le prompt éditable en base ne la mentionne pas.
+const EDITOR_INSTRUCTION_RULES =
+  "\n\n=== CONSIGNE DE L'ÉDITEUR & LANGUE DU RAPPORT (PRIORITAIRE) ===\n"
+  + "La « Recommandation / consigne particulière de l'éditeur » transmise dans le message est une instruction que tu SUIS STRICTEMENT, à la lettre — tant qu'elle ne te conduit pas à écrire une contrevérité, à fabriquer un fait, ni à sauter une rubrique obligatoire de la structure imposée.\n"
+  + "LANGUE DU RAPPORT : Éclosion Édition édite en FRANÇAIS ET en ANGLAIS et dispose d'un service de traduction ; les deux langues sont pleinement légitimes. Par défaut tu rédiges en FRANÇAIS. Mais si la consigne de l'éditeur demande une autre langue (par ex. « en anglais », « in English »), tu rédiges l'INTÉGRALITÉ du rapport dans cette langue — intitulés des rubriques (traduits), grille de notation, commentaires, verdict et pied de rapport compris —, en conservant exactement les mêmes clés et le même ordre de rubriques. Tu ne mélanges jamais deux langues dans un même rapport.";
+
 const REPORT_MAX_TOKENS = 8000;
 // Budget de « réflexion approfondie » pour la rédaction du rapport (1er appel)
 // quand le modèle la gère (Sonnet/Opus). max_tokens est élargi en conséquence.
@@ -1114,7 +1124,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         + `\n\nRègles de forme : ${guidance} Tout tableau est rendu au format Markdown (| … |).`
         + (tpl!.footer ? `\n\nTermine par ce pied de rapport : ${tpl!.footer}` : "")
       : "";
-    const systemPrompt = prompt.systemPrompt + structureBlock;
+    const systemPrompt = prompt.systemPrompt + structureBlock + EDITOR_INSTRUCTION_RULES;
 
     const client = new Anthropic({ apiKey });
     const textOf = (blocks: { type: string }[]) =>

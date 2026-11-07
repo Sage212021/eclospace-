@@ -770,8 +770,8 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
 
         {/* Acceptation sous conditions (audit éditorial, point n°2) : suivi des
             conditions à lever avant l'entrée en production (mise en page). */}
-        {permissions.has("decision_editoriale:consultation") && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && manuscript.status.stepOrder < MISE_EN_PAGE_STEP_ORDER && (
-          <AcceptanceConditionsPanel manuscriptId={manuscript.id} canManage={canDecide} confirm={confirm} onError={setError} />
+        {(permissions.has("decision_editoriale:consultation") || canDecide || !!roles?.has("ASSISTANT_EDITORIAL")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && manuscript.status.stepOrder < MISE_EN_PAGE_STEP_ORDER && (
+          <AcceptanceConditionsPanel manuscriptId={manuscript.id} canManage={canDecide || !!roles?.has("ASSISTANT_EDITORIAL")} confirm={confirm} onError={setError} />
         )}
 
         {confieAutrui && (

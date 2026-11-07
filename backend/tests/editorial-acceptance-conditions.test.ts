@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, seedEvaluation } from "./helpers.js";
+import { extractSessionCookie, seedEvaluation, createUserWithRole } from "./helpers.js";
 
 // Suivi des acceptations « sous conditions » (audit éditorial, point n°2) : les
 // conditions posées par le comité sont listées, levées une à une (datées,
@@ -91,6 +91,35 @@ describe("acceptation sous conditions — suivi des conditions", () => {
     expect(refreshed.json().remaining).toBe(0);
     expect(refreshed.json().items[0].lifted).toBe(true);
     expect(refreshed.json().items[0].lift_note).toBe("Chapitre revu.");
+  });
+
+  it("l'assistant éditorial peut lever une condition ; un correcteur ne le peut pas (403)", async () => {
+    const id = await manuscriptAt("DECISION_EDITORIALE");
+    await app.inject({
+      method: "POST", url: `/api/v1/manuscripts/${id}/editorial-decision`, headers: { cookie },
+      payload: { decision: "acceptation_conditions", motivation: "Sous réserve.", conditions: ["Cond A", "Cond B"] },
+    });
+    const conds = await prisma.editorialAcceptanceCondition.findMany({ where: { manuscriptId: id, deletedAt: null }, orderBy: { createdAt: "asc" } });
+    expect(conds.length).toBe(2);
+
+    const asst = await createUserWithRole(`asst_cond_${rnd()}`, "ASSISTANT_EDITORIAL", "Asst123!");
+    const corr = await createUserWithRole(`corr_cond_${rnd()}`, "CORRECTEUR", "Corr123!");
+    const login = async (u: string, p: string) => {
+      const r = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: u, password: p } });
+      return extractSessionCookie(r.cookies.map((c) => `${c.name}=${c.value}`));
+    };
+    const asstCookie = await login(asst.username, "Asst123!");
+    const corrCookie = await login(corr.username, "Corr123!");
+
+    // Correcteur → refus.
+    const refused = await app.inject({ method: "POST", url: `/api/v1/acceptance-conditions/${conds[0].id}/lift`, headers: { cookie: corrCookie }, payload: { note: "x" } });
+    expect(refused.statusCode).toBe(403);
+
+    // Assistant éditorial → autorisé.
+    const ok = await app.inject({ method: "POST", url: `/api/v1/acceptance-conditions/${conds[0].id}/lift`, headers: { cookie: asstCookie }, payload: { note: "Levée par l'assistant." } });
+    expect(ok.statusCode).toBe(200);
+    const list = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/acceptance-conditions`, headers: { cookie } });
+    expect(list.json().lifted).toBe(1);
   });
 
   it("ajout, réouverture, retrait ; refuse d'ajouter hors acceptation conditionnelle", async () => {

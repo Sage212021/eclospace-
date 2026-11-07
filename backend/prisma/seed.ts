@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-conditions-acceptation-assistant-editorial",
+      version: "2026.11",
+      title: "Nouveauté — L'assistant éditorial peut lever les conditions d'acceptation",
+      body: "Quand un ouvrage a été « Accepté sous conditions », il faut lever ces conditions avant de pouvoir passer en mise en page (sinon la clôture de la correction reste bloquée — même si toutes les corrections sont intégrées). Jusqu'ici, seule la Direction éditoriale pouvait les lever. Désormais, l'assistant éditorial le peut aussi : sur la fiche de l'ouvrage, dans le bloc « Acceptation sous conditions », il peut lever (ou rouvrir, ajouter, retirer) chaque condition, avec une note. La décision éditoriale elle-même (accepter / refuser) reste réservée à la Direction éditoriale.",
+      permissionModules: ["decision_editoriale"],
+      departmentCodes: ["DIRED", "SECR", "DG"],
+    },
+    {
       slug: "2026-11-mes-integrations-classees-par-etape",
       version: "2026.11",
       title: "Nouveauté — « Mes intégrations de correction » rangées par étape",

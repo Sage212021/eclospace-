@@ -971,7 +971,7 @@ export async function uploadCorrectionPhase(manuscriptId: string, phase: string,
 export interface CorrectionCycleMovement {
   id: string;
   at: string;
-  kind: "opened" | "deposit" | "reassign" | "closed" | "note";
+  kind: "opened" | "deposit" | "replacement" | "reassign" | "closed" | "note";
   userId: string | null;
   userName: string | null;
   userRole: string | null;

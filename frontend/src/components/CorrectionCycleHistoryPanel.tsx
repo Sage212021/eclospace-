@@ -14,6 +14,7 @@ import { getCorrectionCycles, type CorrectionCycleHistory, type CorrectionCycleM
 const KIND_LABEL: Record<CorrectionCycleMovement["kind"], string> = {
   opened: "Ouverture du cycle",
   deposit: "Dépôt",
+  replacement: "Remplacement de fichier",
   reassign: "Réaffectation",
   closed: "Clôture",
   note: "Note",

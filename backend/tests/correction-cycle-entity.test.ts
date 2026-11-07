@@ -64,6 +64,28 @@ describe("entité cycle de correction (Phase 2)", () => {
     expect(deposits[0].stepStatus).toBe("CORRECTION");
   });
 
+  it("remplacer un fichier déjà déposé : mouvement « replacement » au journal (fichier remplacé, nouveau fichier, auteur, date)", async () => {
+    const m = await manuscriptAtCorrection();
+    // 1er dépôt.
+    const up1 = multipart("file", "rapport-v1.txt", "Première version.");
+    expect((await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/rapport_1`, headers: { cookie, ...up1.headers }, payload: up1.body })).statusCode).toBe(201);
+    // Remplacement (même phase, nouveau fichier).
+    const up2 = multipart("file", "rapport-v2.txt", "Version corrigée.");
+    expect((await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/rapport_1`, headers: { cookie, ...up2.headers }, payload: up2.body })).statusCode).toBe(201);
+
+    const cycles = (await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/correction-cycles`, headers: { cookie } })).json() as any[];
+    const movements = cycles[0].movements as any[];
+    const replacement = movements.find((mv) => mv.kind === "replacement");
+    expect(replacement).toBeTruthy();
+    // Journal : auteur, date, fichier remplacé ET nouveau fichier.
+    expect(replacement.userId).toBe(adminId);
+    expect(replacement.at).toBeTruthy();
+    expect(replacement.observations).toContain("rapport-v1.txt"); // fichier remplacé
+    expect(replacement.observations).toContain("rapport-v2.txt"); // nouveau fichier
+    // Le 1er dépôt reste un « deposit » distinct.
+    expect(movements.filter((mv) => mv.kind === "deposit")).toHaveLength(1);
+  });
+
   it("la fiche expose le cycle actif (référence + n°)", async () => {
     const m = await manuscriptAtCorrection();
     const up = multipart("file", "rapport.txt", "Rapport.");

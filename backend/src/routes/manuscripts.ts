@@ -1480,6 +1480,11 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           return reply.code(403).send({ code: "not_authorized_for_phase", message: denied });
         }
       }
+      // Remplacement d'une pièce déjà déposée ? (pour l'historiser au journal
+      // avec le fichier remplacé, le nouveau fichier, la date et l'auteur).
+      let isReplacement = false;
+      let replacedFilename: string | null = null;
+
       // VERROUS DU RELAIS DE CORRECTION — appliqués aux DEUX branches : TEXTE et
       // COUVERTURE (demande opérateur 10/10 : le cycle couverture est désormais
       // obligatoire et ordonné au même titre que le texte).
@@ -1488,7 +1493,8 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         const phaseList = isCover ? COVER_CORRECTION_PHASES : CORRECTION_PHASES;
         const cycle = isCover ? await coverCorrectionCycleState(id) : await correctionCycleState(id);
         const current = cycle.find((p) => p.key === phase);
-        const isReplacement = Boolean(current?.has_file);
+        isReplacement = Boolean(current?.has_file);
+        replacedFilename = current?.has_file ? (current.filename ?? null) : null;
 
         // ORDRE DU CYCLE : un NOUVEAU dépôt d'une pièce ne peut se faire que si
         // TOUTES les étapes précédentes de SA branche ont déjà un fichier.
@@ -1532,13 +1538,23 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       const version = await prisma.documentVersion.create({
         data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Correction — ${label}`, uploadedBy: request.user!.id },
       });
-      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { correction_phase: phase }, ipAddress: request.ip });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { correction_phase: phase, replaced: isReplacement, replaced_filename: replacedFilename }, ipAddress: request.ip });
 
       // Motif / observations éventuels envoyés avec le dépôt (champs multipart).
       const fields = file.fields as Record<string, { value?: string } | undefined> | undefined;
       const motive = fields?.motive?.value?.toString().trim() || null;
       const observations = fields?.observations?.value?.toString().trim() || null;
       const userRole = request.user!.roles[0] ?? null;
+
+      // REMPLACEMENT : on l'historise au journal du cycle comme un mouvement
+      // dédié, en précisant le fichier remplacé, le nouveau fichier (la date et
+      // l'auteur sont portés par le mouvement lui-même). Sinon, dépôt normal.
+      const newFilename = file.filename || label;
+      const movementKind = isReplacement ? "replacement" : "deposit";
+      const replacementNote = isReplacement
+        ? `Fichier remplacé : « ${replacedFilename ?? "fichier précédent"} » → nouveau fichier : « ${newFilename} ».`
+        : null;
+      const movementObservations = [replacementNote, observations].filter(Boolean).join(" — ") || null;
 
       // Rapport de correction de COUVERTURE : on notifie l'INFOGRAPHE — celui
       // DÉSIGNÉ pour l'ouvrage en priorité, sinon le responsable de l'étape
@@ -1562,7 +1578,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         // Mouvement du cycle (branche couverture) — historisé UNIQUEMENT si un
         // cycle de correction est ouvert (sinon, dépôt infographie post-clôture :
         // on n'ouvre pas de cycle de correction fantôme).
-        await recordCorrectionMovementIfOpen(id, { kind: "deposit", userId: request.user!.id, userRole, recipientId: coverRecipient, motive, observations, documentVersionId: version.id, stepStatus: manuscript.status.code });
+        await recordCorrectionMovementIfOpen(id, { kind: movementKind, userId: request.user!.id, userRole, recipientId: coverRecipient, motive, observations: movementObservations, documentVersionId: version.id, stepStatus: manuscript.status.code });
         return reply.code(201).send({ version_id: version.id, phase, label });
       }
 
@@ -1597,7 +1613,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         }
       }
       // Mouvement du cycle (branche texte) — historisé sur le cycle actif.
-      await recordCorrectionMovement(id, { kind: "deposit", userId: request.user!.id, userRole, recipientId: textRecipient, motive, observations, documentVersionId: version.id, stepStatus: manuscript.status.code });
+      await recordCorrectionMovement(id, { kind: movementKind, userId: request.user!.id, userRole, recipientId: textRecipient, motive, observations: movementObservations, documentVersionId: version.id, stepStatus: manuscript.status.code });
       return reply.code(201).send({ version_id: version.id, phase, label });
     },
   );

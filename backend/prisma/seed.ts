@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-cycle-correction-journal-remplacement",
+      version: "2026.11",
+      title: "Nouveauté — Remplacement d'un fichier de correction tracé au journal",
+      body: "Quand on remplace un fichier déjà déposé dans le cycle de correction (texte ou couverture), le journal du cycle l'enregistre désormais comme un mouvement « Remplacement de fichier », avec la date et l'heure, la personne qui a remplacé, le nom du fichier remplacé et celui du nouveau fichier (« Fichier remplacé : « rapport-v1.docx » → nouveau fichier : « rapport-v2.docx » »). Avant, un remplacement apparaissait comme un simple dépôt, sans préciser ce qui changeait. L'historique complet reste consultable sur la fiche de l'ouvrage.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "INFOG", "DG"],
+    },
+    {
       slug: "2026-11-annulation-recu-directeur-editorial",
       version: "2026.11",
       title: "Nouveauté — Le Directeur éditorial peut annuler un reçu",

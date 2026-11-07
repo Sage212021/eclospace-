@@ -11,7 +11,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-export type MovementKind = "opened" | "deposit" | "reassign" | "closed" | "note";
+export type MovementKind = "opened" | "deposit" | "replacement" | "reassign" | "closed" | "note";
 
 export interface MovementInput {
   kind: MovementKind;

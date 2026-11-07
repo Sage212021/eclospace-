@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-editeur-lit-les-images",
+      version: "2026.11",
+      title: "Nouveauté — SAGE Éditeur lit le texte des images et captures jointes",
+      body: "Dans l'atelier éditorial (SAGE Éditeur), vous pouvez joindre une image ou une capture d'écran (photo d'une page, capture d'un passage, tableau, note lisible) : SAGE la voit et lit le texte qu'elle contient, pour le transcrire, l'analyser, le corriger ou le commenter comme un texte ordinaire. Il ne répond plus qu'il ne peut pas lire une image. Si une capture est vraiment illisible (floue, coupée, texte trop petit), il vous le signale précisément au lieu d'inventer. La pièce jointe se dépose avec le bouton 📎 du dialogue.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "DG"],
+    },
+    {
       slug: "2026-11-cycle-correction-journal-remplacement",
       version: "2026.11",
       title: "Nouveauté — Remplacement d'un fichier de correction tracé au journal",

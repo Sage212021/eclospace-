@@ -178,6 +178,25 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     expect(JSON.stringify(listed.json().messages)).not.toContain(marker);
   });
 
+  it("lit une IMAGE / capture jointe : elle est transmise en vision au modèle, et la consigne de lecture d'image est au prompt", async () => {
+    // Petit PNG valide (décodable par jimp), pour que l'image soit normalisée puis envoyée en vision.
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAIUlEQVR4AYXBAQEAMAiAME7/zt4Esr1ZHCRIkCBBggQJHxtuBAxSsWhBAAAAAElFTkSuQmCC", "base64");
+    const mp = multipartMessage("Lis le texte sur cette capture.", "capture.png", "image/png", png);
+    const msg = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/message`, headers: { cookie: adminCookie, "content-type": mp.contentType }, payload: mp.body });
+    expect(msg.statusCode).toBe(202);
+    const assistant = await waitMessage(msg.json().assistant_message_id);
+    expect(assistant.status).toBe("done");
+
+    // Le dernier appel au modèle contient un bloc image (vision) dans le message utilisateur.
+    const lastMessages = calls[calls.length - 1]?.messages as Array<{ role: string; content: unknown }> | undefined;
+    const lastUser = lastMessages?.[lastMessages.length - 1];
+    const hasImageBlock = Array.isArray(lastUser?.content) && (lastUser!.content as Array<{ type?: string }>).some((b) => b?.type === "image");
+    expect(hasImageBlock).toBe(true);
+
+    // Le prompt système autorise explicitement la lecture d'une image/capture.
+    expect(calls[calls.length - 1]?.system ?? "").toContain("IMAGES JOINTS");
+  });
+
   it("accepte un document seul (sans question saisie) au dialogue", async () => {
     const mp = multipartMessage("", "dossier.txt", "text/plain", Buffer.from("Contenu du dossier joint par l'opérateur.", "utf8"));
     const msg = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/message`, headers: { cookie: adminCookie, "content-type": mp.contentType }, payload: mp.body });

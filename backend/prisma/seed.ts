@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-mes-corrections-nom-infographe",
+      version: "2026.11",
+      title: "Nouveauté — « Mes corrections » affiche l'infographe responsable",
+      body: "Sur chaque ouvrage de « Mes corrections », le nom de l'infographe responsable (désigné depuis l'évaluation) est désormais affiché sur la carte — « 🎨 Infographe : [nom] ». Le correcteur voit ainsi, dès l'étape correction, qui s'occupe de la couverture. Le choix / changement de cet infographe pour les corrections de couverture reste disponible dans le panneau « Correction de la couverture » (pré-rempli avec l'infographe de l'évaluation).",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "INFOG", "DG"],
+    },
+    {
       slug: "2026-11-conditions-acceptation-assistant-editorial",
       version: "2026.11",
       title: "Nouveauté — L'assistant éditorial peut lever les conditions d'acceptation",

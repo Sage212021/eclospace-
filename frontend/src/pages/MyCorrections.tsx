@@ -265,6 +265,7 @@ function CorrectionCard({ task, onDepose, onRefresh, onMessage, bookTypes, suppo
             <span>{TYPE_LABELS[task.type] ?? task.type}</span>
             {task.plannedEnd && <span>· échéance {new Date(task.plannedEnd).toLocaleDateString("fr-FR")}</span>}
             <span style={{ fontFamily: "var(--font-mono)" }} title="Avancement réel — phases du circuit déposées (texte + couverture)">· {task.correctionPct} % · T {task.textDone}/4 · C {task.coverDone}/4</span>
+            <span title="Infographe responsable (désigné depuis l'évaluation) — il reçoit les corrections de couverture">· 🎨 Infographe : {task.infographe ? task.infographe.name : "non désigné"}</span>
           </div>
         </div>
         {done && reopened && <Button variant="subtle" size="sm" onClick={() => setReopened(false)}>Replier</Button>}

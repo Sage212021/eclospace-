@@ -125,6 +125,16 @@ function CoverReports({ manuscriptId }: { manuscriptId: string }) {
 // finale (VCF). Branche TEXTE (la couverture, gérée par l'infographe, arrive en
 // 2ᵉ temps).
 
+// Étape d'avancement d'une intégration (= la pastille affichée) : sert à
+// REGROUPER les ouvrages par étape au lieu d'une liste mélangée.
+function stageOf(m: MyIntegrationItem): { key: string; label: string; order: number } {
+  const restant = m.counts.a_integrer + m.counts.a_revoir;
+  if (m.counts.total === 0) return { key: "aucune", label: "Aucune correction retenue", order: 3 };
+  if (restant > 0) return { key: "a_integrer", label: "À intégrer", order: 1 };
+  if (m.can_close) return { key: "pret", label: "Prêts à clore", order: 4 };
+  return { key: "fichier_final", label: "Reste le fichier final", order: 2 };
+}
+
 export function MyIntegrations({ focusManuscriptId, onFocusConsumed }: { focusManuscriptId?: string | null; onFocusConsumed?: () => void } = {}) {
   const [items, setItems] = useState<MyIntegrationItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +160,20 @@ export function MyIntegrations({ focusManuscriptId, onFocusConsumed }: { focusMa
 
   const active = items.filter((m) => !m.closed_at);
   const history = items.filter((m) => m.closed_at);
+
+  // Regroupement des ouvrages actifs par étape d'avancement (plus de liste
+  // mélangée) : à intégrer → reste le fichier final → aucune correction retenue
+  // → prêts à clore.
+  const activeGroups = (() => {
+    const map = new Map<string, { key: string; label: string; order: number; items: MyIntegrationItem[] }>();
+    for (const m of active) {
+      const s = stageOf(m);
+      let g = map.get(s.key);
+      if (!g) { g = { key: s.key, label: s.label, order: s.order, items: [] }; map.set(s.key, g); }
+      g.items.push(m);
+    }
+    return [...map.values()].sort((a, b) => a.order - b.order);
+  })();
 
   async function toggleClosure(m: MyIntegrationItem, closed: boolean) {
     const rowKey = `${m.branch}:${m.id}`;
@@ -267,8 +291,18 @@ export function MyIntegrations({ focusManuscriptId, onFocusConsumed }: { focusMa
         <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 10 }}>Aucun ouvrage à intégrer pour l'instant. Dès qu'un correcteur vous confie un manuscrit et accepte des corrections, il apparaîtra ici.</div>
       )}
 
-      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-        {active.map((m) => renderItem(m, false))}
+      <div style={{ display: "grid", gap: 16, marginTop: 12 }}>
+        {activeGroups.map((g) => (
+          <div key={g.key}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 8px" }}>
+              <span style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--ink)" }}>{g.label}</span>
+              <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{g.items.length}</span>
+            </div>
+            <div style={{ display: "grid", gap: 10 }}>
+              {g.items.map((m) => renderItem(m, false))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Historique des intégrations closes — accordéon replié pour ne pas

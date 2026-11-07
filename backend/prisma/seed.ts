@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-mes-integrations-classees-par-etape",
+      version: "2026.11",
+      title: "Nouveauté — « Mes intégrations de correction » rangées par étape",
+      body: "Vos ouvrages à intégrer ne sont plus mélangés : ils sont désormais regroupés par étape d'avancement, dans l'ordre — « À intégrer », « Reste le fichier final », « Aucune correction retenue », puis « Prêts à clore ». Chaque groupe affiche son nombre d'ouvrages. Vous voyez d'un coup d'œil ce qui demande une action et ce qui est prêt. L'historique des intégrations closes reste à part, comme avant.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "INFOG", "DG"],
+    },
+    {
       slug: "2026-11-sage-editeur-lit-les-images",
       version: "2026.11",
       title: "Nouveauté — SAGE Éditeur lit le texte des images et captures jointes",

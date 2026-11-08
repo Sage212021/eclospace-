@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-surveillance-echeances-editoriales",
+      version: "2026.11",
+      title: "Nouveauté — Surveillance automatique des échéances éditoriales",
+      body: "ECLOSPACE surveille désormais, tout seul et en continu (même quand personne n'est connecté), les échéances des tâches éditoriales. Dès qu'une tâche planifiée n'est pas terminée et que sa date de fin approche (à 7, 3 ou 1 jour) ou est dépassée, une alerte part automatiquement vers la Direction générale (supervision) et vers le responsable de la tâche, dans la cloche de notifications — et par e-mail pour les alertes importantes. Chaque alerte précise l'ouvrage, la tâche concernée et le nombre de jours de retard ou restants. Vous n'avez plus à aller chercher les retards : ils viennent à vous, une seule fois par échéance (pas de répétition), et une tâche replanifiée rouvre le suivi sur la nouvelle date.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DG", "DIRED", "CORR", "INFOG"],
+    },
+    {
       slug: "2026-11-sage-editeur-controle-qualite-livrables",
       version: "2026.11",
       title: "Nouveauté — SAGE Éditeur contrôle ses livrables avant de les remettre",

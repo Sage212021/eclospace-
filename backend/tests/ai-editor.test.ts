@@ -2,12 +2,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 
 // API Claude simulée : le faux client renvoie un texte fixe (aucun appel réseau).
-const calls: { system?: string; messages?: unknown }[] = [];
+const calls: { system?: string; messages?: unknown; tools?: unknown }[] = [];
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
-      create: async (args: { system?: string; messages?: unknown }) => {
-        calls.push({ system: args.system, messages: args.messages });
+      create: async (args: { system?: string; messages?: unknown; tools?: unknown }) => {
+        calls.push({ system: args.system, messages: args.messages, tools: args.tools });
         return {
           model: "claude-sonnet-5",
           stop_reason: "end_turn",
@@ -155,6 +155,11 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     expect(system).toContain("anglais britannique");
     expect(system).toContain("ISBN");
     expect(system).toContain("AUTONOMIE ÉDITORIALE");
+    // Recherche Web : SAGE Éditeur se voit proposer l'outil web_search (vérifier
+    // normes, références, actualités), comme le SAGE du dialogue DG.
+    expect(system).toContain("RECHERCHE WEB");
+    const tools = (calls[calls.length - 1]?.tools ?? []) as Array<{ name?: string; type?: string }>;
+    expect(tools.some((t) => t.name === "web_search")).toBe(true);
   });
 
   // ── Pièce jointe au dialogue éditorial (PDF/.docx/texte/image) ──

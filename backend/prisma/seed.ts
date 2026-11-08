@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-editeur-recherche-web",
+      version: "2026.11",
+      title: "Nouveauté — SAGE Éditeur peut désormais vérifier sur le Web",
+      body: "SAGE Éditeur dispose maintenant d'une recherche sur Internet, comme le SAGE de votre espace « Échanger avec SAGE ». Il peut vérifier de lui-même une norme en vigueur (ISBN, règles de citation…), une référence, l'existence d'un titre déjà publié, un auteur, une donnée de marché ou une actualité, au lieu de seulement signaler « à vérifier ». Il cite ses sources naturellement, dans le fil de la phrase (nom et date), sans coller de liste de liens. Deux garde-fous importants : il n'invente jamais une norme, un chiffre ou une référence — s'il ne trouve pas, il le dit ; et la confidentialité est absolue — il n'envoie jamais le texte d'un manuscrit ni une information confidentielle à la recherche Web, seulement des requêtes générales (un titre, une norme, un fait public).",
+      permissionModules: ["manuscripts", "comite_lecture"],
+      departmentCodes: ["DIRED", "COMLEC", "CORR", "DG"],
+    },
+    {
       slug: "2026-11-sage-editeur-directeur-international",
       version: "2026.11",
       title: "Nouveauté — SAGE Éditeur devient un directeur éditorial international",

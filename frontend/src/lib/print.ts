@@ -2259,6 +2259,9 @@ export function printPurchaseOrderVoucher(v: PurchaseOrderVoucher, opts?: PrintO
     ${docField(tr("Raison sociale", "Name"), escapeHtml(v.supplier))}
     ${docField(tr("Adresse", "Address"), v.supplierAddress ? escapeHtml(v.supplierAddress) : null)}
     ${docField(tr("Contact (tél. / email)", "Contact (phone / email)"), v.supplierContact ? escapeHtml(v.supplierContact) : null)}
+    ${docField(tr("NIU (n° contribuable)", "Taxpayer no. (NIU)"), v.supplierTaxId ? escapeHtml(v.supplierTaxId) : null)}
+    ${docField(tr("Registre de commerce (RCCM)", "Trade register (RCCM)"), v.supplierRegistration ? escapeHtml(v.supplierRegistration) : null)}
+    ${docField(tr("Compte bancaire", "Bank account"), v.supplierBankAccount ? escapeHtml(v.supplierBankAccount) : null)}
 
     ${docSection(tr("Détail de la commande", "Order detail"))}
     <table class="lines">

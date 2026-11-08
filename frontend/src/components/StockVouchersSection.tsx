@@ -13,6 +13,8 @@ import {
   updatePurchaseOrderVoucher,
   deletePurchaseOrderVoucher,
   poVoucherPrintFileUrl,
+  listPrinters,
+  type Printer,
   type BookReceiptVoucher,
   type BookReceiptLine,
   type AuthorWithdrawalVoucher,
@@ -312,16 +314,37 @@ export function PurchaseOrderSection({ isbns, canManage, onError }: { isbns: Isb
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [head, setHead] = useState({ ordered_at: today(), supplier: "", supplier_address: "", supplier_contact: "", quote_ref: "", delivery_place: "", delivery_due: "", payment_terms: "", tax_rate: "0", issued_by_name: "", issued_by_role: "", notes: "" });
+  const emptyHead = { ordered_at: today(), supplier: "", supplier_address: "", supplier_contact: "", supplier_tax_id: "", supplier_registration: "", supplier_bank_account: "", quote_ref: "", delivery_place: "", delivery_due: "", payment_terms: "", tax_rate: "0", issued_by_name: "", issued_by_role: "", notes: "" };
+  const [head, setHead] = useState({ ...emptyHead });
   const [lines, setLines] = useState<PoLineDraft[]>([emptyPoLine()]);
+  // Carnet d'imprimeurs : permet de pré-remplir le fournisseur et ses mentions
+  // légales d'un clic (les informations sont déjà enregistrées dans le carnet).
+  const [printers, setPrinters] = useState<Printer[]>([]);
 
   const load = () => listPurchaseOrderVouchers().then(setRows).catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { load(); listPrinters().then(setPrinters).catch(() => {}); /* eslint-disable-next-line */ }, []);
+
+  function applyPrinter(printerId: string) {
+    const p = printers.find((x) => x.id === printerId);
+    if (!p) return;
+    const pa = p.partner;
+    const contact = [pa.phone, pa.email].filter(Boolean).join(" · ");
+    setHead((h) => ({
+      ...h,
+      supplier: `${pa.firstName}${pa.lastName ? " " + pa.lastName : ""}`.trim(),
+      supplier_address: pa.city ?? h.supplier_address,
+      supplier_contact: contact || h.supplier_contact,
+      supplier_tax_id: pa.niu ?? "",
+      supplier_registration: pa.rccm ?? "",
+      supplier_bank_account: pa.bankAccount ?? "",
+      payment_terms: p.paymentTerms ?? h.payment_terms,
+    }));
+  }
 
   function reset() {
     setEditingId(null);
     setShowForm(false);
-    setHead({ ordered_at: today(), supplier: "", supplier_address: "", supplier_contact: "", quote_ref: "", delivery_place: "", delivery_due: "", payment_terms: "", tax_rate: "0", issued_by_name: "", issued_by_role: "", notes: "" });
+    setHead({ ...emptyHead });
     setLines([emptyPoLine()]);
   }
 
@@ -330,6 +353,7 @@ export function PurchaseOrderSection({ isbns, canManage, onError }: { isbns: Isb
     setShowForm(true);
     setHead({
       ordered_at: v.orderedAt.slice(0, 10), supplier: v.supplier, supplier_address: v.supplierAddress ?? "", supplier_contact: v.supplierContact ?? "",
+      supplier_tax_id: v.supplierTaxId ?? "", supplier_registration: v.supplierRegistration ?? "", supplier_bank_account: v.supplierBankAccount ?? "",
       quote_ref: v.quoteRef ?? "", delivery_place: v.deliveryPlace ?? "", delivery_due: v.deliveryDue ? v.deliveryDue.slice(0, 10) : "",
       payment_terms: v.paymentTerms ?? "", tax_rate: String(Number(v.taxRate) || 0), issued_by_name: v.issuedByName ?? "", issued_by_role: v.issuedByRole ?? "", notes: v.notes ?? "",
     });
@@ -364,6 +388,9 @@ export function PurchaseOrderSection({ isbns, canManage, onError }: { isbns: Isb
         supplier: head.supplier.trim(),
         supplier_address: head.supplier_address || null,
         supplier_contact: head.supplier_contact || null,
+        supplier_tax_id: head.supplier_tax_id || null,
+        supplier_registration: head.supplier_registration || null,
+        supplier_bank_account: head.supplier_bank_account || null,
         quote_ref: head.quote_ref || null,
         delivery_place: head.delivery_place || null,
         delivery_due: head.delivery_due ? new Date(head.delivery_due).toISOString() : null,
@@ -400,11 +427,24 @@ export function PurchaseOrderSection({ isbns, canManage, onError }: { isbns: Isb
       {showForm && canManage && (
         <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 14, marginBottom: 14 }}>
           <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 10 }}>{editingId ? "Modifier le bon de commande" : "Nouveau bon de commande"}</div>
+          {printers.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <Field label="Choisir un imprimeur du carnet (pré-remplit le fournisseur et ses mentions légales)">
+                <select defaultValue="" onChange={(e) => { applyPrinter(e.target.value); e.target.value = ""; }}>
+                  <option value="">— Sélectionner un imprimeur enregistré —</option>
+                  {printers.map((p) => <option key={p.id} value={p.id}>{p.partner.firstName}{p.partner.lastName ? ` ${p.partner.lastName}` : ""}{p.partner.city ? ` — ${p.partner.city}` : ""}</option>)}
+                </select>
+              </Field>
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
             <Field label="Date de commande"><input type="date" value={head.ordered_at} onChange={(e) => setHead({ ...head, ordered_at: e.target.value })} /></Field>
             <Field label="Fournisseur / imprimeur *"><input value={head.supplier} onChange={(e) => setHead({ ...head, supplier: e.target.value })} placeholder="Ex. Imprimerie Saint-Paul" /></Field>
             <Field label="Adresse du fournisseur"><input value={head.supplier_address} onChange={(e) => setHead({ ...head, supplier_address: e.target.value })} /></Field>
             <Field label="Contact (tél. / email)"><input value={head.supplier_contact} onChange={(e) => setHead({ ...head, supplier_contact: e.target.value })} /></Field>
+            <Field label="NIU (n° contribuable)"><input value={head.supplier_tax_id} onChange={(e) => setHead({ ...head, supplier_tax_id: e.target.value })} placeholder="Mention légale" /></Field>
+            <Field label="Registre de commerce (RCCM)"><input value={head.supplier_registration} onChange={(e) => setHead({ ...head, supplier_registration: e.target.value })} placeholder="Mention légale" /></Field>
+            <Field label="Compte bancaire"><input value={head.supplier_bank_account} onChange={(e) => setHead({ ...head, supplier_bank_account: e.target.value })} placeholder="Banque, n° de compte" /></Field>
             <Field label="Réf. devis"><input value={head.quote_ref} onChange={(e) => setHead({ ...head, quote_ref: e.target.value })} /></Field>
             <Field label="Lieu de livraison"><input value={head.delivery_place} onChange={(e) => setHead({ ...head, delivery_place: e.target.value })} /></Field>
             <Field label="Date de livraison souhaitée"><input type="date" value={head.delivery_due} onChange={(e) => setHead({ ...head, delivery_due: e.target.value })} /></Field>

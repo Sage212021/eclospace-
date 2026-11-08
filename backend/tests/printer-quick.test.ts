@@ -28,7 +28,7 @@ describe("Imprimeurs — création rapide (carnet)", () => {
     const name = `Imprimerie Test ${Math.random().toString(36).slice(2, 7)}`;
     const res = await app.inject({
       method: "POST", url: "/api/v1/printers/quick", headers: { cookie },
-      payload: { name, city: "Yaoundé", phone: "690000000", specialties: ["offset", "numérique"], payment_terms: "50 % à la commande" },
+      payload: { name, city: "Yaoundé", phone: "690000000", niu: "M099999999999Z", rccm: "RC/YAO/2026/B/999", bank_account: "CCA BANK — 0009999999", specialties: ["offset", "numérique"], payment_terms: "50 % à la commande" },
     });
     expect(res.statusCode).toBe(201);
     const printer = res.json();
@@ -36,10 +36,13 @@ describe("Imprimeurs — création rapide (carnet)", () => {
     expect(printer.partner.firstName).toBe(name);
     expect(printer.specialties).toContain("offset");
 
-    // Le partenaire est bien de catégorie « imprimeur ».
+    // Le partenaire est bien de catégorie « imprimeur », avec ses mentions légales.
     const partner = await prisma.partner.findUniqueOrThrow({ where: { id: printer.partner.id } });
     expect(partner.category).toBe("imprimeur");
     expect(partner.city).toBe("Yaoundé");
+    expect(partner.niu).toBe("M099999999999Z");
+    expect(partner.rccm).toBe("RC/YAO/2026/B/999");
+    expect(partner.bankAccount).toContain("CCA BANK");
 
     // Il apparaît dans la liste des imprimeurs (utilisée pour demander un devis).
     const list = await app.inject({ method: "GET", url: "/api/v1/printers", headers: { cookie } });

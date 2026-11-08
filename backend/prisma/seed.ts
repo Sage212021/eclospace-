@@ -1385,12 +1385,15 @@ async function main() {
   // recrée pas un imprimeur déjà présent (repéré par son e-mail), et on complète
   // la fiche Printer si elle manquait. Les coordonnées restent modifiables dans
   // l'application ; ce pré-chargement ne fait que garantir leur présence.
-  const seededPrinters: { name: string; city: string; phone: string; email: string; specialties: string[]; paymentTerms: string }[] = [
+  const seededPrinters: { name: string; city: string; phone: string; email: string; niu: string; rccm: string; bankAccount: string | null; specialties: string[]; paymentTerms: string }[] = [
     {
       name: "BILLY PRINT CONCEPT",
       city: "Yaoundé (Cradat, face au Centre commercial)",
       phone: "+237 697 43 75 76 / +237 680 98 97 93",
       email: "billydjeutane92@gmail.com",
+      niu: "M102217703787F",
+      rccm: "RC/YAE/2022B/3555",
+      bankAccount: "CCA BANK — 0274311601, Code G 10029, Clé 13",
       specialties: ["Infographie", "Sérigraphie", "Édition", "Photocopie", "Communication"],
       paymentTerms: "70 % avant production, 30 % après production",
     },
@@ -1399,6 +1402,9 @@ async function main() {
       city: "Cité Verte, Yaoundé",
       phone: "+237 657 93 56 75 / +237 676 67 63 85",
       email: "editionsglc@gmail.com",
+      niu: "M032517621437Y",
+      rccm: "RC/YAO/2025/B/573",
+      bankAccount: null,
       specialties: ["Impression d'ouvrages", "Édition"],
       paymentTerms: "Paiement en espèces (CASH)",
     },
@@ -1407,8 +1413,11 @@ async function main() {
     let partner = await prisma.partner.findFirst({ where: { category: "imprimeur", email: p.email } });
     if (!partner) {
       partner = await prisma.partner.create({
-        data: { category: "imprimeur", firstName: p.name, lastName: "", city: p.city, phone: p.phone, email: p.email },
+        data: { category: "imprimeur", firstName: p.name, lastName: "", city: p.city, phone: p.phone, email: p.email, niu: p.niu, rccm: p.rccm, bankAccount: p.bankAccount },
       });
+    } else if (partner.niu === null && partner.rccm === null) {
+      // Complète les mentions légales si la fiche existait déjà sans elles.
+      await prisma.partner.update({ where: { id: partner.id }, data: { niu: p.niu, rccm: p.rccm, bankAccount: p.bankAccount } });
     }
     const existingPrinter = await prisma.printer.findUnique({ where: { partnerId: partner.id } });
     if (!existingPrinter) {
@@ -1537,6 +1546,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-bon-commande-mentions-legales-fournisseur",
+      version: "2026.11",
+      title: "Nouveauté — Mentions légales du fournisseur sur le bon de commande",
+      body: "Le bon de commande peut désormais porter les mentions légales obligatoires du fournisseur : NIU (n° contribuable), registre de commerce (RCCM) et compte bancaire. Deux nouveautés pour aller vite : (1) un sélecteur « Choisir un imprimeur du carnet » pré-remplit d'un clic le fournisseur, ses coordonnées ET ses mentions légales (puisque les imprimeurs enregistrés les contiennent déjà) ; (2) ces trois mentions s'impriment sur le bon de commande (PDF), sous l'identité du fournisseur. Le carnet d'imprimeurs a été enrichi pour stocker ces informations, et les deux imprimeurs déjà enregistrés (Billy Print Concept, GLC Éditions/GLC SARL) ont leurs mentions renseignées. Vous pouvez toujours saisir ou corriger ces champs à la main.",
+      permissionModules: ["stock", "printing"],
+      departmentCodes: ["INFOG", "FIN", "DG"],
+    },
     {
       slug: "2026-11-carnet-imprimeurs-billy-glc",
       version: "2026.11",

@@ -103,6 +103,7 @@ describe("pièces stock & magasin (bon de réception + retrait auteur)", () => {
       method: "POST", url: "/api/v1/purchase-order-vouchers", headers: { cookie },
       payload: {
         ordered_at: "2026-10-15T00:00:00.000Z", supplier: "Imprimerie Saint-Paul", supplier_address: "Yaoundé", supplier_contact: "699 00 00 00",
+        supplier_tax_id: "M012345678901A", supplier_registration: "RC/YAO/2020/B/123", supplier_bank_account: "CCA BANK — 0001234567, Clé 11",
         quote_ref: "DEV-2026-012", delivery_place: "Entrepôt principal", delivery_due: "2026-11-15T00:00:00.000Z",
         payment_terms: "50 % à la commande, solde à la livraison", tax_rate: 0, issued_by_name: "NDI SANAMA", issued_by_role: "Responsable des stocks",
         lines: [
@@ -115,6 +116,10 @@ describe("pièces stock & magasin (bon de réception + retrait auteur)", () => {
     expect(create.json().number).toMatch(/^BC-\d{4}-\d{4}$/);
     expect(create.json().lines).toHaveLength(2);
     expect(create.json().lines[0].specs).toContain("pelliculé");
+    // Mentions légales du fournisseur, à reporter sur le bon de commande.
+    expect(create.json().supplierTaxId).toBe("M012345678901A");
+    expect(create.json().supplierRegistration).toBe("RC/YAO/2020/B/123");
+    expect(create.json().supplierBankAccount).toContain("CCA BANK");
     const firstSeq = Number(create.json().number.slice(-4));
 
     // Numérotation continue.

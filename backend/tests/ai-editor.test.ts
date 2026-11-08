@@ -142,6 +142,12 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     const system = calls[calls.length - 1]?.system ?? "";
     expect(system).toContain("ÉCRIS COMME UN ÉDITEUR");
     expect(system).toContain("je vais procéder à l'analyse");
+    // SAGE sait analyser l'authenticité de l'écriture (détection d'une rédaction
+    // automatisée), mais de façon prudente : jamais catégorique, toujours avec un
+    // degré d'incertitude, et jamais comme motif de rejet à lui seul.
+    expect(system).toContain("ANALYSE D'AUTHENTICITÉ DE L'ÉCRITURE");
+    expect(system).toContain("ce manuscrit a été écrit par une IA");
+    expect(system).toContain("DEGRÉ D'INCERTITUDE");
   });
 
   // ── Pièce jointe au dialogue éditorial (PDF/.docx/texte/image) ──

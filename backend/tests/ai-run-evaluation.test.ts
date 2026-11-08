@@ -172,6 +172,15 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     // Parité de rigueur : un rapport en anglais applique la même exigence que
     // le français (même grille, sévérité, lecture intégrale, complétude).
     expect(evalSystem).toContain("RIGUEUR IDENTIQUE");
+    // Écriture naturelle : les tics d'une rédaction automatique sont bannis du
+    // rapport, et l'analyse d'authenticité de l'écriture est demandée — mais de
+    // façon ARGUMENTÉE et NUANCÉE (jamais catégorique), et sans employer le mot
+    // « IA » dans le rapport livré (charte, règle 9).
+    expect(evalSystem).toContain("ÉCRITURE NATURELLE");
+    expect(evalSystem).toContain("Il est important de noter que");
+    expect(evalSystem).toContain("ANALYSE D'AUTHENTICITÉ");
+    expect(evalSystem).toContain("DEGRÉ D'INCERTITUDE");
+    expect(evalSystem).toContain("JAMAIS, à lui seul, un motif de rejet");
     // Les consignes de forme PROPRES au gabarit d'évaluation sont transmises,
     // et l'évaluation n'est PAS poussée vers des annotations de correction.
     expect(evalSystem).toContain("NON un rapport de correction");

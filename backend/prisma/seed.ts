@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-ia-authenticite-ecriture-et-ton-naturel",
+      version: "2026.11",
+      title: "Nouveauté — Détection d'une écriture « trop lisse » + rapports au ton plus naturel",
+      body: "Deux améliorations pour SAGE et les assistants de rapport (évaluation, correction BAT1/BAT2). D'abord, ils savent désormais repérer les signes d'une écriture standardisée ou produite de façon automatique : passages trop uniformes, formules stéréotypées, dialogues artificiels, incohérences de style entre chapitres. Important : jamais d'accusation tranchée. SAGE ne dira jamais « ce manuscrit a été écrit par une machine » ; il livre un constat argumenté, situe les passages concernés, donne un degré d'incertitude et distingue trois cas (texte entièrement généré, texte humain fortement assisté, ou texte humain qui présente ces traits par hasard). Le doute profite à l'auteur : ce constat ne justifie jamais à lui seul un refus. Ensuite, les rapports et réponses sont écrits de façon plus naturelle : on a retiré les tics de rédaction automatique (« il convient de souligner que », « en somme », « plus que jamais », vocabulaire passe-partout, phrases toutes de la même longueur, abus de tirets et de gras).",
+      permissionModules: ["manuscripts", "comite_lecture"],
+      departmentCodes: ["DIRED", "COMLEC", "CORR", "DG"],
+    },
+    {
       slug: "2026-11-sage-gouvernance-actions-sensibles",
       version: "2026.11",
       title: "Nouveauté — SAGE : garde-fous sur les actions sensibles",

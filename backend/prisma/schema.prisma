@@ -6310,6 +6310,24 @@ model DigitalServiceAlert {
   @@map("digital_service_alerts")
 }
 
+// Veille des ÉCHÉANCES ÉDITORIALES : alertes émises (anti-doublon). Une tâche
+// (plannedEnd) dont l'échéance approche ou est dépassée, et qui n'est pas
+// terminée, déclenche UNE alerte par seuil et par date d'échéance. Replanifier
+// la tâche (nouvelle plannedEnd) ré-ouvre les alertes (la date entre dans la
+// clé). Pas de FK (simple registre), pour ne pas alourdir le modèle Task.
+model EditorialDeadlineAlert {
+  id           String   @id @default(uuid())
+  taskId       String   @map("task_id")
+  manuscriptId String   @map("manuscript_id")
+  kind         String   // "deadline"
+  threshold    String   // "J-7" | "J-3" | "J-1" | "overdue"
+  dedupeKey    String   @unique @map("dedupe_key")
+  sentAt       DateTime @default(now()) @map("sent_at")
+
+  @@index([taskId])
+  @@map("editorial_deadline_alerts")
+}
+
 model DigitalServicePayment {
   id                String               @id @default(uuid())
   serviceId         String               @map("service_id")

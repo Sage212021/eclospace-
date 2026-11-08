@@ -1499,6 +1499,21 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-gouvernance-actions-sensibles",
+      version: "2026.11",
+      title: "Nouveauté — SAGE : garde-fous sur les actions sensibles",
+      body: "SAGE (votre espace « Échanger avec SAGE ») reste un conseiller en lecture seule : il analyse et propose, mais n'exécute aucune action sur le système — c'est toujours une personne habilitée qui décide et applique. Les actions sensibles exigent une autorisation humaine explicite, et SAGE ne les fait jamais lui-même : modifier un contrat (validation humaine), réaffecter définitivement un manuscrit (autorisation requise), supprimer un document (autorisation explicite), modifier les droits d'accès (administrateur habilité). Pour chacune, SAGE se limite à proposer en indiquant qui doit valider, sans jamais contourner un contrôle. Enfin, tout ce que SAGE consulte, analyse, propose ou rédige reste consigné dans l'échange, consultable par la Direction générale.",
+      departmentCodes: ["DG"],
+    },
+    {
+      slug: "2026-11-rapports-ia-anglais-meme-rigueur",
+      version: "2026.11",
+      title: "Nouveauté — Rapports IA en anglais : même rigueur qu'en français",
+      body: "Quand vous demandez un rapport en anglais (évaluation, ou correction BAT1/BAT2), il a désormais exactement la même rigueur que la version française : même grille officielle (mêmes critères, coefficients et notation sur 10), mêmes niveaux de sévérité, lecture intégrale du texte, toutes les rubriques complètes, et pour la correction le même relevé exhaustif des anomalies. Changer de langue ne change que la langue de rédaction, jamais le niveau d'exigence : pas de version allégée ni plus indulgente parce qu'elle est en anglais.",
+      permissionModules: ["manuscripts", "comite_lecture"],
+      departmentCodes: ["DIRED", "COMLEC", "CORR", "DG"],
+    },
+    {
       slug: "2026-11-evaluation-ia-consigne-et-langue",
       version: "2026.11",
       title: "Nouveauté — Évaluation IA : vos consignes (dont la langue) sont suivies à la lettre",

@@ -162,6 +162,11 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(system).toContain("COMPÉTENCES DE DIRECTION ÉDITORIALE");
     expect(system).toContain("LIGNE ÉDITORIALE");
     expect(system).toContain("POLITIQUE D'ACQUISITION");
+    // Gouvernance : SAGE est en lecture seule, les actions sensibles exigent une
+    // autorisation humaine, et ses échanges restent tracés pour le DG.
+    expect(system).toContain("GOUVERNANCE & ACTIONS SENSIBLES");
+    expect(system).toContain("autorisation humaine explicite");
+    expect(system).toContain("TRAÇABILITÉ");
   });
 
   it("rédige un document long SANS s'arrêter au 1ᵉʳ article (continuation après coupure de jetons)", async () => {

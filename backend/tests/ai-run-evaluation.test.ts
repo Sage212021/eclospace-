@@ -169,6 +169,9 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(evalSystem).toContain("SUIS STRICTEMENT");
     expect(evalSystem).toContain("LANGUE DU RAPPORT");
     expect(evalSystem.toUpperCase()).toContain("ANGLAIS");
+    // Parité de rigueur : un rapport en anglais applique la même exigence que
+    // le français (même grille, sévérité, lecture intégrale, complétude).
+    expect(evalSystem).toContain("RIGUEUR IDENTIQUE");
     // Les consignes de forme PROPRES au gabarit d'évaluation sont transmises,
     // et l'évaluation n'est PAS poussée vers des annotations de correction.
     expect(evalSystem).toContain("NON un rapport de correction");

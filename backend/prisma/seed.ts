@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-editeur-controle-qualite-livrables",
+      version: "2026.11",
+      title: "Nouveauté — SAGE Éditeur contrôle ses livrables avant de les remettre",
+      body: "Avant de vous remettre un livrable (textes de présentation / 4e de couverture, lettre à l'auteur, préparation de copie, propositions de titres, fiche de lecture), SAGE Éditeur vérifie désormais lui-même qu'il est conforme : toutes les rubriques attendues sont présentes, la lettre à l'auteur porte bien la signature « Le Service éditorial — Éditions Éclosion », et surtout le document ne contient aucune mention d'« IA » ou d'« intelligence artificielle » (un document remis ou publié ne révèle jamais la manière dont il a été produit). S'il détecte un défaut, il corrige le document avant de vous le livrer, et un filtre de sécurité retire en dernier recours toute mention d'IA résiduelle. Vous recevez ainsi un document complet, signé et propre, sans avoir à le repasser derrière.",
+      permissionModules: ["manuscripts", "comite_lecture"],
+      departmentCodes: ["DIRED", "COMLEC", "CORR", "DG"],
+    },
+    {
       slug: "2026-11-sage-editeur-recherche-web",
       version: "2026.11",
       title: "Nouveauté — SAGE Éditeur peut désormais vérifier sur le Web",

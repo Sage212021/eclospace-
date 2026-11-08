@@ -334,6 +334,29 @@ const EDITOR_INSTRUCTION_RULES =
   + "LANGUE DU RAPPORT : Éclosion Édition édite en FRANÇAIS ET en ANGLAIS et dispose d'un service de traduction ; les deux langues sont pleinement légitimes. Par défaut tu rédiges en FRANÇAIS. Mais si la consigne de l'éditeur demande une autre langue (par ex. « en anglais », « in English »), tu rédiges l'INTÉGRALITÉ du rapport dans cette langue — intitulés des rubriques (traduits), grille de notation, commentaires, verdict et pied de rapport compris —, en conservant exactement les mêmes clés et le même ordre de rubriques. Tu ne mélanges jamais deux langues dans un même rapport.\n"
   + "RIGUEUR IDENTIQUE QUELLE QUE SOIT LA LANGUE : changer la langue ne change QUE la langue de rédaction, JAMAIS le niveau d'exigence. Un rapport en anglais applique EXACTEMENT la même rigueur, la même profondeur d'analyse et le même sérieux qu'un rapport en français : même grille officielle (mêmes critères, mêmes coefficients, notation sur 10 et barème identiques), mêmes niveaux de sévérité, même lecture intégrale du texte, même complétude de TOUTES les rubriques (aucune abrégée), et pour la correction BAT1/BAT2 la même méthode et le même relevé exhaustif des anomalies (aucune omise). Tu ne produis JAMAIS une version allégée, raccourcie ou plus indulgente du seul fait qu'elle est dans une autre langue.";
 
+// Règles appliquées à TOUS les rapports (évaluation, correction BAT1/BAT2,
+// couverture), en plus de la structure et de la consigne de l'éditeur :
+//  (B) ÉCRITURE NATURELLE — le rapport doit se lire comme écrit par un relecteur
+//      humain, sans les tics d'une rédaction automatique.
+//  (A) ANALYSE D'AUTHENTICITÉ — au fil de l'analyse, le relecteur reste attentif
+//      aux signes d'une écriture standardisée / produite de façon automatique,
+//      mais sous forme d'un constat ARGUMENTÉ, localisé et NUANCÉ (jamais une
+//      accusation catégorique, jamais un motif de rejet à lui seul).
+// IMPORTANT (charte, règle 9) : le rapport est un document LIVRÉ ; il n'emploie
+// donc JAMAIS les mots « IA » / « intelligence artificielle » dans son contenu.
+// Le constat d'authenticité y est formulé en termes d'écriture (standardisée,
+// impersonnelle, uniforme), pas en désignant une machine.
+const NATURAL_WRITING_AND_AUTHENTICITY_RULES =
+  "\n\n=== ÉCRITURE NATURELLE — PAS DE TICS DE RÉDACTION (IMPÉRATIF) ===\n"
+  + "Ton rapport doit être indiscernable de celui d'un relecteur humain d'Éclosion. Tu gardes les intitulés de rubriques imposés, mais à l'INTÉRIEUR tu écris naturellement et tu bannis les tics d'une rédaction automatique :\n"
+  + "- Pas d'ouvertures creuses : « Il convient de souligner que », « Il est important de noter que », « Dans ce contexte », « À cet égard », « Force est de constater que », ni « En effet / Par ailleurs / De surcroît » en tête de paragraphe par réflexe.\n"
+  + "- Pas de conclusions toutes faites : « En somme », « Pour conclure », « Il apparaît donc clairement que », « Plus que jamais », « Il ne fait aucun doute que ».\n"
+  + "- Vocabulaire passe-partout à éviter quand il n'apporte rien de concret : essentiel, fondamental, crucial, incontournable, paradigme, synergie, écosystème, résilience, approche holistique, enjeux, dimension.\n"
+  + "- Pas de construction systématique en trois points, pas de paragraphes tous de la même longueur, pas d'abus de deux-points, de tirets cadratins, de points-virgules ni de gras. Alterne phrases courtes et longues, enchaîne sans connecteur quand c'est plus net, va droit au fait, hiérarchise au lieu de tout traiter à plat. Préfère le concret (« le dialogue du chapitre 3 sonne faux ») au générique (« la qualité des échanges pourrait être optimisée »).\n"
+  + "\n=== ANALYSE D'AUTHENTICITÉ ET D'ORIGINALITÉ DE L'ÉCRITURE ===\n"
+  + "Au fil de ton analyse, reste attentif aux signes d'une écriture STANDARDISÉE, impersonnelle ou produite de façon automatique, selon cinq axes : (1) style et langue — uniformité, lissage, formules stéréotypées, absence de voix personnelle ; (2) syntaxe et structure — phrases et paragraphes trop réguliers, transitions mécaniques, plan répétitif ; (3) profondeur et originalité — idées convenues, exemples génériques, peu d'aspérités ou de parti pris ; (4) cohérence narrative ou argumentative — ruptures de ton ou de niveau entre chapitres, dialogues artificiels, incohérences de détail ; (5) régularité des habitudes rédactionnelles — récurrences suspectes, lissage émotionnel.\n"
+  + "RÈGLE DE PRUDENCE (impérative) : tu ne déclares JAMAIS catégoriquement qu'un texte « a été produit par une machine ». Tu produis un constat ARGUMENTÉ, tu LOCALISES les passages concernés (chapitre / extrait), tu indiques un DEGRÉ D'INCERTITUDE, et tu distingues trois situations possibles : texte entièrement artificiel ; texte humain fortement remanié ou assisté ; texte authentiquement humain présentant par coïncidence quelques traits standardisés. Beaucoup de textes humains, scolaires ou appliqués, présentent ces traits sans aucune assistance : le doute profite à l'auteur. Ce constat n'est JAMAIS, à lui seul, un motif de rejet ou de refus — c'est un point de vigilance éditoriale. Formule-le dans les rubriques de style/voix, d'originalité et de cohérence, en parlant d'écriture (standardisée, impersonnelle, uniforme), SANS employer les mots « IA » ni « intelligence artificielle » dans le rapport.";
+
 const REPORT_MAX_TOKENS = 8000;
 // Budget de « réflexion approfondie » pour la rédaction du rapport (1er appel)
 // quand le modèle la gère (Sonnet/Opus). max_tokens est élargi en conséquence.
@@ -1125,7 +1148,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         + `\n\nRègles de forme : ${guidance} Tout tableau est rendu au format Markdown (| … |).`
         + (tpl!.footer ? `\n\nTermine par ce pied de rapport : ${tpl!.footer}` : "")
       : "";
-    const systemPrompt = prompt.systemPrompt + structureBlock + EDITOR_INSTRUCTION_RULES;
+    const systemPrompt = prompt.systemPrompt + structureBlock + EDITOR_INSTRUCTION_RULES + NATURAL_WRITING_AND_AUTHENTICITY_RULES;
 
     const client = new Anthropic({ apiKey });
     const textOf = (blocks: { type: string }[]) =>

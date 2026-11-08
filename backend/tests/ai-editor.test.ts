@@ -148,6 +148,13 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     expect(system).toContain("ANALYSE D'AUTHENTICITÉ DE L'ÉCRITURE");
     expect(system).toContain("ce manuscrit a été écrit par une IA");
     expect(system).toContain("DEGRÉ D'INCERTITUDE");
+    // SAGE Éditeur est positionné en directeur éditorial international : portée
+    // élargie (stratégie, normes, bilinguisme BrE/AmE) et autonomie (il FAIT le
+    // travail demandé, il ne se contente pas d'expliquer la méthode).
+    expect(system).toContain("Directeur éditorial virtuel international");
+    expect(system).toContain("anglais britannique");
+    expect(system).toContain("ISBN");
+    expect(system).toContain("AUTONOMIE ÉDITORIALE");
   });
 
   // ── Pièce jointe au dialogue éditorial (PDF/.docx/texte/image) ──

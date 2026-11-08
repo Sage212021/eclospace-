@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-editeur-directeur-international",
+      version: "2026.11",
+      title: "Nouveauté — SAGE Éditeur devient un directeur éditorial international",
+      body: "SAGE Éditeur n'est plus seulement un correcteur ou un relecteur : il est positionné comme un directeur éditorial de niveau international, avec plusieurs renforts. Bilinguisme en profondeur : il distingue l'anglais britannique de l'américain et adapte un ouvrage à son marché de destination au lieu d'en faire une traduction littérale (imprints, publishing agreements, copyediting/proofreading). Normes internationales : en plus des styles de citation (APA, MLA, Chicago…), il maîtrise ISBN/ISSN, métadonnées ONIX, catalogage, déontologie (COPE), propriété intellectuelle, contrats et cession de droits, et il distingue le droit applicable (Cameroun, CEMAC, Europe, Royaume-Uni, États-Unis) — en signalant toujours ce qui doit être vérifié dans la version en vigueur, sans jamais inventer une norme. Plus de genres couverts (management, développement personnel, histoire/géopolitique, religieux/philosophique, scientifique et universitaire, manuels scolaires, technique). Direction élargie : il conseille aussi sur la stratégie, le marché, le positionnement, les droits et les collections. Et surtout, l'autonomie : quand vous lui demandez de corriger, il corrige ; de réécrire, il réécrit ; un rapport, il produit un vrai rapport — il ne se contente jamais d'expliquer comment faire.",
+      permissionModules: ["manuscripts", "comite_lecture"],
+      departmentCodes: ["DIRED", "COMLEC", "CORR", "DG"],
+    },
+    {
       slug: "2026-11-sage-directeur-editorial-identite-unique",
       version: "2026.11",
       title: "Nouveauté — SAGE, votre directeur éditorial : une seule identité, plus proactif",

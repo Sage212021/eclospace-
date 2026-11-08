@@ -41,6 +41,10 @@ const quickPrinterSchema = z.object({
   city: z.string().trim().max(120).optional(),
   phone: z.string().trim().max(60).optional(),
   email: z.string().trim().max(160).optional(),
+  // Mentions légales à reporter sur le bon de commande (facultatives).
+  niu: z.string().trim().max(120).optional(),
+  rccm: z.string().trim().max(160).optional(),
+  bank_account: z.string().trim().max(200).optional(),
   specialties: z.array(z.string()).default([]),
   payment_terms: z.string().trim().max(400).optional(),
 });
@@ -151,6 +155,9 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           city: d.city ?? null,
           phone: d.phone ?? null,
           email: d.email ?? null,
+          niu: d.niu ?? null,
+          rccm: d.rccm ?? null,
+          bankAccount: d.bank_account ?? null,
         },
       });
       return tx.printer.create({

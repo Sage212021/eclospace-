@@ -3209,7 +3209,12 @@ export function batSignedScanUrl(batId: string): string {
 export interface Printer {
   id: string;
   specialties: string[];
-  partner: { id: string; firstName: string; lastName: string };
+  paymentTerms?: string | null;
+  partner: {
+    id: string; firstName: string; lastName: string;
+    city?: string | null; phone?: string | null; email?: string | null;
+    niu?: string | null; rccm?: string | null; bankAccount?: string | null;
+  };
 }
 
 export function listPrinters() {
@@ -3217,7 +3222,7 @@ export function listPrinters() {
 }
 
 // Ajout rapide d'un imprimeur (carnet), depuis la rubrique Impression de la fiche.
-export function createPrinterQuick(body: { name: string; city?: string; phone?: string; email?: string; specialties?: string[]; payment_terms?: string }) {
+export function createPrinterQuick(body: { name: string; city?: string; phone?: string; email?: string; niu?: string; rccm?: string; bank_account?: string; specialties?: string[]; payment_terms?: string }) {
   return request<Printer>("/api/v1/printers/quick", { method: "POST", body: JSON.stringify(body) });
 }
 
@@ -3479,6 +3484,9 @@ export interface PurchaseOrderVoucher {
   supplier: string;
   supplierAddress: string | null;
   supplierContact: string | null;
+  supplierTaxId: string | null;
+  supplierRegistration: string | null;
+  supplierBankAccount: string | null;
   quoteRef: string | null;
   deliveryPlace: string | null;
   deliveryDue: string | null;
@@ -3504,6 +3512,9 @@ export interface PurchaseOrderVoucherInput {
   supplier: string;
   supplier_address?: string | null;
   supplier_contact?: string | null;
+  supplier_tax_id?: string | null;
+  supplier_registration?: string | null;
+  supplier_bank_account?: string | null;
   quote_ref?: string | null;
   delivery_place?: string | null;
   delivery_due?: string | null;

@@ -1812,6 +1812,11 @@ model Partner {
   postalBox     String?         @map("postal_box")
   otherContact  String?         @map("other_contact")
   niu           String?
+  // Mentions légales d'un prestataire/fournisseur (imprimeur…), à reporter sur
+  // les documents d'achat (bon de commande) : registre de commerce (RCCM) et
+  // coordonnées bancaires. Le NIU ci-dessus sert aussi d'identifiant fiscal.
+  rccm          String?
+  bankAccount   String?         @map("bank_account")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -5773,6 +5778,12 @@ model PurchaseOrderVoucher {
   supplier        String // imprimeur / fournisseur
   supplierAddress String?                    @map("supplier_address")
   supplierContact String?                    @map("supplier_contact") // téléphone / email / interlocuteur
+  // Mentions légales du fournisseur à faire figurer sur le bon de commande
+  // (instantané au moment de l'établissement) : NIU (n° contribuable), registre
+  // de commerce (RCCM) et compte bancaire. Facultatifs.
+  supplierTaxId        String?               @map("supplier_tax_id")
+  supplierRegistration String?               @map("supplier_registration")
+  supplierBankAccount  String?               @map("supplier_bank_account")
   quoteRef        String?                    @map("quote_ref") // référence du devis
   deliveryPlace   String?                    @map("delivery_place") // lieu de livraison
   deliveryDue     DateTime?                  @map("delivery_due") // date de livraison souhaitée

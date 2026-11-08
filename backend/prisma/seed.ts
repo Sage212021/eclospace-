@@ -1377,6 +1377,45 @@ async function main() {
     await prisma.manuscriptStep.create({ data: { manuscriptId: demoMs.id, statusId: corrStatus.id, actualStart: new Date("2026-06-01") } });
   }
 
+  // ── Carnet d'imprimeurs pré-enregistrés (pôle Impression & fabrication) ─────
+  // Imprimeurs/prestataires connus d'Éclosion, chargés d'avance pour être
+  // sélectionnables sur les devis et bons de commande sans ressaisie. Chaque
+  // fiche = Partenaire (catégorie « imprimeur ») + fiche Printer (spécialités,
+  // conditions de paiement), comme l'ajout rapide du carnet. Idempotent : on ne
+  // recrée pas un imprimeur déjà présent (repéré par son e-mail), et on complète
+  // la fiche Printer si elle manquait. Les coordonnées restent modifiables dans
+  // l'application ; ce pré-chargement ne fait que garantir leur présence.
+  const seededPrinters: { name: string; city: string; phone: string; email: string; specialties: string[]; paymentTerms: string }[] = [
+    {
+      name: "BILLY PRINT CONCEPT",
+      city: "Yaoundé (Cradat, face au Centre commercial)",
+      phone: "+237 697 43 75 76 / +237 680 98 97 93",
+      email: "billydjeutane92@gmail.com",
+      specialties: ["Infographie", "Sérigraphie", "Édition", "Photocopie", "Communication"],
+      paymentTerms: "70 % avant production, 30 % après production",
+    },
+    {
+      name: "GLC Éditions (GLC SARL)",
+      city: "Cité Verte, Yaoundé",
+      phone: "+237 657 93 56 75 / +237 676 67 63 85",
+      email: "editionsglc@gmail.com",
+      specialties: ["Impression d'ouvrages", "Édition"],
+      paymentTerms: "Paiement en espèces (CASH)",
+    },
+  ];
+  for (const p of seededPrinters) {
+    let partner = await prisma.partner.findFirst({ where: { category: "imprimeur", email: p.email } });
+    if (!partner) {
+      partner = await prisma.partner.create({
+        data: { category: "imprimeur", firstName: p.name, lastName: "", city: p.city, phone: p.phone, email: p.email },
+      });
+    }
+    const existingPrinter = await prisma.printer.findUnique({ where: { partnerId: partner.id } });
+    if (!existingPrinter) {
+      await prisma.printer.create({ data: { partnerId: partner.id, specialties: p.specialties, paymentTerms: p.paymentTerms } });
+    }
+  }
+
   // ── Centre de Communication Interne — Babillard d'annonces (évolution) ──────
   // RBAC strict (décision opérateur D-027, 01/09/2026) : tout le personnel
   // CONSULTE les annonces qui le ciblent (consultation, bornée à soi côté
@@ -1498,6 +1537,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-carnet-imprimeurs-billy-glc",
+      version: "2026.11",
+      title: "Nouveauté — Deux imprimeurs pré-enregistrés dans le carnet",
+      body: "Le carnet d'imprimeurs du pôle Impression & fabrication contient désormais, d'avance, deux prestataires prêts à être choisis sur les devis et bons de commande : BILLY PRINT CONCEPT (Yaoundé — infographie, sérigraphie, édition ; 70 % avant / 30 % après) et GLC Éditions / GLC SARL (Cité Verte, Yaoundé — impression d'ouvrages ; paiement espèces). Leurs coordonnées (ville, téléphone, e-mail, spécialités, conditions de paiement) sont déjà saisies : au moment d'établir un bon de commande, il suffit de les sélectionner. Vous pouvez à tout moment modifier ces fiches ou en ajouter d'autres depuis le carnet d'imprimeurs (ajout rapide).",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "DG"],
+    },
     {
       slug: "2026-11-sage-ecrit-au-dg-suivi-editorial",
       version: "2026.11",

@@ -167,6 +167,12 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(system).toContain("GOUVERNANCE & ACTIONS SENSIBLES");
     expect(system).toContain("autorisation humaine explicite");
     expect(system).toContain("TRAÇABILITÉ");
+    // La validation définitive d'une publication est une action sensible réservée
+    // au DG / à un responsable habilité (SAGE propose, ne valide pas).
+    expect(system).toContain("Valider définitivement une publication");
+    // SAGE est l'unique directeur éditorial (une seule identité) et proactif sur
+    // les risques qu'il relève dans les données.
+    expect(system).toContain("UNIQUE SAGE");
   });
 
   it("rédige un document long SANS s'arrêter au 1ᵉʳ article (continuation après coupure de jetons)", async () => {

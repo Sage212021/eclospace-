@@ -449,6 +449,93 @@ export async function runRewrite(rewriteId: string): Promise<void> {
 // supporte pas, l'appel échoue → on réessaie SANS cet outil (dégradation).
 const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 5 };
 
+// ── CONTRÔLE QUALITÉ DES LIVRABLES (avant remise) ───────────────────────────
+// SAGE vérifie automatiquement un document AVANT de le livrer : complétude des
+// rubriques imposées, signature réglementaire (lettre), et surtout ABSENCE de
+// toute mention d'IA (charte, règle 9 : un document LIVRÉ ne révèle jamais son
+// mode de production). S'il détecte un défaut, il corrige une fois (appel de
+// réparation borné), puis un filet déterministe neutralise toute mention d'IA
+// résiduelle. Ne s'applique QU'AUX livrables remis/publiés, pas aux analyses
+// internes (diagnostic, cohérence, documentaire…) qui, elles, peuvent nommer
+// « IA » (constat d'authenticité) et ont une forme libre.
+const DELIVERABLE_KINDS = new Set(["presentation", "lettre_auteur", "copyedit", "titrologie", "fiche_lecture"]);
+
+// Intitulés distinctifs attendus par livrable (contrôle de complétude ; liste
+// volontairement COURTE pour éviter les faux positifs de reformulation).
+const DELIVERABLE_HEADINGS: Record<string, string[]> = {
+  presentation: ["4E DE COUVERTURE", "SYNOPSIS", "ACCROCHE"],
+  copyedit: ["NIVEAU D'INTERVENTION", "TEXTE PRÉPARÉ", "CORRECTIONS"],
+  titrologie: ["PROPOSITIONS DE TITRES", "RECOMMANDATION"],
+  fiche_lecture: ["PITCH", "RECOMMANDATION"],
+};
+
+const LETTRE_SIGNATURE = "Le Service éditorial — Éditions Éclosion";
+
+// Mentions d'« intelligence artificielle » proscrites dans un document LIVRÉ.
+const FORBIDDEN_AI_RE = /intelligence artificielle|\bg[ée]n[ée]r[ée]e?s?\s+par\s+(?:une?\s+)?(?:ia|intelligence)\b|\ben tant qu['’]ia\b|\(\s*ia\s*\)|\bassist[ée]e?\s+par\s+(?:une?\s+)?ia\b/i;
+
+// Défauts détectés sur un livrable (déterministe). Vide = conforme.
+export function deliverableIssues(kind: string, text: string): string[] {
+  const issues: string[] = [];
+  if (!text.trim()) { issues.push("le livrable est vide"); return issues; }
+  const headings = DELIVERABLE_HEADINGS[kind];
+  if (headings) {
+    const up = text.toUpperCase();
+    const missing = headings.filter((h) => !up.includes(h.toUpperCase()));
+    if (missing.length) issues.push(`rubriques imposées manquantes : ${missing.join(", ")}`);
+  }
+  if (kind === "lettre_auteur" && !text.includes(LETTRE_SIGNATURE)) {
+    issues.push(`signature « ${LETTRE_SIGNATURE} » absente ou incorrecte`);
+  }
+  if (FORBIDDEN_AI_RE.test(text)) issues.push("mention interdite d'une intelligence artificielle (document livré, charte §9)");
+  return issues;
+}
+
+// Filet de sécurité DÉTERMINISTE (règle 9) : neutralise toute mention d'IA
+// résiduelle dans un document livré, de façon conservatrice. Dernier recours
+// après la réparation par le modèle.
+export function scrubAiMentions(text: string): string {
+  return text
+    .replace(/\s*\(\s*(?:IA|I\.?A\.?)\s*\)/g, "")
+    .replace(/\bg[ée]n[ée]r[ée]e?s?\s+par\s+(?:une?\s+)?intelligence artificielle\b/gi, "produit par le Service éditorial")
+    .replace(/\bg[ée]n[ée]r[ée]e?s?\s+par\s+(?:une?\s+)?ia\b/gi, "produit par le Service éditorial")
+    .replace(/\bassist[ée]e?s?\s+par\s+(?:une?\s+)?(?:ia|intelligence artificielle)\b/gi, "préparé par le Service éditorial")
+    .replace(/\ben tant qu['’]ia,?\s*/gi, "")
+    .replace(/\bintelligence artificielle\b/gi, "Service éditorial");
+}
+
+// Contrôle qualité d'un livrable : si des défauts sont détectés, une passe de
+// réparation BORNÉE (un seul appel) corrige le document ; puis, pour un livrable,
+// un filet déterministe retire toute mention d'IA résiduelle. Ne lève jamais.
+async function controlDeliverable(
+  kind: string,
+  text: string,
+  client: { messages: { create: (args: unknown) => Promise<{ content?: Array<{ type: string; text?: string }> }> } },
+  modelId: string,
+): Promise<string> {
+  const issues = deliverableIssues(kind, text);
+  if (!issues.length) return text;
+  const instruction =
+    "=== CONTRÔLE QUALITÉ DU LIVRABLE (correction avant remise) ===\n"
+    + "Le document ci-dessous va être remis. Corrige UNIQUEMENT les points suivants, sans rien inventer et en conservant tout le contenu correct et sa langue :\n"
+    + issues.map((i) => `- ${i}`).join("\n")
+    + "\nRends le document corrigé, COMPLET et prêt à être remis — rien d'autre : aucun commentaire, aucune note de contrôle, aucun préambule.\n"
+    + "Ce document est LIVRÉ : il ne comporte AUCUNE mention « IA » ni « intelligence artificielle », et aucune indication sur sa manière d'avoir été produit."
+    + (kind === "lettre_auteur" ? `\nTermine par la signature exacte « ${LETTRE_SIGNATURE} » et rien après.` : "");
+  let out = text;
+  try {
+    const resp = await client.messages.create({
+      model: modelId, max_tokens: 4096, system: AGENT_SYSTEM,
+      messages: [{ role: "user", content: `${instruction}\n\n=== DOCUMENT À CORRIGER ===\n${text}` }],
+    });
+    const fixed = (resp.content ?? []).filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
+    if (fixed) out = fixed;
+  } catch {
+    // Une réparation qui échoue ne doit pas perdre le document initial.
+  }
+  return scrubAiMentions(out);
+}
+
 // Exécution (longue) en arrière-plan : remplit le message « assistant » en
 // attente. Ne lève JAMAIS : toute erreur est consignée sur le message.
 export async function runEditorAnswer(assistantMessageId: string): Promise<void> {
@@ -645,6 +732,10 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       if (resp.stop_reason === "pause_turn") { convo.push({ role: "assistant", content: resp.content }); continue; }
       text = textOfBlocks(resp.content).trim();
       break;
+    }
+    // CONTRÔLE QUALITÉ avant remise : seulement pour les livrables remis/publiés.
+    if (DELIVERABLE_KINDS.has(assistant.kind)) {
+      text = await controlDeliverable(assistant.kind, text, client as never, modelId);
     }
     await prisma.aiEditorialMessage.update({
       where: { id: assistantMessageId },

@@ -3,15 +3,35 @@ import type { FastifyInstance } from "fastify";
 
 // API Claude simulée : le faux client renvoie un texte fixe (aucun appel réseau).
 const calls: { system?: string; messages?: unknown; tools?: unknown }[] = [];
+// Bloc « conforme » renvoyé par la passe de contrôle qualité (contient toutes
+// les rubriques imposées + la signature réglementaire, sans aucune mention d'IA).
+const QC_COMPLIANT = [
+  "# 4E DE COUVERTURE", "Texte.", "# RÉSUMÉ COURT (CATALOGUE)", "Texte.", "# SYNOPSIS", "Texte.",
+  "# ARGUMENTAIRE (LIBRAIRES / PRESSE)", "Texte.", "# ACCROCHE", "Une phrase.", "# MOTS-CLÉS ET THÉMATIQUE", "mots.",
+  "# NIVEAU D'INTERVENTION", "Texte.", "# TEXTE PRÉPARÉ", "Texte.", "# CORRECTIONS", "Néant.",
+  "# ANALYSE ÉDITORIALE", "Texte.", "# PROPOSITIONS DE TITRES", "1. Titre.", "# COMPARATIF", "Texte.",
+  "# RECOMMANDATION", "Texte.", "# POTENTIEL COMMERCIAL", "Texte.", "1) PITCH", "Texte.",
+  "Le Service éditorial — Éditions Éclosion",
+].join("\n");
+const lastUserText = (messages: unknown): string => {
+  const arr = (messages as Array<{ role?: string; content?: unknown }> | undefined) ?? [];
+  const last = arr[arr.length - 1];
+  if (!last) return "";
+  if (typeof last.content === "string") return last.content;
+  return ((last.content as Array<{ type?: string; text?: string }> | undefined) ?? [])
+    .filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n");
+};
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
       create: async (args: { system?: string; messages?: unknown; tools?: unknown }) => {
         calls.push({ system: args.system, messages: args.messages, tools: args.tools });
+        // Passe de contrôle qualité : renvoie un document conforme et complet.
+        const isQc = lastUserText(args.messages).includes("CONTRÔLE QUALITÉ DU LIVRABLE");
         return {
           model: "claude-sonnet-5",
           stop_reason: "end_turn",
-          content: [{ type: "text", text: "Diagnostic éditorial : structure solide ; le dénouement mérite d'être renforcé." }],
+          content: [{ type: "text", text: isQc ? QC_COMPLIANT : "Diagnostic éditorial : structure solide ; le dénouement mérite d'être renforcé." }],
           usage: { input_tokens: 100, output_tokens: 200 },
         };
       },
@@ -23,6 +43,7 @@ vi.mock("@anthropic-ai/sdk", () => {
 
 const { buildApp } = await import("../src/app.js");
 const { prisma } = await import("../src/lib/prisma.js");
+const { deliverableIssues, scrubAiMentions } = await import("../src/lib/aiEditor.js");
 const { storeFile } = await import("../src/lib/storage.js");
 const { createUserWithRole, extractSessionCookie } = await import("./helpers.js");
 
@@ -279,8 +300,10 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
       expect(msg.status).toBe("done");
       expect(msg.kind).toBe(kind);
       expect(msg.content.length).toBeGreaterThan(0);
-      // Le manuscrit est bien transmis au modèle (contexte complet).
-      const sent = (calls[calls.length - 1]?.messages as Array<{ content: string }> | undefined)?.map((x) => x.content).join(" ") ?? "";
+      // Le manuscrit est bien transmis au modèle (contexte complet). On scanne
+      // TOUS les appels : pour un livrable, la passe de contrôle qualité ajoute
+      // un appel de réparation qui n'est pas celui de la génération.
+      const sent = calls.map((c) => (c?.messages as Array<{ content: unknown }> | undefined)?.map((x) => (typeof x.content === "string" ? x.content : JSON.stringify(x.content))).join(" ") ?? "").join(" ");
       expect(sent).toContain("MANUSCRIT");
     });
 
@@ -300,13 +323,13 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/lettre-auteur`, headers: { cookie: adminCookie } });
     expect(r.statusCode).toBe(202);
     await waitMessage(r.json().message_id);
-    const last = calls[calls.length - 1];
-    const task = (last?.messages as Array<{ content: string }> | undefined)?.map((x) => x.content).join(" ") ?? "";
+    // On scanne tous les appels (la génération, puis l'éventuel contrôle qualité).
+    const task = calls.map((c) => (c?.messages as Array<{ content: unknown }> | undefined)?.map((x) => (typeof x.content === "string" ? x.content : JSON.stringify(x.content))).join(" ") ?? "").join(" ");
     // La consigne de la lettre impose la signature du service et interdit le nom « SAGE ».
     expect(task).toContain("Le Service éditorial — Éditions Éclosion");
     expect(task).toMatch(/jamais ton propre nom/i);
     // La règle est aussi portée par la consigne de comportement (vaut pour tout courrier).
-    expect(last?.system ?? "").toContain("SIGNATURE DES COURRIERS");
+    expect(calls[calls.length - 1]?.system ?? "").toContain("SIGNATURE DES COURRIERS");
   });
 
   // ── Préparation de copie (Lot G) ──
@@ -316,14 +339,51 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     const msg = await waitMessage(r.json().assistant_message_id);
     expect(msg.status).toBe("done");
     expect(msg.kind).toBe("copyedit");
-    // Le texte à préparer est bien transmis au modèle.
-    const sent = (calls[calls.length - 1]?.messages as Array<{ content: string }> | undefined)?.map((x) => x.content).join(" ") ?? "";
+    // Le texte à préparer est bien transmis au modèle (scan de tous les appels :
+    // le contrôle qualité peut ajouter un appel de réparation).
+    const sent = calls.map((c) => (c?.messages as Array<{ content: unknown }> | undefined)?.map((x) => (typeof x.content === "string" ? x.content : JSON.stringify(x.content))).join(" ") ?? "").join(" ");
     expect(sent).toContain("TEXTE À PRÉPARER");
   });
 
   it("refuse la préparation de copie sans chapitre ni texte (400)", async () => {
     const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/copyedit`, headers: { cookie: adminCookie }, payload: {} });
     expect(r.statusCode).toBe(400);
+  });
+
+  // ── Contrôle qualité des livrables (avant remise) ──
+  it("détecte les défauts d'un livrable (rubriques, signature, mention d'IA)", () => {
+    // Un texte minimal ne contient pas les rubriques imposées de la présentation.
+    expect(deliverableIssues("presentation", "Juste une phrase.").some((i) => /rubriques imposées manquantes/.test(i))).toBe(true);
+    // La lettre doit porter la signature réglementaire.
+    expect(deliverableIssues("lettre_auteur", "Bonjour, voici nos remarques.").some((i) => /signature/.test(i))).toBe(true);
+    // Mention d'IA interdite dans un document livré.
+    expect(deliverableIssues("presentation", "4E DE COUVERTURE … SYNOPSIS … ACCROCHE … texte généré par une IA").some((i) => /intelligence artificielle/.test(i))).toBe(true);
+    // Un livrable complet et conforme ne lève aucun défaut.
+    const ok = "# 4E DE COUVERTURE\nx\n# SYNOPSIS\nx\n# ACCROCHE\nx";
+    expect(deliverableIssues("presentation", ok)).toEqual([]);
+  });
+
+  it("le filet déterministe retire toute mention d'IA d'un document livré (règle 9)", () => {
+    expect(scrubAiMentions("Roman généré par une IA, retravaillé.")).not.toMatch(/\bIA\b|intelligence artificielle/i);
+    expect(scrubAiMentions("Texte rédigé avec une intelligence artificielle.")).not.toMatch(/intelligence artificielle/i);
+    expect(scrubAiMentions("Couverture (IA) à valider.")).not.toContain("(IA)");
+  });
+
+  it("corrige automatiquement un livrable non conforme avant de le remettre", async () => {
+    // La génération renvoie un texte incomplet (mock) ; le contrôle qualité doit
+    // déclencher une réparation et livrer un document complet et signé.
+    const before = calls.length;
+    const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/presentation`, headers: { cookie: adminCookie } });
+    expect(r.statusCode).toBe(202);
+    const msg = await waitMessage(r.json().message_id);
+    expect(msg.status).toBe("done");
+    // Un appel de réparation a bien eu lieu (génération + contrôle qualité).
+    expect(calls.length).toBeGreaterThanOrEqual(before + 2);
+    const qcRan = calls.some((c) => JSON.stringify(c?.messages ?? "").includes("CONTRÔLE QUALITÉ DU LIVRABLE"));
+    expect(qcRan).toBe(true);
+    // Le document remis est désormais complet (rubriques présentes) et sans IA.
+    expect(msg.content).toContain("4E DE COUVERTURE");
+    expect(msg.content).not.toMatch(/intelligence artificielle/i);
   });
 
   it("signale un chapitre inconnu (409 chapter_not_found)", async () => {

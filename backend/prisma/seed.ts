@@ -1499,6 +1499,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-rapports-ia-anglais-meme-rigueur",
+      version: "2026.11",
+      title: "Nouveauté — Rapports IA en anglais : même rigueur qu'en français",
+      body: "Quand vous demandez un rapport en anglais (évaluation, ou correction BAT1/BAT2), il a désormais exactement la même rigueur que la version française : même grille officielle (mêmes critères, coefficients et notation sur 10), mêmes niveaux de sévérité, lecture intégrale du texte, toutes les rubriques complètes, et pour la correction le même relevé exhaustif des anomalies. Changer de langue ne change que la langue de rédaction, jamais le niveau d'exigence : pas de version allégée ni plus indulgente parce qu'elle est en anglais.",
+      permissionModules: ["manuscripts", "comite_lecture"],
+      departmentCodes: ["DIRED", "COMLEC", "CORR", "DG"],
+    },
+    {
       slug: "2026-11-evaluation-ia-consigne-et-langue",
       version: "2026.11",
       title: "Nouveauté — Évaluation IA : vos consignes (dont la langue) sont suivies à la lettre",

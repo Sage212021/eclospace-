@@ -5933,6 +5933,9 @@ model AiConversation {
   id        String    @id @default(uuid())
   ownerId   String    @map("owner_id")
   title     String    @default("Nouvelle conversation")
+  // Canal particulier : null = conversation libre du DG ; "sage_direction" = le
+  // fil où SAGE écrit de lui-même au DG (points de situation, alertes).
+  kind      String?   @map("kind")
   archivedAt DateTime? @map("archived_at")
   createdBy String?   @map("created_by")
   createdAt DateTime  @default(now()) @map("created_at")

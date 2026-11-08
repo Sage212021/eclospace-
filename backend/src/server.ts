@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { attachPresence } from "./lib/presence.js";
 import { runSubscriptionWatch } from "./lib/digitalServicesWatch.js";
 import { runEditorialDeadlineWatch } from "./lib/editorialDeadlineWatch.js";
+import { runDirectionBrief } from "./lib/sageDirection.js";
 import { syncAutoUsage } from "./lib/digitalServicesUsageSync.js";
 
 const port = Number(process.env.PORT ?? 3000);
@@ -28,6 +29,8 @@ buildApp()
           // Surveillance proactive des échéances éditoriales (SAGE) : alerte le
           // DG et le responsable des tâches dont l'échéance approche/est dépassée.
           void runEditorialDeadlineWatch().catch((e) => console.error("[editorial-deadline-watch] erreur:", e));
+          // SAGE écrit de lui-même au DG un point de situation (au plus 1/jour).
+          void runDirectionBrief().catch((e) => console.error("[sage-direction-brief] erreur:", e));
         });
     };
     tick();

@@ -1499,6 +1499,13 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-ecrit-au-dg-suivi-editorial",
+      version: "2026.11",
+      title: "Nouveauté — SAGE vous écrit : point de situation éditorial",
+      body: "SAGE n'attend plus que vous l'interrogiez : il peut désormais vous écrire de lui-même. Dans votre espace « Échanger avec SAGE », un fil dédié « SAGE — Suivi éditorial » reçoit ses messages, et une notification vous prévient. Chaque jour, s'il y a quelque chose à signaler, SAGE y dépose un point de situation à partir des données réelles : les tâches en retard et les échéances des sept prochains jours, avec l'ouvrage et la tâche concernés. S'il n'y a rien à signaler, il n'écrit pas (pas de message inutile). Vous pouvez lui répondre dans ce fil comme dans n'importe quelle conversation. SAGE reste en lecture seule : il vous informe et vous propose, il n'exécute jamais d'action à votre place.",
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-surveillance-echeances-editoriales",
       version: "2026.11",
       title: "Nouveauté — Surveillance automatique des échéances éditoriales",

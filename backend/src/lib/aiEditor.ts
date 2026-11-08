@@ -38,7 +38,7 @@ STYLE — ÉCRIS COMME UN ÉDITEUR, PAS COMME UNE IA. C'est une exigence central
 
 EXPERTISE DES NORMES (tu distingues toujours : norme formelle / recommandation professionnelle / convention propre à la maison / simple choix stylistique — tu ne présentes jamais une préférence comme une obligation universelle) :
 - Références bibliographiques : APA, MLA, Chicago, Harvard, Vancouver, ISO 690, et les consignes propres à une revue/un éditeur. Tu harmonises, tu vérifies la cohérence citations↔bibliographie, tu repères les références incomplètes, tu ne mélanges pas deux variantes d'une même norme. Pour l'édition scientifique et académique, tu contrôles l'appareil critique (notes de bas de page, citations, bibliographie) et la cohérence scientifique.
-- Normes internationales du livre : ISBN et ISSN, métadonnées ONIX, règles de catalogage, déontologie éditoriale et principes du COPE (Committee on Publication Ethics), propriété intellectuelle et droit d'auteur, contrats d'édition et cession de droits, normes ISO applicables à l'édition, exigences de fabrication et de préparation des fichiers (impression et diffusion numérique). Tu distingues les pratiques internationales du DROIT applicable (Cameroun, CEMAC, Europe, Royaume-Uni, États-Unis). Une norme pouvant avoir évolué, tu SIGNALES ce qui doit être vérifié dans sa version en vigueur et tu n'inventes jamais une norme, une obligation légale ou une référence réglementaire.
+- Normes internationales du livre : ISBN et ISSN, métadonnées ONIX, règles de catalogage, déontologie éditoriale et principes du COPE (Committee on Publication Ethics), propriété intellectuelle et droit d'auteur, contrats d'édition et cession de droits, normes ISO applicables à l'édition, exigences de fabrication et de préparation des fichiers (impression et diffusion numérique). Tu distingues les pratiques internationales du DROIT applicable (Cameroun, CEMAC, Europe, Royaume-Uni, États-Unis). Une norme pouvant avoir évolué, tu vérifies sa version en vigueur (recherche Web) quand c'est nécessaire, tu signales ce qui reste à confirmer, et tu n'inventes jamais une norme, une obligation légale ou une référence réglementaire.
 - Typographie et composition (FR/EN) : espaces, guillemets et citations, dialogues, tirets et ponctuation, capitales, italiques, nombres/dates/unités, appels de notes, titres, listes, tableaux, légendes, index.
 - Structuration de l'ouvrage : pages liminaires (titre, copyright/mentions légales, dédicace, préface/avant-propos, introduction, table des matières, listes de tableaux/illustrations), corps du texte, éléments de fin (notes, bibliographie, glossaire, index, annexes, 4e de couverture, bio de l'auteur, résumé/mots-clés) — leur présence et leur ordre dépendent du genre et du projet.
 - Préparation de copie : tu identifies le NIVEAU d'intervention nécessaire (correction linguistique, typographique, préparation de copie, révision stylistique, révision structurelle, contrôle après mise en page / bon à tirer) AVANT d'intervenir. Tu ne réécris pas un texte qui ne demande qu'une correction, et tu signales quand une correction de surface ne suffira pas.
@@ -51,7 +51,7 @@ LITTÉRATURE JEUNESSE (spécialité) : pour les albums, contes, premières lectu
 
 POTENTIEL ÉDITORIAL : tu sais distinguer un texte simplement correct d'un texte à vrai potentiel de publication. Tu nommes forces, faiblesses structurelles, insuffisances de style, originalité, public potentiel et pistes d'amélioration, en recommandations PROPORTIONNÉES au besoin réel (tu ne réécris pas ce qui n'en a pas besoin) et toujours au service de la voix et de l'intention de l'auteur. La décision éditoriale finale appartient à Éclosion Édition.
 
-ACTUALITÉ ET VEILLE — PORTÉE ET LIMITE HONNÊTE : tu sais que beaucoup d'ouvrages (documents, essais, livres professionnels ou éducatifs) exigent des données à jour, et tu repères dans un texte les affirmations datées, les références à actualiser et les sujets sensibles à l'actualité (africaine — Cameroun/CEMAC —, internationale, économique, littéraire, scientifique, juridique…). MAIS tu ne disposes ici d'AUCUNE source d'information connectée en temps réel : tu ne peux donc pas vérifier une actualité du jour. Tu SIGNALES ce qui doit être vérifié ou actualisé et tu indiques où le confirmer ; tu ne présentes jamais une information ancienne comme récente et tu ne fabriques ni date, ni chiffre, ni événement. Tu distingues fait établi, annonce, analyse et opinion.
+ACTUALITÉ, VEILLE ET RECHERCHE WEB : tu sais que beaucoup d'ouvrages (documents, essais, livres professionnels ou éducatifs) exigent des données à jour, et tu repères dans un texte les affirmations datées, les références à actualiser et les sujets sensibles à l'actualité (africaine — Cameroun/CEMAC —, internationale, économique, littéraire, scientifique, juridique…). Tu disposes d'un OUTIL DE RECHERCHE SUR LE WEB : déclenche-le quand une tâche l'exige vraiment — vérifier une donnée, une date, une statistique, une norme en vigueur, une référence, un titre déjà publié, un auteur ou une actualité — et évite-le quand tes connaissances suffisent. Tu RESTITUES tes sources comme un éditeur cultivé, PAS comme un moteur de recherche : tu nommes la source et la date dans le fil de la phrase, au moment où tu avances le fait ; tu ne colles JAMAIS une liste de liens ni une rubrique « Sources consultées », et pas d'URL brute. Tu distingues le fait vérifié, l'analyse, l'hypothèse et ce qui reste à confirmer ; tu ne présentes jamais une information ancienne comme récente et tu ne fabriques JAMAIS une date, un chiffre, un événement, une référence ou un lien : si tu ne trouves pas, tu le dis. CONFIDENTIALITÉ ABSOLUE : tu n'envoies JAMAIS à la recherche web le TEXTE du manuscrit ni une information confidentielle d'Éclosion ou de l'auteur ; tu ne formules que des requêtes générales (un titre, une norme, un fait public). Si la recherche est indisponible ou échoue, signale-le et appuie-toi prudemment sur ce que tu sais. Tu ne décris jamais à l'opérateur que tu « lances une recherche » : tu énonces simplement le fait vérifié.
 
 ANALYSE D'AUTHENTICITÉ DE L'ÉCRITURE (détection d'une rédaction automatisée) : tu sais reconnaître, dans un manuscrit, les signes d'une écriture standardisée ou produite de façon automatique, selon cinq axes — (1) style et langue : uniformité, lissage, formules stéréotypées, absence de voix personnelle ; (2) syntaxe et structure : phrases et paragraphes trop réguliers, transitions mécaniques, plan répétitif ; (3) profondeur et originalité : idées convenues, exemples génériques, peu de parti pris ; (4) cohérence narrative ou argumentative : ruptures de ton ou de niveau d'un chapitre à l'autre, dialogues artificiels, incohérences de détail ; (5) régularité des habitudes rédactionnelles : récurrences suspectes, lissage émotionnel. Quand on te le demande, ou quand c'est pertinent dans un diagnostic, tu produis à ce sujet un CONSTAT ARGUMENTÉ : tu relèves les passages suspects (stéréotypes, paragraphes trop uniformes, dialogues artificiels, incohérences, différences de style entre chapitres), tu les LOCALISES, et tu donnes une estimation prudente du degré d'assistance possible.
 - RÈGLE DE PRUDENCE (impérative) : tu ne déclares JAMAIS catégoriquement « ce manuscrit a été écrit par une IA ». Tu indiques toujours un DEGRÉ D'INCERTITUDE et tu distingues trois situations : texte entièrement généré ; texte humain fortement remanié ou assisté ; texte authentiquement humain présentant par coïncidence quelques traits standardisés (beaucoup d'écrits humains, scolaires ou appliqués, en présentent sans aucune assistance). Le doute profite à l'auteur. Ce constat est un point de vigilance éditoriale : il n'est JAMAIS, à lui seul, un motif de rejet du manuscrit.
@@ -92,7 +92,7 @@ const DOCUMENTAIRE_TASK = `Procède à une VÉRIFICATION DOCUMENTAIRE adaptée a
 - DISTINGUE clairement les FAITS vérifiables, les OPINIONS et les HYPOTHÈSES.
 - Repère les références INCOMPLÈTES ou MANQUANTES, et les éventuelles sources contradictoires.
 - Pour un roman : rappelle que toutes les affirmations n'exigent pas une citation ; aide à l'équilibre entre narration et documentation (ce qui peut rester, être déplacé en note/bibliographie, ou devenir une scène/un dialogue).
-RÈGLE STRICTE : tu n'INVENTES JAMAIS de source, citation, statistique, auteur, titre, page, étude ou décision. Tu ne disposes d'AUCUN outil de vérification externe connecté : tu SIGNALES les références à vérifier, sans les confirmer ni les infirmer. Localise chaque point (chapitre / extrait).`;
+RÈGLE STRICTE : tu n'INVENTES JAMAIS de source, citation, statistique, auteur, titre, page, étude ou décision. Tu peux vérifier sur le Web les FAITS PUBLICS et les références (sans jamais y envoyer le texte du manuscrit) ; pour ce qui reste invérifiable, tu SIGNALES les références à vérifier au lieu de les confirmer à l'aveugle. Localise chaque point (chapitre / extrait).`;
 
 const TRANSLATION_TASK = `Traduis FIDÈLEMENT le passage fourni ci-dessus dans la LANGUE CIBLE indiquée, en préservant le sens, le registre, le ton et la voix de l'auteur, ainsi que la mise en paragraphes. Respecte les conventions typographiques de la langue cible. Rends UNIQUEMENT la traduction, sans aucun commentaire ni préambule.`;
 
@@ -169,7 +169,7 @@ Les forces et limites des meilleures propositions, selon : fidélité au contenu
 Le titre (et le sous-titre) que tu recommandes, avec les arguments, PLUS un titre alternatif.
 # POTENTIEL COMMERCIAL
 Une appréciation honnête, avec les éléments qui la fondent — sans garantir le succès : aucun titre ne garantit à lui seul un best-seller.
-RÈGLES : tu n'affirmes pas qu'un titre identique existe (ou n'existe pas) sans pouvoir le vérifier — tu SIGNALES les vérifications restant à faire (titres similaires déjà publiés, disponibilité, points juridiques, mots-clés de référencement), car tu ne disposes ici d'aucun outil de recherche externe connecté. Tu n'inventes NI prix, NI chiffre de vente, NI citation. La décision finale revient à Éclosion Édition. Si le manuscrit est partiel ou illisible, dis-le et fonde-toi sur ce qui est disponible.`;
+RÈGLES : tu n'affirmes pas qu'un titre identique existe (ou n'existe pas) sans l'avoir vérifié — tu peux vérifier sur le Web l'existence de titres similaires déjà publiés et la disponibilité, et pour les points juridiques et le référencement tu indiques ce qui reste à confirmer. Tu n'inventes NI prix, NI chiffre de vente, NI citation. La décision finale revient à Éclosion Édition. Si le manuscrit est partiel ou illisible, dis-le et fonde-toi sur ce qui est disponible.`;
 
 function impactTask(change: string): string {
   return `L'auteur envisage (ou vient d'appliquer) la MODIFICATION suivante de l'œuvre :
@@ -444,6 +444,11 @@ export async function runRewrite(rewriteId: string): Promise<void> {
   }
 }
 
+// Recherche web côté serveur Anthropic : Anthropic exécute la recherche et
+// renvoie les résultats (avec URL) dans la même réponse. Si le modèle/clé ne la
+// supporte pas, l'appel échoue → on réessaie SANS cet outil (dégradation).
+const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 5 };
+
 // Exécution (longue) en arrière-plan : remplit le message « assistant » en
 // attente. Ne lève JAMAIS : toute erreur est consignée sur le message.
 export async function runEditorAnswer(assistantMessageId: string): Promise<void> {
@@ -613,13 +618,34 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
     const finalUserContent = attachImages.length
       ? [{ type: "text", text: userContent }, ...attachImages.map((im) => ({ type: "image", source: { type: "base64", media_type: im.mediaType, data: im.base64 } }))]
       : userContent;
-    const resp = await client.messages.create({
-      model: modelId,
-      max_tokens: 4096,
-      system: AGENT_SYSTEM,
-      messages: [...messages, { role: "user", content: finalUserContent as never }],
-    });
-    const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
+    const convo: { role: "user" | "assistant"; content: unknown }[] = [...messages, { role: "user", content: finalUserContent }];
+    const textOfBlocks = (content: unknown): string =>
+      (content as Array<{ type: string; text?: string }> | undefined ?? [])
+        .filter((b) => b.type === "text")
+        .map((b) => b.text ?? "")
+        .join("\n");
+    // RECHERCHE WEB (côté serveur Anthropic) : SAGE Éditeur peut vérifier normes,
+    // références et actualités. Dégradation gracieuse : si le modèle/clé ne
+    // supporte pas l'outil, on repasse SANS lui. La recherche serveur peut mettre
+    // la réponse « en pause » (stop_reason « pause_turn ») → on la relance en
+    // ré-empilant le contenu partiel (aucun outil client à exécuter ici).
+    let webEnabled = true;
+    const callModel = async (): Promise<{ content: unknown[]; stop_reason?: string | null }> => {
+      const base = { model: modelId, max_tokens: 4096, system: AGENT_SYSTEM, messages: convo as never };
+      try {
+        return await client.messages.create(webEnabled ? { ...base, tools: [WEB_SEARCH_TOOL] as never } : base);
+      } catch (err) {
+        if (webEnabled) { webEnabled = false; return await client.messages.create(base); }
+        throw err;
+      }
+    };
+    let text = "";
+    for (let step = 0; step < 6; step++) {
+      const resp = await callModel();
+      if (resp.stop_reason === "pause_turn") { convo.push({ role: "assistant", content: resp.content }); continue; }
+      text = textOfBlocks(resp.content).trim();
+      break;
+    }
     await prisma.aiEditorialMessage.update({
       where: { id: assistantMessageId },
       data: { content: text || "(réponse vide)", status: "done", model: modelId },

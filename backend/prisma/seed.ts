@@ -1499,6 +1499,13 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-directeur-editorial-identite-unique",
+      version: "2026.11",
+      title: "Nouveauté — SAGE, votre directeur éditorial : une seule identité, plus proactif",
+      body: "Votre espace « Échanger avec SAGE » affirme désormais clairement ce qu'est SAGE : un unique directeur éditorial, une seule conversation, qui mobilise de lui-même la bonne compétence (lecture d'un manuscrit, analyse, cohérence, programme, veille, note de direction) sans que vous ayez à choisir un « mode ». Deux renforts : SAGE est plus proactif — dans les données qu'il consulte (dossiers, étapes, échéances, catalogue), il relève de lui-même les retards, blocages et incohérences, sans jamais inventer une date ou une difficulté que les données ne montrent pas ; et ses garde-fous sont complétés — la validation définitive d'une publication (bon à publier, mise en vente) s'ajoute aux actions sensibles qu'il ne fait jamais lui-même et qui restent réservées au DG ou à un responsable habilité. SAGE propose et argumente, c'est vous qui décidez. Enfin, sa façon d'écrire reste débarrassée des tics d'assistant (pas d'émojis décoratifs, pas d'enthousiasme de commande, pas de répétition de la question).",
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-ia-authenticite-ecriture-et-ton-naturel",
       version: "2026.11",
       title: "Nouveauté — Détection d'une écriture « trop lisse » + rapports au ton plus naturel",

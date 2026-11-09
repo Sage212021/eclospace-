@@ -1547,6 +1547,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-attestation-acompte",
+      version: "2026.11",
+      title: "Nouveauté — Attestation d'acompte à remettre au client",
+      body: "Quand une facture porte un acompte (une « avance »), un bouton « Attestation d'acompte » apparaît à côté de la facture (pôle Finance). Il génère un document court, à remettre au client, qui confirme l'acompte reçu : le client, la référence de la facture, le montant total, l'acompte encaissé et le solde restant à régler. C'est une simple pièce justificative : elle ne tient pas lieu de facture et ne change rien à votre comptabilité (la facture et l'encaissement restent inchangés). Elle complète la chaîne de documents côté acompte.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-11-bon-commande-client-depuis-devis",
       version: "2026.11",
       title: "Nouveauté — Bon de commande client (généré depuis le devis accepté)",

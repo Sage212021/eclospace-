@@ -575,6 +575,47 @@ export function downloadClientOrderPdf(quote: EditorialQuote): void {
   clientOrderPdf(quote).save(`Bon-de-commande-client-${quote.quoteNumber}.pdf`);
 }
 
+// Attestation d'acompte : document court remis au client pour confirmer l'acompte
+// (avance) reçu sur une facture. Ne change RIEN à la comptabilité — c'est une
+// pièce justificative générée depuis la facture qui porte déjà l'avance.
+export function advanceAttestationPdf(invoice: InvoiceDetail): jsPDF {
+  const cur = invoice.currency || "XAF";
+  const adv = Number(invoice.advanceAmount ?? 0);
+  const solde = Math.round((Number(invoice.totalTtc) - adv) * 100) / 100;
+  const columns: Column[] = [
+    { label: "Prestation", width: 110, align: "left" },
+    { label: "Qté", width: 20, align: "right" },
+    { label: "Total HT", width: CONTENT_W - 110 - 20, align: "right" },
+  ];
+  const rows = invoice.lines.map((l) => [l.description, String(l.quantity), money(l.lineTotal, cur)]);
+  const notes = [
+    `Acompte reçu au titre de la facture ${invoice.invoiceNumber}.`,
+    `Solde restant à régler : ${money(solde, cur)}.`,
+    "Ce document atteste du versement de l'acompte ; il ne tient pas lieu de facture.",
+  ];
+  return renderHouseDoc({
+    docName: "Attestation d'acompte",
+    fileName: `Attestation d'acompte ${invoice.invoiceNumber}`,
+    number: invoice.invoiceNumber,
+    meta: [{ label: "Date", value: new Date(invoice.issuedAt ?? invoice.createdAt).toLocaleDateString("fr-FR") }],
+    partyLabel: "Reçu de",
+    partyName: invoice.customer.name,
+    columns,
+    rows,
+    totals: [
+      { label: "Total TTC", value: money(invoice.totalTtc, cur) },
+      { label: invoice.advanceLabel?.trim() || "Acompte reçu", value: money(adv, cur), strong: true },
+      { label: "Solde restant", value: money(solde, cur) },
+    ],
+    notes,
+    signatureFor: HOUSE.legalName,
+  });
+}
+
+export function downloadAdvanceAttestationPdf(invoice: InvoiceDetail): void {
+  advanceAttestationPdf(invoice).save(`Attestation-acompte-${invoice.invoiceNumber}.pdf`);
+}
+
 // URL blob du PDF du bon de commande client, pour un aperçu inline (iframe).
 export function clientOrderPdfBlobUrl(quote: EditorialQuote): string {
   return clientOrderPdf(quote).output("bloburl") as unknown as string;

@@ -845,6 +845,26 @@ const PO_STATUS_LABELS: Record<string, [string, string]> = {
   cancelled: ["Annulé", "Cancelled"],
 };
 
+// Mentions du fournisseur (imprimeur) à faire figurer sur le bon de commande,
+// reprises automatiquement de sa fiche du carnet : coordonnées + mentions
+// légales (NIU, RCCM, compte bancaire). N'affiche que ce qui est renseigné.
+function supplierLegalHtml(po: PurchaseOrder): string {
+  const p = po.printer?.partner;
+  if (!p) return "";
+  const rows: string[] = [];
+  const add = (label: [string, string], value?: string | null) => {
+    if (value && value.trim()) rows.push(`<span>${tr(label[0], label[1])} : <b>${escapeHtml(value)}</b></span>`);
+  };
+  const contact = [p.phone, p.email].filter(Boolean).join(" · ");
+  add(["Adresse", "Address"], p.city);
+  add(["Contact", "Contact"], contact || null);
+  add(["NIU (n° contribuable)", "Taxpayer no. (NIU)"], p.niu);
+  add(["Registre de commerce (RCCM)", "Trade register (RCCM)"], p.rccm);
+  add(["Compte bancaire", "Bank account"], p.bankAccount);
+  if (rows.length === 0) return "";
+  return `<div class="meta" style="margin-top:4px;font-size:11.5px">${rows.join("")}</div>`;
+}
+
 // Bon de commande imprimeur prêt à imprimer (Ch. 15 §15.4). Récapitule le
 // fournisseur, l'ouvrage, la quantité, le montant et les conditions de livraison.
 export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
@@ -879,6 +899,7 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
     <div class="party">
       <div class="party__label">${tr("Fournisseur (imprimeur)", "Supplier (printer)")}</div>
       <div class="party__name">${escapeHtml(printer)}</div>
+      ${supplierLegalHtml(po)}
     </div>
     ${refsHtml}
     <table class="lines">

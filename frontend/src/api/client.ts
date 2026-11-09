@@ -3262,6 +3262,12 @@ export function selectPrintQuote(quoteId: string, selectionMotive: string, chose
   });
 }
 
+// Suppression (logique) d'un devis en double / erroné, tant qu'aucun bon de
+// commande n'en a découlé.
+export function deletePrintQuote(quoteId: string) {
+  return request<{ ok: boolean }>(`/api/v1/print-quotes/${quoteId}`, { method: "DELETE" });
+}
+
 export type QcVerdict = "conform" | "with_reserves" | "non_conform";
 
 export interface GoodsReceiptClaim {
@@ -3302,7 +3308,11 @@ export interface PurchaseOrder {
   currency?: string;
   deliveryDue?: string | null;
   quantityTolerancePct?: string | null;
-  printer?: { partner: { firstName: string; lastName: string } };
+  printer?: { partner: {
+    firstName: string; lastName: string;
+    city?: string | null; phone?: string | null; email?: string | null;
+    niu?: string | null; rccm?: string | null; bankAccount?: string | null;
+  } };
   // Fiche technique (productionSpecs) + références (ISBN, auteur) RÉCUPÉRÉES
   // automatiquement de la Maquette / de la fiche de l'ouvrage.
   quote?: { manuscript?: {
@@ -3322,6 +3332,7 @@ export const BON_FUNCTION_LABELS: Record<string, string> = {
   impression: "Responsable Impression",
   stock: "Responsable Stock & magasin",
   daf: "DAF",
+  direction: "Direction générale",
 };
 
 // Références + fiche technique + consignes d'un bon de commande, prêtes à être

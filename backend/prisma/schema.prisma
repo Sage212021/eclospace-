@@ -3440,6 +3440,9 @@ model PrintQuote {
   selectedQuantity Int?             @map("selected_quantity")
 
   createdAt DateTime @default(now()) @map("created_at")
+  // Suppression LOGIQUE (règle d'intégrité §13) : un devis en double ou erroné
+  // peut être retiré tant qu'il n'a pas donné lieu à un bon de commande.
+  deletedAt DateTime? @map("deleted_at")
 
   purchaseOrder PurchaseOrder?
 

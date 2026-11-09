@@ -11,6 +11,9 @@ const BON_SAISIE = [
   { module: "printing", action: "saisie" as const },
   { module: "stock", action: "saisie" as const },
   { module: "finance", action: "saisie" as const },
+  // La Direction générale (printing:administration) peut aussi établir le bon de
+  // commande, au titre de la fonction « direction » (choix opérateur 09/11/2026).
+  { module: "printing", action: "administration" as const },
 ];
 const BON_CONSULT = [
   { module: "printing", action: "consultation" as const },
@@ -70,7 +73,7 @@ const purchaseOrderSchema = z.object({
   delivery_location_id: z.string().uuid().optional(),
   quantity_tolerance_pct: z.number().nonnegative().optional(),
   printer_instructions: z.string().max(2000).optional(),
-  established_by_function: z.enum(["impression", "stock", "daf"]).optional(),
+  established_by_function: z.enum(["impression", "stock", "daf", "direction"]).optional(),
 });
 
 const poStatusSchema = z.object({ status: z.nativeEnum(PurchaseOrderStatus) });
@@ -263,7 +266,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const quotes = await prisma.printQuote.findMany({
-        where: { manuscriptId: id },
+        where: { manuscriptId: id, deletedAt: null },
         include: { printer: { include: { partner: true } } },
         orderBy: { createdAt: "asc" },
       });
@@ -301,6 +304,27 @@ export default async function printingRoutes(fastify: FastifyInstance) {
         },
       });
       return reply.send(updated);
+    },
+  );
+
+  // Suppression LOGIQUE d'un devis (doublon, erreur de saisie) : autorisée à qui
+  // peut établir un bon de commande (Impression / Stock / DAF / Direction), tant
+  // que le devis n'a PAS donné lieu à un bon de commande (sinon le bon devrait
+  // être annulé d'abord). Un devis « sélectionné » reste supprimable tant qu'il
+  // n'a pas de bon de commande (on peut revenir sur le choix).
+  fastify.delete(
+    "/api/v1/print-quotes/:id",
+    { preHandler: requireAnyPermission(BON_SAISIE) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const quote = await prisma.printQuote.findFirst({ where: { id, deletedAt: null }, include: { purchaseOrder: { select: { id: true } } } });
+      if (!quote) return reply.code(404).send({ code: "not_found", message: "Devis introuvable." });
+      if (quote.purchaseOrder) {
+        return reply.code(409).send({ code: "quote_has_purchase_order", message: "Ce devis a déjà donné lieu à un bon de commande : annulez d'abord le bon de commande." });
+      }
+      await prisma.printQuote.update({ where: { id }, data: { deletedAt: new Date() } });
+      await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "print_quote", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
+      return reply.send({ ok: true });
     },
   );
 

@@ -13,6 +13,7 @@ import {
   recordPrintQuoteAmounts,
   requestPrintQuote,
   selectPrintQuote,
+  deletePrintQuote,
   setGoodsReceiptQc,
   updatePurchaseOrderInstructions,
   updatePurchaseOrderStatus,
@@ -142,6 +143,18 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la sélection.");
+    }
+  }
+
+  async function handleDeleteQuote(quote: PrintQuote) {
+    const who = `${quote.printer.partner.firstName}${quote.printer.partner.lastName ? " " + quote.printer.partner.lastName : ""}`.trim();
+    if (!window.confirm(`Supprimer ce devis (${who} — tirages : ${quote.quantities.join(", ")}) ?`)) return;
+    try {
+      await deletePrintQuote(quote.id);
+      await refresh();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Suppression du devis impossible.");
     }
   }
 
@@ -283,6 +296,11 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
               Sélectionner
             </button>
           )}
+          {(canManage || canManageBon) && (quote.status === "requested" || quote.status === "received") && (
+            <button onClick={() => handleDeleteQuote(quote)} style={{ ...secondaryButtonStyle, color: "var(--alert)" }}>
+              Supprimer le devis
+            </button>
+          )}
           {canManageBon && quote.status === "selected" && (
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 6 }}>
               {bonFunctions.length > 1 && (
@@ -301,7 +319,12 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
       ))}
 
       <div style={{ fontSize: 12, fontWeight: 600, marginTop: 16 }}>Bons de commande</div>
-      {orders.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun bon de commande.</p>}
+      {orders.length === 0 && (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>
+          Aucun bon de commande pour l'instant. Pour en établir un : saisissez le devis reçu, puis <strong>Sélectionner</strong> le devis retenu ; le bouton <strong>« Générer le bon de commande »</strong> apparaît alors sous ce devis.
+          {!canManageBon && <> (l'établissement est réservé aux fonctions Impression, Stock, DAF et Direction générale).</>}
+        </p>
+      )}
       {orders.map((po) => (
         <div key={po.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0", fontSize: 13 }}>
           <div style={{ fontFamily: "var(--font-mono)" }}>{po.poNumber}</div>

@@ -546,6 +546,17 @@ export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
   // que l'aperçu/impression (purchaseOrderExtras), pour un document identique.
   const { author, isbn, specRows, instructions, establishedBy } = purchaseOrderExtras(po);
   const infoLines: string[] = [];
+  // Mentions du fournisseur (reprises du carnet) : coordonnées + mentions légales
+  // obligatoires sur le bon de commande (NIU, RCCM, compte bancaire).
+  const sup = po.printer?.partner;
+  if (sup) {
+    const contact = [sup.phone, sup.email].filter(Boolean).join(" · ");
+    if (sup.city) infoLines.push(`Adresse : ${sup.city}`);
+    if (contact) infoLines.push(`Contact : ${contact}`);
+    if (sup.niu) infoLines.push(`NIU (n° contribuable) : ${sup.niu}`);
+    if (sup.rccm) infoLines.push(`Registre de commerce (RCCM) : ${sup.rccm}`);
+    if (sup.bankAccount) infoLines.push(`Compte bancaire : ${sup.bankAccount}`);
+  }
   if (author) infoLines.push(`Auteur : ${author}`);
   if (isbn) infoLines.push(`ISBN : ${isbn}`);
   infoLines.push(`Lieu de livraison : ${location}`, `Tolérance de quantité : ${tolerance}`);

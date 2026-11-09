@@ -76,7 +76,7 @@ import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
 import { printInvoice, printRoyaltyStatement, printTreasuryBalance, type PrintOpts } from "../lib/print";
-import { downloadInvoicePdf, downloadRoyaltyStatementPdf } from "../lib/financePdf";
+import { downloadInvoicePdf, downloadRoyaltyStatementPdf, downloadAdvanceAttestationPdf } from "../lib/financePdf";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { AccountingExportSection } from "../components/AccountingExportSection";
 
@@ -240,6 +240,16 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
         .catch(() => {});
     } catch (err) {
       fail(err, "Échec de l'ouverture de la facture.");
+    }
+  }
+
+  // Attestation d'acompte : document court remis au client, généré depuis la
+  // facture qui porte une avance. N'affecte pas la comptabilité.
+  async function handleAdvanceAttestation(invoiceId: string) {
+    try {
+      downloadAdvanceAttestationPdf(await getInvoice(invoiceId));
+    } catch (err) {
+      fail(err, "Échec de la génération de l'attestation d'acompte.");
     }
   }
 
@@ -606,6 +616,10 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
             <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
               <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} onDownloadPdf={() => handlePrintInvoice(invoice.id, {}, true)} />
               <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>{t("fin.send_email", "Envoyer par e-mail")}</Button>
+              {/* Attestation d'acompte : disponible dès que la facture porte une avance. */}
+              {invoice.type === "invoice" && Number(invoice.advanceAmount ?? 0) > 0 && (
+                <Button variant="view" size="sm" onClick={() => handleAdvanceAttestation(invoice.id)}>{t("fin.advance_attestation", "Attestation d'acompte")}</Button>
+              )}
               {/* Avoir (note de crédit) : voie légale de correction — utile
                   quand la facture est déjà tirée ou réglée (annulation impossible). */}
               {canManage && invoice.type === "invoice" && (invoice.status === "issued" || invoice.status === "paid") && (

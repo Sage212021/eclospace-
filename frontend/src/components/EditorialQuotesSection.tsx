@@ -18,7 +18,7 @@ import {
   type ServiceType,
 } from "../api/client";
 import { printEditorialQuote, printInvoice } from "../lib/print";
-import { downloadEditorialQuotePdf } from "../lib/financePdf";
+import { downloadEditorialQuotePdf, downloadClientOrderPdf, clientOrderPdfBlobUrl } from "../lib/financePdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -282,6 +282,7 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
               {q.acceptanceMethod === "online_link" ? " (en ligne)" : q.acceptanceMethod === "paper" ? " (devis papier)" : ""}
             </div>
           )}
+          {q.status === "accepted" && <ClientOrderPanel quoteId={q.id} onError={setError} />}
         </div>
       ))}
 
@@ -555,3 +556,36 @@ const secondaryButtonStyle: React.CSSProperties = {
   fontSize: 12,
   cursor: "pointer",
 };
+
+// Bon de commande CLIENT, généré à partir du devis ACCEPTÉ : aperçu inline (PDF)
+// + téléchargement. On recharge le devis complet (avec ses lignes) à l'ouverture
+// de l'aperçu — la liste ne porte pas forcément le détail des prestations.
+function ClientOrderPanel({ quoteId, onError }: { quoteId: string; onError: (m: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
+  const [full, setFull] = useState<EditorialQuote | null>(null);
+
+  useEffect(() => {
+    if (!open) { setUrl(null); setFull(null); return; }
+    let active = true;
+    let u: string | null = null;
+    getEditorialQuote(quoteId)
+      .then((quote) => { if (!active) return; setFull(quote); u = clientOrderPdfBlobUrl(quote); setUrl(u); })
+      .catch((e) => onError(e instanceof Error ? e.message : "Génération du bon de commande impossible."));
+    return () => { active = false; if (u) URL.revokeObjectURL(u); };
+  }, [open, quoteId, onError]);
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={() => setOpen((v) => !v)} style={secondaryButtonStyle}>{open ? "Masquer le bon de commande" : "📄 Bon de commande client"}</button>
+        {open && full && <button onClick={() => downloadClientOrderPdf(full)} style={secondaryButtonStyle}>Télécharger</button>}
+      </div>
+      {open && (
+        url
+          ? <iframe title={`Bon de commande ${quoteId}`} src={url} style={{ width: "100%", height: 500, border: "1px solid var(--line)", borderRadius: 8, marginTop: 8, background: "#fff" }} />
+          : <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>Génération de l'aperçu…</p>
+      )}
+    </div>
+  );
+}

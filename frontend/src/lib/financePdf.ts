@@ -527,6 +527,59 @@ export function downloadEditorialQuotePdf(quote: EditorialQuote): void {
   editorialQuotePdf(quote).save(`Devis-${quote.quoteNumber}.pdf`);
 }
 
+// Bon de commande CLIENT : document généré à partir du DEVIS ACCEPTÉ — il
+// reprend automatiquement la référence du devis, les prestations, quantités,
+// prix, totaux et conditions, ainsi que la confirmation du client (signataire,
+// date). Pas de ressaisie : c'est la matérialisation de la commande du client.
+// On conserve la numérotation en service : le bon porte la RÉFÉRENCE du devis.
+export function clientOrderPdf(quote: EditorialQuote): jsPDF {
+  const cur = quote.currency || "XAF";
+  const client = quote.customer?.name ?? (quote.partner ? `${quote.partner.firstName} ${quote.partner.lastName}` : "");
+  const columns: Column[] = [
+    { label: "Prestation", width: 78, align: "left" },
+    { label: "Qté", width: 18, align: "right" },
+    { label: "P.U. HT", width: 34, align: "right" },
+    { label: "TVA", width: 18, align: "right" },
+    { label: "Total HT", width: CONTENT_W - 78 - 18 - 34 - 18, align: "right" },
+  ];
+  const rows = quote.lines.map((l) => [l.description, String(l.quantity), money(l.unitPrice, cur), `${Number(l.taxRate)} %`, money(l.lineTotal, cur)]);
+
+  const notes: string[] = [`Commande passée sur la base du devis ${quote.quoteNumber}.`];
+  if (quote.manuscript) notes.push(`Ouvrage : ${quote.manuscript.title}`);
+  if (quote.notes) notes.push(quote.notes);
+  if (quote.exclusionsNote) notes.push(quote.exclusionsNote);
+  if (quote.acceptedAt) {
+    notes.push(`Commande confirmée par ${quote.signerName ?? "le client"}, le ${new Date(quote.acceptedAt).toLocaleDateString("fr-FR")}${quote.acceptanceMethod ? ` · ${QUOTE_METHOD[quote.acceptanceMethod] ?? quote.acceptanceMethod}` : ""}.`);
+  }
+
+  return renderHouseDoc({
+    docName: "Bon de commande client",
+    fileName: `Bon de commande client ${quote.quoteNumber}`,
+    number: quote.quoteNumber,
+    meta: quote.validUntil ? [{ label: "Devis valable jusqu'au", value: new Date(quote.validUntil).toLocaleDateString("fr-FR") }] : [],
+    partyLabel: "Commande de",
+    partyName: client,
+    columns,
+    rows,
+    totals: [
+      { label: "Total HT", value: money(quote.totalHt, cur) },
+      { label: "TVA", value: money(quote.totalTax, cur) },
+      { label: "Total TTC", value: money(quote.totalTtc, cur), strong: true },
+    ],
+    notes,
+    signatureFor: HOUSE.legalName,
+  });
+}
+
+export function downloadClientOrderPdf(quote: EditorialQuote): void {
+  clientOrderPdf(quote).save(`Bon-de-commande-client-${quote.quoteNumber}.pdf`);
+}
+
+// URL blob du PDF du bon de commande client, pour un aperçu inline (iframe).
+export function clientOrderPdfBlobUrl(quote: EditorialQuote): string {
+  return clientOrderPdf(quote).output("bloburl") as unknown as string;
+}
+
 // ── Bon de commande (imprimeur) ──────────────────────────────────────────────
 const PO_STATUS: Record<string, string> = {
   draft: "Brouillon", approved: "Approuvé", sent: "Transmis", in_production: "En production",

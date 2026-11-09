@@ -1547,6 +1547,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bon-commande-client-depuis-devis",
+      version: "2026.11",
+      title: "Nouveauté — Bon de commande client (généré depuis le devis accepté)",
+      body: "Dès qu'un devis est accepté par le client, un bouton « 📄 Bon de commande client » apparaît sous ce devis. Il génère, sans aucune ressaisie, le bon de commande du client : il reprend automatiquement la référence du devis, les prestations, quantités, prix et totaux, les conditions, ainsi que la confirmation du client (nom du signataire et date). Vous pouvez l'afficher en aperçu dans la page et le télécharger en PDF à l'en-tête Éclosion. C'est la pièce n°3 de votre chaîne de documents (du devis à l'avoir) ; elle se branche juste après l'acceptation du devis.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-impression-devis-formulaires-en-ligne",
       version: "2026.11",
       title: "Nouveauté — Devis d'impression : saisie et sélection sans pop-up",

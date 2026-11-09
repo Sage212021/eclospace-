@@ -1547,6 +1547,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bon-commande-apercu-et-modification",
+      version: "2026.11",
+      title: "Nouveauté — Bon de commande : aperçu à l'écran + modification",
+      body: "Sur un bon de commande d'impression, un bouton « 👁 Aperçu » affiche désormais le document exactement tel qu'il sera imprimé, directement dans la page (plus besoin d'ouvrir une fenêtre d'impression pour le vérifier). Et tant que le bon est au brouillon (avant approbation), « ✎ Modifier le bon » permet de corriger sa date et son lieu de livraison, la tolérance de quantité et les consignes à l'imprimeur, puis de revoir l'aperçu mis à jour. Une fois le bon approuvé ou transmis, il est figé (lecture seule) pour garantir l'intégrité du document envoyé. Première étape de l'intégration de votre chaîne complète de documents (du devis à l'avoir) ; la suite viendra par étapes.",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "DG"],
+    },
+    {
       slug: "2026-11-impression-devis-bon-commande-clarifie",
       version: "2026.11",
       title: "Nouveauté — Devis & bon de commande d'impression : plus clairs",

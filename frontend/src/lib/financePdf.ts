@@ -590,6 +590,12 @@ export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
   });
 }
 
+// URL « blob: » du PDF du bon de commande, pour un APERÇU inline (iframe) dans
+// l'application. À révoquer (URL.revokeObjectURL) quand l'aperçu est fermé.
+export function purchaseOrderPdfBlobUrl(po: PurchaseOrder): string {
+  return purchaseOrderPdf(po).output("bloburl") as unknown as string;
+}
+
 // Bon de commande en PDF, renvoyé comme fichier (pour le transfert messagerie/WhatsApp).
 export function purchaseOrderPdfFile(po: PurchaseOrder): File {
   return new File([purchaseOrderPdf(po).output("blob")], `Bon-de-commande-${po.poNumber}.pdf`, { type: "application/pdf" });

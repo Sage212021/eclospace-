@@ -256,6 +256,26 @@ describe("Impression et fabrication (Lot 3)", () => {
     expect(orders.json()[0].printer.partner).toBeTruthy();
   });
 
+  it("permet d'aperçu/modifier le bon de commande au brouillon, puis le fige une fois approuvé", async () => {
+    const manuscript = await createManuscriptWithSignedBat("Manuscrit Bon Modifiable");
+    const quote = (await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/print-quotes`, headers: { cookie: adminCookie }, payload: { printer_id: printerId, quantities: [1000] } })).json();
+    await app.inject({ method: "PATCH", url: `/api/v1/print-quotes/${quote.id}`, headers: { cookie: adminCookie }, payload: { amounts: { "1000": 900000 } } });
+    await app.inject({ method: "POST", url: `/api/v1/print-quotes/${quote.id}/select`, headers: { cookie: adminCookie }, payload: { selection_motive: "ok", chosen_quantity: 1000 } });
+    const po = (await app.inject({ method: "POST", url: `/api/v1/print-quotes/${quote.id}/purchase-order`, headers: { cookie: adminCookie }, payload: {} })).json();
+
+    // Modification au brouillon : date de livraison, tolérance, consignes.
+    const edit = await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}`, headers: { cookie: adminCookie }, payload: { delivery_due: "2026-12-01T00:00:00.000Z", quantity_tolerance_pct: 3, printer_instructions: "Livraison en cartons de 20" } });
+    expect(edit.statusCode).toBe(200);
+    expect(Number(edit.json().quantityTolerancePct)).toBe(3);
+    expect(edit.json().printerInstructions).toBe("Livraison en cartons de 20");
+
+    // Une fois approuvé, le bon est figé : la modification est refusée (409).
+    await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "approved" } });
+    const late = await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}`, headers: { cookie: adminCookie }, payload: { printer_instructions: "Trop tard" } });
+    expect(late.statusCode).toBe(409);
+    expect(late.json().code).toBe("po_not_draft");
+  });
+
   it("exige la validation Direction générale au-delà du seuil de délégation (Ch. 15 §15.3 point 5)", async () => {
     const manuscript = await createManuscriptWithSignedBat("Manuscrit Impression Seuil");
     const quoteResponse = await app.inject({

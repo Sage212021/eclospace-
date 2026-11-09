@@ -3268,6 +3268,17 @@ export function deletePrintQuote(quoteId: string) {
   return request<{ ok: boolean }>(`/api/v1/print-quotes/${quoteId}`, { method: "DELETE" });
 }
 
+// Modification d'un bon de commande au brouillon (aperçu + modifier) : date et
+// lieu de livraison, tolérance de quantité, consignes à l'imprimeur.
+export function updatePurchaseOrder(id: string, input: {
+  delivery_due?: string | null;
+  delivery_location_id?: string | null;
+  quantity_tolerance_pct?: number | null;
+  printer_instructions?: string | null;
+}) {
+  return request<PurchaseOrder>(`/api/v1/purchase-orders/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
 export type QcVerdict = "conform" | "with_reserves" | "non_conform";
 
 export interface GoodsReceiptClaim {
@@ -3307,6 +3318,7 @@ export interface PurchaseOrder {
   orderedQuantity: number;
   currency?: string;
   deliveryDue?: string | null;
+  deliveryLocationId?: string | null;
   quantityTolerancePct?: string | null;
   printer?: { partner: {
     firstName: string; lastName: string;

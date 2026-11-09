@@ -219,6 +219,8 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
     permissions.has("printing:saisie") ? { value: "impression", label: "Responsable Impression" } : null,
     permissions.has("stock:saisie") ? { value: "stock", label: "Responsable Stock & magasin" } : null,
     permissions.has("finance:saisie") ? { value: "daf", label: "DAF" } : null,
+    // La Direction générale (printing:administration) peut aussi établir le bon.
+    permissions.has("printing:administration") ? { value: "direction", label: "Direction générale" } : null,
   ].filter(Boolean)) as { value: string; label: string }[];
   const canAssignReader = permissions.has("comite_lecture:saisie");
   const canCloseCommittee = permissions.has("comite_lecture:validation");

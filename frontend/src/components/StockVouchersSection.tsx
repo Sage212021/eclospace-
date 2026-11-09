@@ -419,7 +419,7 @@ export function PurchaseOrderSection({ isbns, canManage, onError }: { isbns: Isb
   }
 
   return (
-    <Card title="Bons de commande" subtitle="Commande officielle passée à un imprimeur / fournisseur — aux normes d'édition (fournisseur, devis, lignes, délai, conditions). À saisir et imprimer." collapsible defaultOpen={false}>
+    <Card title="Bons de commande — fournisseurs & achats hors-livre" subtitle="Pour une commande à un fournisseur divers (hors impression d'un ouvrage). Pour l'impression d'un livre, établissez le bon de commande depuis l'étape « Impression » de la fiche de l'ouvrage (devis → bon de commande officiel)." collapsible defaultOpen={false}>
       {canManage && !showForm && (
         <div style={{ marginBottom: 12 }}><Button variant="add" size="sm" onClick={() => setShowForm(true)}>Nouveau bon de commande</Button></div>
       )}

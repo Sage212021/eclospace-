@@ -1547,6 +1547,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-impression-devis-bon-commande-clarifie",
+      version: "2026.11",
+      title: "Nouveauté — Devis & bon de commande d'impression : plus clairs",
+      body: "Trois améliorations à l'étape « Impression » de la fiche d'un ouvrage. (1) On peut désormais SUPPRIMER un devis en double ou erroné (tant qu'il n'a pas donné lieu à un bon de commande). (2) La Direction générale peut maintenant ÉTABLIR elle-même le bon de commande (nouvelle fonction « Direction générale » à côté d'Impression, Stock et DAF). (3) Le bon de commande d'impression porte désormais les mentions légales de l'imprimeur (NIU, registre de commerce, compte bancaire), reprises automatiquement de sa fiche. Rappel du parcours : demander un devis → « Saisir le devis reçu » → « Sélectionner » le devis retenu → le bouton « Générer le bon de commande » apparaît alors. Le bon de commande d'un livre s'établit à cette étape ; le bon de commande du pôle Stock est désormais réservé aux achats hors-livre (fournisseurs divers).",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "DG"],
+    },
+    {
       slug: "2026-11-bon-commande-mentions-legales-fournisseur",
       version: "2026.11",
       title: "Nouveauté — Mentions légales du fournisseur sur le bon de commande",

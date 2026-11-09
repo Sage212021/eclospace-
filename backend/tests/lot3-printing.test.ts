@@ -225,6 +225,37 @@ describe("Impression et fabrication (Lot 3)", () => {
     expect(po.json().poNumber).toMatch(/^PO-\d{4}-\d{4}$/);
   });
 
+  it("supprime un devis en double, établit le bon au titre « direction », et refuse de supprimer un devis déjà commandé", async () => {
+    const manuscript = await createManuscriptWithSignedBat("Manuscrit Devis Doublon");
+    const mk = () => app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/print-quotes`, headers: { cookie: adminCookie }, payload: { printer_id: printerId, quantities: [500] } });
+    const q1 = (await mk()).json();
+    const q2 = (await mk()).json();
+
+    // Suppression (logique) du doublon : il disparaît de la liste, pas l'autre.
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/print-quotes/${q2.id}`, headers: { cookie: adminCookie } });
+    expect(del.statusCode).toBe(200);
+    const list = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}/print-quotes`, headers: { cookie: adminCookie } });
+    const ids = (list.json().quotes as { id: string }[]).map((x) => x.id);
+    expect(ids).toContain(q1.id);
+    expect(ids).not.toContain(q2.id);
+
+    // q1 : devis reçu → sélection → bon de commande établi « au titre de la direction ».
+    await app.inject({ method: "PATCH", url: `/api/v1/print-quotes/${q1.id}`, headers: { cookie: adminCookie }, payload: { amounts: { "500": 400000 } } });
+    await app.inject({ method: "POST", url: `/api/v1/print-quotes/${q1.id}/select`, headers: { cookie: adminCookie }, payload: { selection_motive: "Choix DG", chosen_quantity: 500 } });
+    const po = await app.inject({ method: "POST", url: `/api/v1/print-quotes/${q1.id}/purchase-order`, headers: { cookie: adminCookie }, payload: { established_by_function: "direction" } });
+    expect(po.statusCode).toBe(201);
+    expect(po.json().establishedByFunction).toBe("direction");
+
+    // Le bon de commande existe : on ne peut plus supprimer son devis.
+    const del2 = await app.inject({ method: "DELETE", url: `/api/v1/print-quotes/${q1.id}`, headers: { cookie: adminCookie } });
+    expect(del2.statusCode).toBe(409);
+    expect(del2.json().code).toBe("quote_has_purchase_order");
+
+    // Le bon de commande renvoyé porte la fiche imprimeur (mentions reportables).
+    const orders = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}/purchase-orders`, headers: { cookie: adminCookie } });
+    expect(orders.json()[0].printer.partner).toBeTruthy();
+  });
+
   it("exige la validation Direction générale au-delà du seuil de délégation (Ch. 15 §15.3 point 5)", async () => {
     const manuscript = await createManuscriptWithSignedBat("Manuscrit Impression Seuil");
     const quoteResponse = await app.inject({

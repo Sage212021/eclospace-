@@ -1547,6 +1547,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-impression-devis-formulaires-en-ligne",
+      version: "2026.11",
+      title: "Nouveauté — Devis d'impression : saisie et sélection sans pop-up",
+      body: "Fini les petites fenêtres du navigateur à l'étape « Impression ». Pour saisir un devis reçu, un formulaire en ligne affiche désormais un champ de montant par hypothèse de tirage (plus un délai annoncé facultatif) ; tout se renseigne d'un coup, à l'écran. Pour retenir un devis, un formulaire propose de choisir le tirage dans une liste et d'écrire le motif du choix, puis de valider. C'est plus clair, moins d'erreurs, et on voit ce qu'on saisit. Le reste du parcours (supprimer un devis, générer le bon de commande) ne change pas.",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "DG"],
+    },
+    {
       slug: "2026-11-bon-commande-apercu-et-modification",
       version: "2026.11",
       title: "Nouveauté — Bon de commande : aperçu à l'écran + modification",

@@ -60,7 +60,6 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   const [showAddPrinter, setShowAddPrinter] = useState(false);
   const [pf, setPf] = useState({ name: "", city: "", phone: "", email: "", specialties: "", payment_terms: "" });
   const [selPrinter, setSelPrinter] = useState("");
-  const [bonFn, setBonFn] = useState(bonFunctions[0]?.value ?? "");
   const [qtys, setQtys] = useState("500, 1000");
 
   const refresh = async () => {
@@ -124,27 +123,23 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
     }
   }
 
-  async function handleRecordAmounts(quote: PrintQuote) {
-    const amounts: Record<string, number> = {};
-    for (const qty of quote.quantities) {
-      const amount = Number(window.prompt(`Montant pour ${qty} exemplaires`, "0") ?? "0");
-      if (amount > 0) amounts[String(qty)] = amount;
-    }
+  // Saisie des montants du devis reçu (formulaire en ligne, plus de fenêtre pop-up).
+  async function recordAmounts(quoteId: string, amounts: Record<string, number>, leadDays?: number) {
     try {
-      await recordPrintQuoteAmounts(quote.id, amounts);
+      await recordPrintQuoteAmounts(quoteId, amounts, leadDays);
       await refresh();
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'enregistrement du devis.");
     }
   }
 
-  async function handleSelect(quote: PrintQuote) {
-    const chosenQuantity = Number(window.prompt("Tirage retenu", quote.quantities[0]?.toString() ?? "0") ?? "0");
-    const motive = window.prompt("Motif du choix");
-    if (!chosenQuantity || !motive) return;
+  // Sélection motivée d'un devis (formulaire en ligne).
+  async function selectQuote(quoteId: string, motive: string, chosenQuantity: number) {
     try {
-      await selectPrintQuote(quote.id, motive, chosenQuantity);
+      await selectPrintQuote(quoteId, motive, chosenQuantity);
       await refresh();
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la sélection.");
     }
@@ -162,11 +157,12 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
     }
   }
 
-  async function handleCreatePurchaseOrder(quote: PrintQuote) {
+  async function createPo(quoteId: string, fn: string) {
     try {
       // Fonction au titre de laquelle le bon est établi (traçabilité).
-      await createPurchaseOrder(quote.id, bonFn ? { established_by_function: bonFn } : {});
+      await createPurchaseOrder(quoteId, fn ? { established_by_function: fn } : {});
       await refresh();
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la génération du bon de commande.");
     }
@@ -271,55 +267,18 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
       <div style={{ fontSize: 12, fontWeight: 600 }}>Devis</div>
       {quotes.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun devis demandé.</p>}
       {quotes.map((quote) => (
-        <div key={quote.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0", fontSize: 13 }}>
-          <div>
-            {quote.printer.partner.firstName} {quote.printer.partner.lastName} — {quote.status} — tirages : {quote.quantities.join(", ")}
-          </div>
-          {quote.amounts && (
-            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, display: "flex", flexWrap: "wrap", gap: 12 }}>
-              {Object.entries(quote.amounts).map(([quantity, total]) => {
-                const qty = Number(quantity);
-                const unit = qty > 0 ? Math.round((total / qty) * 100) / 100 : null;
-                return (
-                  <span key={quantity}>
-                    {qty.toLocaleString("fr-FR")} ex. →{" "}
-                    <span style={{ fontFamily: "var(--font-mono)" }}>{total.toLocaleString("fr-FR")}</span>
-                    {unit !== null && <span style={{ fontFamily: "var(--font-mono)" }}> ({unit.toLocaleString("fr-FR")}/u)</span>}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          {canManage && quote.status === "requested" && (
-            <button onClick={() => handleRecordAmounts(quote)} style={secondaryButtonStyle}>
-              Saisir le devis reçu
-            </button>
-          )}
-          {canValidate && quote.status === "received" && (
-            <button onClick={() => handleSelect(quote)} style={secondaryButtonStyle}>
-              Sélectionner
-            </button>
-          )}
-          {(canManage || canManageBon) && (quote.status === "requested" || quote.status === "received") && (
-            <button onClick={() => handleDeleteQuote(quote)} style={{ ...secondaryButtonStyle, color: "var(--alert)" }}>
-              Supprimer le devis
-            </button>
-          )}
-          {canManageBon && quote.status === "selected" && (
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 6 }}>
-              {bonFunctions.length > 1 && (
-                <label style={fieldLabel}>Établi au titre de
-                  <select style={fieldInput} value={bonFn} onChange={(e) => setBonFn(e.target.value)}>
-                    {bonFunctions.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                  </select>
-                </label>
-              )}
-              <button onClick={() => handleCreatePurchaseOrder(quote)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>
-                Générer le bon de commande
-              </button>
-            </div>
-          )}
-        </div>
+        <QuoteRow
+          key={quote.id}
+          quote={quote}
+          canManage={canManage}
+          canValidate={canValidate}
+          canManageBon={canManageBon}
+          bonFunctions={bonFunctions}
+          onRecord={recordAmounts}
+          onSelect={selectQuote}
+          onDelete={handleDeleteQuote}
+          onCreatePo={createPo}
+        />
       ))}
 
       <div style={{ fontSize: 12, fontWeight: 600, marginTop: 16 }}>Bons de commande</div>
@@ -406,6 +365,133 @@ const secondaryButtonStyle: React.CSSProperties = {
 
 const fieldLabel: React.CSSProperties = { fontSize: 11.5, color: "var(--muted)", fontWeight: 600, display: "flex", flexDirection: "column", gap: 2 };
 const fieldInput: React.CSSProperties = { padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12.5, boxSizing: "border-box" };
+
+// Une ligne de devis avec ses actions EN LIGNE (plus de fenêtres pop-up) :
+// saisie des montants reçus, sélection motivée, suppression, génération du bon.
+function QuoteRow({ quote, canManage, canValidate, canManageBon, bonFunctions, onRecord, onSelect, onDelete, onCreatePo }: {
+  quote: PrintQuote;
+  canManage: boolean;
+  canValidate: boolean;
+  canManageBon: boolean;
+  bonFunctions: { value: string; label: string }[];
+  onRecord: (quoteId: string, amounts: Record<string, number>, leadDays?: number) => Promise<void>;
+  onSelect: (quoteId: string, motive: string, qty: number) => Promise<void>;
+  onDelete: (quote: PrintQuote) => Promise<void>;
+  onCreatePo: (quoteId: string, fn: string) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<null | "record" | "select">(null);
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [leadDays, setLeadDays] = useState("");
+  const [chosenQty, setChosenQty] = useState(String(quote.quantities[0] ?? ""));
+  const [motive, setMotive] = useState("");
+  const [bonFn, setBonFn] = useState(bonFunctions[0]?.value ?? "");
+  const [busy, setBusy] = useState(false);
+  const who = `${quote.printer.partner.firstName}${quote.printer.partner.lastName ? " " + quote.printer.partner.lastName : ""}`.trim();
+
+  function openRecord() {
+    const init: Record<string, string> = {};
+    for (const qty of quote.quantities) init[String(qty)] = quote.amounts?.[String(qty)] != null ? String(quote.amounts[String(qty)]) : "";
+    setAmounts(init);
+    setLeadDays(quote.leadTimeDays != null ? String(quote.leadTimeDays) : "");
+    setMode("record");
+  }
+  async function submitRecord() {
+    const parsed: Record<string, number> = {};
+    for (const qty of quote.quantities) { const v = Number(amounts[String(qty)]); if (v > 0) parsed[String(qty)] = v; }
+    if (Object.keys(parsed).length === 0) return;
+    setBusy(true);
+    try { await onRecord(quote.id, parsed, leadDays.trim() ? Number(leadDays) : undefined); setMode(null); } finally { setBusy(false); }
+  }
+  async function submitSelect() {
+    const qty = Number(chosenQty);
+    if (!qty || !motive.trim()) return;
+    setBusy(true);
+    try { await onSelect(quote.id, motive.trim(), qty); setMode(null); } finally { setBusy(false); }
+  }
+  async function submitPo() {
+    setBusy(true);
+    try { await onCreatePo(quote.id, bonFn); } finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid var(--line)", padding: "8px 0", fontSize: 13 }}>
+      <div>{who} — {quote.status} — tirages : {quote.quantities.join(", ")}</div>
+      {quote.amounts && (
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, display: "flex", flexWrap: "wrap", gap: 12 }}>
+          {Object.entries(quote.amounts).map(([quantity, total]) => {
+            const qty = Number(quantity);
+            const unit = qty > 0 ? Math.round((total / qty) * 100) / 100 : null;
+            return (
+              <span key={quantity}>
+                {qty.toLocaleString("fr-FR")} ex. → <span style={{ fontFamily: "var(--font-mono)" }}>{total.toLocaleString("fr-FR")}</span>
+                {unit !== null && <span style={{ fontFamily: "var(--font-mono)" }}> ({unit.toLocaleString("fr-FR")}/u)</span>}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Saisie du devis reçu — formulaire en ligne */}
+      {canManage && quote.status === "requested" && mode !== "record" && (
+        <button onClick={openRecord} style={secondaryButtonStyle}>Saisir le devis reçu</button>
+      )}
+      {mode === "record" && (
+        <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+          {quote.quantities.map((qty) => (
+            <label key={qty} style={fieldLabel}>Montant pour {qty.toLocaleString("fr-FR")} ex. (FCFA)
+              <input type="number" min={0} style={fieldInput} value={amounts[String(qty)] ?? ""} onChange={(e) => setAmounts({ ...amounts, [String(qty)]: e.target.value })} />
+            </label>
+          ))}
+          <label style={fieldLabel}>Délai annoncé (jours, facultatif)
+            <input type="number" min={0} style={fieldInput} value={leadDays} onChange={(e) => setLeadDays(e.target.value)} />
+          </label>
+          <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+            <button onClick={submitRecord} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", border: "none", fontWeight: 700 }}>Enregistrer le devis</button>
+            <button onClick={() => setMode(null)} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0 }}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Sélection motivée — formulaire en ligne */}
+      {canValidate && quote.status === "received" && mode !== "select" && (
+        <button onClick={() => { setChosenQty(String(quote.quantities[0] ?? "")); setMotive(""); setMode("select"); }} style={secondaryButtonStyle}>Sélectionner</button>
+      )}
+      {mode === "select" && (
+        <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+          <label style={fieldLabel}>Tirage retenu
+            <select style={fieldInput} value={chosenQty} onChange={(e) => setChosenQty(e.target.value)}>
+              {quote.quantities.map((qty) => <option key={qty} value={qty}>{qty.toLocaleString("fr-FR")} ex.</option>)}
+            </select>
+          </label>
+          <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Motif du choix
+            <textarea rows={2} style={{ ...fieldInput, width: "100%", resize: "vertical" }} value={motive} onChange={(e) => setMotive(e.target.value)} placeholder="Ex. meilleur coût unitaire au tirage de 1000, délai le plus court…" />
+          </label>
+          <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+            <button onClick={submitSelect} disabled={busy || !motive.trim()} style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", border: "none", fontWeight: 700 }}>Valider la sélection</button>
+            <button onClick={() => setMode(null)} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0 }}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {(canManage || canManageBon) && (quote.status === "requested" || quote.status === "received") && mode === null && (
+        <button onClick={() => onDelete(quote)} style={{ ...secondaryButtonStyle, color: "var(--alert)" }}>Supprimer le devis</button>
+      )}
+
+      {canManageBon && quote.status === "selected" && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 6 }}>
+          {bonFunctions.length > 1 && (
+            <label style={fieldLabel}>Établi au titre de
+              <select style={fieldInput} value={bonFn} onChange={(e) => setBonFn(e.target.value)}>
+                {bonFunctions.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+            </label>
+          )}
+          <button onClick={submitPo} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0 }}>Générer le bon de commande</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Aperçu (PDF inline) + modification du bon de commande. La modification des
 // champs (livraison, tolérance, consignes) n'est possible qu'au BROUILLON ; une

@@ -487,6 +487,45 @@ export default async function printingRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Modification du bon de commande AVANT approbation (aperçu + modifier) : date
+  // de livraison, lieu, tolérance de quantité et consignes. Réservé au brouillon
+  // (une fois approuvé/transmis, le document est figé). Ouvert aux fonctions qui
+  // établissent le bon (Impression / Stock / DAF / Direction).
+  fastify.patch(
+    "/api/v1/purchase-orders/:id",
+    { preHandler: requireAnyPermission(BON_SAISIE) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const schema = z.object({
+        delivery_due: z.string().datetime().nullish(),
+        delivery_location_id: z.string().uuid().nullish(),
+        quantity_tolerance_pct: z.number().nonnegative().nullish(),
+        printer_instructions: z.string().max(2000).nullish(),
+      });
+      const parsed = schema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const po = await prisma.purchaseOrder.findUnique({ where: { id }, select: { id: true, status: true } });
+      if (!po) return reply.code(404).send({ code: "not_found", message: "Bon de commande introuvable." });
+      if (po.status !== PurchaseOrderStatus.draft) {
+        return reply.code(409).send({ code: "po_not_draft", message: "Un bon de commande ne se modifie qu'au brouillon, avant son approbation." });
+      }
+      const d = parsed.data;
+      const updated = await prisma.purchaseOrder.update({
+        where: { id },
+        data: {
+          deliveryDue: d.delivery_due !== undefined ? (d.delivery_due ? new Date(d.delivery_due) : null) : undefined,
+          deliveryLocationId: d.delivery_location_id !== undefined ? d.delivery_location_id : undefined,
+          quantityTolerancePct: d.quantity_tolerance_pct !== undefined ? d.quantity_tolerance_pct : undefined,
+          printerInstructions: d.printer_instructions !== undefined ? (d.printer_instructions?.trim() || null) : undefined,
+        },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "purchase_order", entityId: id, newValues: { edited: true }, ipAddress: request.ip });
+      return reply.send(updated);
+    },
+  );
+
   // Circuit de délégation (Ch. 15 §15.4) : même seuil que la sélection du devis.
   fastify.patch(
     "/api/v1/purchase-orders/:id/status",

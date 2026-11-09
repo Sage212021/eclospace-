@@ -14,8 +14,10 @@ import {
   requestPrintQuote,
   selectPrintQuote,
   deletePrintQuote,
+  updatePurchaseOrder,
+  listStockLocations,
+  type StockLocation,
   setGoodsReceiptQc,
-  updatePurchaseOrderInstructions,
   updatePurchaseOrderStatus,
   type GoodsReceipt,
   type PrintQuote,
@@ -28,7 +30,7 @@ import {
   BON_FUNCTION_LABELS,
 } from "../api/client";
 import { printPurchaseOrder } from "../lib/print";
-import { downloadPurchaseOrderPdf, purchaseOrderPdfFile } from "../lib/financePdf";
+import { downloadPurchaseOrderPdf, purchaseOrderPdfFile, purchaseOrderPdfBlobUrl } from "../lib/financePdf";
 import { TransferDocDialog } from "./TransferDocDialog";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -49,6 +51,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [locations, setLocations] = useState<StockLocation[]>([]);
   const [qcItems, setQcItems] = useState<QcChecklistItem[]>([]);
   const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
   const [transferPo, setTransferPo] = useState<PurchaseOrder | null>(null);
@@ -75,6 +78,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
     listQcChecklistItems()
       .then((r) => setQcItems(r.items))
       .catch(() => setQcItems([]));
+    listStockLocations().then(setLocations).catch(() => setLocations([]));
   }, []);
 
   useEffect(() => {
@@ -352,7 +356,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             </button>
           )}
 
-          <PoInstructions po={po} canManage={canManageBon} onSaved={refresh} onError={setError} />
+          <PoEditPanel po={po} canManage={canManageBon} locations={locations} onSaved={refresh} onError={setError} />
 
           {(po.goodsReceipts ?? []).length > 0 && (
             <div style={{ marginTop: 8 }}>
@@ -403,36 +407,101 @@ const secondaryButtonStyle: React.CSSProperties = {
 const fieldLabel: React.CSSProperties = { fontSize: 11.5, color: "var(--muted)", fontWeight: 600, display: "flex", flexDirection: "column", gap: 2 };
 const fieldInput: React.CSSProperties = { padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12.5, boxSizing: "border-box" };
 
-// Consignes libres à l'imprimeur pour un bon de commande (reprises à l'impression).
-function PoInstructions({ po, canManage, onSaved, onError }: { po: PurchaseOrder; canManage: boolean; onSaved: () => Promise<void>; onError: (m: string) => void }) {
+// Aperçu (PDF inline) + modification du bon de commande. La modification des
+// champs (livraison, tolérance, consignes) n'est possible qu'au BROUILLON ; une
+// fois le bon approuvé/transmis, il est figé (lecture seule) mais reste
+// prévisualisable. Les consignes seules restent modifiables après coup.
+function PoEditPanel({ po, canManage, locations, onSaved, onError }: { po: PurchaseOrder; canManage: boolean; locations: StockLocation[]; onSaved: () => Promise<void>; onError: (m: string) => void }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(po.printerInstructions ?? "");
   const [busy, setBusy] = useState(false);
-  const current = (po.printerInstructions ?? "").trim();
+  const isDraft = po.status === "draft";
+  const [form, setForm] = useState({
+    delivery_due: po.deliveryDue ? po.deliveryDue.slice(0, 10) : "",
+    delivery_location_id: po.deliveryLocationId ?? "",
+    quantity_tolerance_pct: po.quantityTolerancePct != null ? String(po.quantityTolerancePct) : "",
+    printer_instructions: po.printerInstructions ?? "",
+  });
+
+  useEffect(() => {
+    if (!showPreview) { setPreviewUrl(null); return; }
+    let url: string | null = null;
+    try { url = purchaseOrderPdfBlobUrl(po); setPreviewUrl(url); } catch { setPreviewUrl(null); }
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [showPreview, po]);
+
+  function startEdit() {
+    setForm({
+      delivery_due: po.deliveryDue ? po.deliveryDue.slice(0, 10) : "",
+      delivery_location_id: po.deliveryLocationId ?? "",
+      quantity_tolerance_pct: po.quantityTolerancePct != null ? String(po.quantityTolerancePct) : "",
+      printer_instructions: po.printerInstructions ?? "",
+    });
+    setEditing(true);
+  }
 
   async function save() {
     setBusy(true);
-    try { await updatePurchaseOrderInstructions(po.id, text); await onSaved(); setEditing(false); }
-    catch (e) { onError(e instanceof Error ? e.message : "Enregistrement des consignes impossible."); }
-    finally { setBusy(false); }
+    try {
+      await updatePurchaseOrder(po.id, {
+        delivery_due: form.delivery_due ? new Date(form.delivery_due).toISOString() : null,
+        delivery_location_id: form.delivery_location_id || null,
+        quantity_tolerance_pct: form.quantity_tolerance_pct.trim() === "" ? null : Number(form.quantity_tolerance_pct),
+        printer_instructions: form.printer_instructions,
+      });
+      await onSaved();
+      setEditing(false);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Enregistrement du bon de commande impossible.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (!editing) {
-    return (
-      <div style={{ marginTop: 6, fontSize: 12.5 }}>
-        <span style={{ color: "var(--muted)" }}>Consignes à l'imprimeur : </span>
-        {current ? <span style={{ whiteSpace: "pre-wrap" }}>{current}</span> : <span style={{ color: "var(--muted)" }}>aucune</span>}
-        {canManage && <button onClick={() => { setText(po.printerInstructions ?? ""); setEditing(true); }} style={{ ...secondaryButtonStyle, marginTop: 0, marginLeft: 8, padding: "3px 10px" }}>{current ? "Modifier" : "+ Ajouter"}</button>}
-      </div>
-    );
-  }
+  const instr = (po.printerInstructions ?? "").trim();
   return (
-    <div style={{ marginTop: 6 }}>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Ex. couleurs Pantone de la couverture, papier recyclé, pré-presse à notre charge, livraison en cartons de 20…" style={{ ...fieldInput, width: "100%", resize: "vertical" }} />
-      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-        <button onClick={save} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", border: "none", fontWeight: 700 }}>Enregistrer</button>
-        <button onClick={() => setEditing(false)} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0 }}>Annuler</button>
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={() => setShowPreview((v) => !v)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>{showPreview ? "Masquer l'aperçu" : "👁 Aperçu"}</button>
+        {canManage && isDraft && !editing && <button onClick={startEdit} style={{ ...secondaryButtonStyle, marginTop: 0 }}>✎ Modifier le bon</button>}
       </div>
+
+      {showPreview && (
+        previewUrl
+          ? <iframe title={`Aperçu ${po.poNumber}`} src={previewUrl} style={{ width: "100%", height: 520, border: "1px solid var(--line)", borderRadius: 8, marginTop: 8, background: "#fff" }} />
+          : <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>Aperçu indisponible.</p>
+      )}
+
+      {editing ? (
+        <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+          <label style={fieldLabel}>Date de livraison souhaitée
+            <input type="date" style={fieldInput} value={form.delivery_due} onChange={(e) => setForm({ ...form, delivery_due: e.target.value })} />
+          </label>
+          <label style={fieldLabel}>Lieu de livraison
+            <select style={fieldInput} value={form.delivery_location_id} onChange={(e) => setForm({ ...form, delivery_location_id: e.target.value })}>
+              <option value="">— Non précisé —</option>
+              {locations.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </select>
+          </label>
+          <label style={fieldLabel}>Tolérance de quantité (%)
+            <input type="number" min={0} step="0.5" style={fieldInput} value={form.quantity_tolerance_pct} onChange={(e) => setForm({ ...form, quantity_tolerance_pct: e.target.value })} placeholder="Ex. 2" />
+          </label>
+          <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Consignes à l'imprimeur
+            <textarea rows={3} style={{ ...fieldInput, width: "100%", resize: "vertical" }} value={form.printer_instructions} onChange={(e) => setForm({ ...form, printer_instructions: e.target.value })} placeholder="Ex. couleurs Pantone de la couverture, papier recyclé, livraison en cartons de 20…" />
+          </label>
+          <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+            <button onClick={save} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", border: "none", fontWeight: 700 }}>Enregistrer</button>
+            <button onClick={() => setEditing(false)} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0 }}>Annuler</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 6, fontSize: 12.5 }}>
+          <span style={{ color: "var(--muted)" }}>Consignes à l'imprimeur : </span>
+          {instr ? <span style={{ whiteSpace: "pre-wrap" }}>{instr}</span> : <span style={{ color: "var(--muted)" }}>aucune</span>}
+          {canManage && !isDraft && <span style={{ color: "var(--muted)", marginLeft: 8 }}>— le bon est {po.status === "cancelled" ? "annulé" : "approuvé"}, il n'est plus modifiable.</span>}
+        </div>
+      )}
     </div>
   );
 }

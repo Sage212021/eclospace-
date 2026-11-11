@@ -18,7 +18,7 @@ import {
   type ServiceType,
 } from "../api/client";
 import { printEditorialQuote, printInvoice } from "../lib/print";
-import { downloadEditorialQuotePdf, downloadClientOrderPdf, clientOrderPdfBlobUrl } from "../lib/financePdf";
+import { downloadEditorialQuotePdf, downloadClientOrderPdf } from "../lib/financePdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -562,30 +562,59 @@ const secondaryButtonStyle: React.CSSProperties = {
 // de l'aperçu — la liste ne porte pas forcément le détail des prestations.
 function ClientOrderPanel({ quoteId, onError }: { quoteId: string; onError: (m: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [url, setUrl] = useState<string | null>(null);
   const [full, setFull] = useState<EditorialQuote | null>(null);
 
   useEffect(() => {
-    if (!open) { setUrl(null); setFull(null); return; }
+    if (!open) { setFull(null); return; }
     let active = true;
-    let u: string | null = null;
     getEditorialQuote(quoteId)
-      .then((quote) => { if (!active) return; setFull(quote); u = clientOrderPdfBlobUrl(quote); setUrl(u); })
+      .then((quote) => { if (active) setFull(quote); })
       .catch((e) => onError(e instanceof Error ? e.message : "Génération du bon de commande impossible."));
-    return () => { active = false; if (u) URL.revokeObjectURL(u); };
+    return () => { active = false; };
   }, [open, quoteId, onError]);
+
+  // Aperçu INLINE (HTML) : fiable sur mobile/webview, où un PDF « blob: » en
+  // iframe est bloqué (« Ce contenu est bloqué »).
+  const preview = (q: EditorialQuote) => {
+    const cur = q.currency || "XAF";
+    const fmt = (v: string | number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(Number(v));
+    const client = q.customer?.name ?? (q.partner ? `${q.partner.firstName} ${q.partner.lastName}` : "—");
+    const sec: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", color: "var(--eclosion-dark, #9A7A12)", margin: "10px 0 4px" };
+    return (
+      <div style={{ marginTop: 8, border: "1px solid var(--line)", borderRadius: 8, padding: 14, background: "#fff" }}>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Bon de commande client</div>
+        <div style={{ fontSize: 12, color: "var(--muted)" }}>Référence devis <span style={{ fontFamily: "var(--font-mono)" }}>{q.quoteNumber}</span></div>
+        <div style={sec}>Commande de</div>
+        <div style={{ fontSize: 13 }}><strong>{client}</strong></div>
+        {q.manuscript && <div style={{ fontSize: 12, color: "var(--muted)" }}>Ouvrage : {q.manuscript.title}</div>}
+        <div style={sec}>Prestations</div>
+        {q.lines.map((l) => (
+          <div key={l.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5, borderTop: "1px solid var(--line)", padding: "4px 0" }}>
+            <span>{l.description} <span style={{ color: "var(--muted)" }}>× {l.quantity}</span></span>
+            <span style={{ fontFamily: "var(--font-mono)" }}>{fmt(l.lineTotal)}</span>
+          </div>
+        ))}
+        <div style={{ textAlign: "right", marginTop: 6, fontSize: 12.5 }}>
+          <div>Total HT : <span style={{ fontFamily: "var(--font-mono)" }}>{fmt(q.totalHt)}</span></div>
+          <div>TVA : <span style={{ fontFamily: "var(--font-mono)" }}>{fmt(q.totalTax)}</span></div>
+          <div style={{ fontWeight: 700 }}>Total TTC : <span style={{ fontFamily: "var(--font-mono)" }}>{fmt(q.totalTtc)}</span></div>
+        </div>
+        {q.acceptedAt && (
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
+            Commande confirmée par {q.signerName ?? "le client"} le {new Date(q.acceptedAt).toLocaleDateString("fr-FR")}.
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{ marginTop: 6 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button onClick={() => setOpen((v) => !v)} style={secondaryButtonStyle}>{open ? "Masquer le bon de commande" : "📄 Bon de commande client"}</button>
-        {open && full && <button onClick={() => downloadClientOrderPdf(full)} style={secondaryButtonStyle}>Télécharger</button>}
+        {open && full && <button onClick={() => downloadClientOrderPdf(full)} style={secondaryButtonStyle}>Télécharger le PDF</button>}
       </div>
-      {open && (
-        url
-          ? <iframe title={`Bon de commande ${quoteId}`} src={url} style={{ width: "100%", height: 500, border: "1px solid var(--line)", borderRadius: 8, marginTop: 8, background: "#fff" }} />
-          : <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>Génération de l'aperçu…</p>
-      )}
+      {open && (full ? preview(full) : <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>Génération de l'aperçu…</p>)}
     </div>
   );
 }

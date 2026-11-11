@@ -1076,7 +1076,7 @@ async function main() {
   });
 
   // Tranche d'ISBN DISPONIBLES non utilisés fournie par la maison
-  // (978-9956-0-7966-7 → 978-9956-0-7985-8). Chargés au statut « disponible ».
+  // (978-9956-0-7966-7 → 978-9956-0-8014-4). Chargés au statut « disponible ».
   // Idempotent et NON destructif : un numéro déjà en banque (même attribué)
   // n'est JAMAIS écrasé ni dupliqué (update vide) — l'ISBN n'est jamais réutilisé.
   // Les ISBN suivants se chargent via l'écran Administrateur « Chargement des ISBN ».
@@ -1085,6 +1085,15 @@ async function main() {
     "9789956079711", "9789956079728", "9789956079735", "9789956079742", "9789956079759",
     "9789956079766", "9789956079773", "9789956079780", "9789956079797", "9789956079803",
     "9789956079810", "9789956079827", "9789956079834", "9789956079841", "9789956079858",
+    // Nouvelle tranche officielle de la Banque des ISBN (Direction du Livre,
+    // Cameroun) : 978-9956-0-7986-5 → 978-9956-0-8014-4, 29 numéros. L'entrée
+    // erronée « …-8010-3 » du scan (doublon de 8010, clé incorrecte) est écartée.
+    "9789956079865", "9789956079872", "9789956079889", "9789956079896", "9789956079902",
+    "9789956079919", "9789956079926", "9789956079933", "9789956079940", "9789956079957",
+    "9789956079964", "9789956079971", "9789956079988", "9789956079995", "9789956080007",
+    "9789956080014", "9789956080021", "9789956080038", "9789956080045", "9789956080052",
+    "9789956080069", "9789956080076", "9789956080083", "9789956080090", "9789956080106",
+    "9789956080113", "9789956080120", "9789956080137", "9789956080144",
   ];
   for (const isbn13 of availableIsbns) {
     await prisma.isbn.upsert({
@@ -1546,6 +1555,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-isbn-nouvelle-tranche-7986-8014",
+      version: "2026.11",
+      title: "Nouveauté — 29 nouveaux ISBN ajoutés au stock disponible",
+      body: "La nouvelle tranche d'ISBN délivrée par la Direction du Livre (Banque des ISBN, Cameroun) est intégrée au stock : 29 numéros, du 978-9956-0-7986-5 au 978-9956-0-8014-4, chargés au statut « disponible » et prêts à être attribués à vos prochains ouvrages. Ils viennent à la suite de la tranche précédente (…-7985-8). À noter : la liste scannée comportait une ligne en double et erronée pour le 8010 (clé « …-3 ») ; nous avons gardé le bon numéro (978-9956-0-8010-6) et écarté le doublon. Rien n'est jamais écrasé : un numéro déjà en banque n'est ni dupliqué ni réutilisé.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["DIRED", "INFOG", "DG"],
+    },
     {
       slug: "2026-11-attestation-acompte",
       version: "2026.11",

@@ -114,4 +114,37 @@ describe("Bilan mensuel de trésorerie", () => {
     expenseIds.push(created.json().id);
     expect(created.json().expenseDate.slice(0, 10)).toBe("2097-05-10");
   });
+
+  it("plage de dates : agrège entrées/sorties au jour près, bornes incluses", async () => {
+    // Tout septembre 2099 : mêmes totaux que le mois du bilan mensuel.
+    const sept = (await app.inject({ method: "GET", url: "/api/v1/finance/balance-range?from=2099-09-01&to=2099-09-30", headers: { cookie } })).json();
+    expect(sept.entrees).toBe(3_000_000);
+    expect(sept.depenses).toBe(2_000_000);
+    expect(sept.solde).toBe(1_000_000);
+    expect(sept.depensesParCategorie.droits_auteur).toBe(250_000);
+
+    // Fenêtre partielle du 11 au 16 sept. : encaissement du 15 (2 500 000) + loyer
+    // du 12 (750 000) ; exclut le décaissement du 10, le transport du 5, l'entrée
+    // du 20 — vérifie la précision au jour près et les bornes incluses.
+    const part = (await app.inject({ method: "GET", url: "/api/v1/finance/balance-range?from=2099-09-11&to=2099-09-16", headers: { cookie } })).json();
+    expect(part.entrees).toBe(2_500_000);
+    expect(part.depenses).toBe(750_000);
+    expect(part.solde).toBe(1_750_000);
+
+    // Journée unique (15 sept.), bornes égales et incluses : l'encaissement du 15 compte.
+    const oneDay = (await app.inject({ method: "GET", url: "/api/v1/finance/balance-range?from=2099-09-15&to=2099-09-15", headers: { cookie } })).json();
+    expect(oneDay.entrees).toBe(2_500_000);
+
+    // Septembre → octobre : cumul des deux mois.
+    const span = (await app.inject({ method: "GET", url: "/api/v1/finance/balance-range?from=2099-09-01&to=2099-10-31", headers: { cookie } })).json();
+    expect(span.entrees).toBe(3_100_000);
+    expect(span.depenses).toBe(2_000_000);
+    expect(span.solde).toBe(1_100_000);
+  });
+
+  it("plage de dates : refuse des bornes manquantes ou incohérentes (400)", async () => {
+    expect((await app.inject({ method: "GET", url: "/api/v1/finance/balance-range?from=2099-09-01", headers: { cookie } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/api/v1/finance/balance-range?from=2099-09-30&to=2099-09-01", headers: { cookie } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/api/v1/finance/balance-range?from=pas-une-date&to=2099-09-30", headers: { cookie } })).statusCode).toBe(400);
+  });
 });

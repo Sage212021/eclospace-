@@ -225,6 +225,64 @@ describe("Impression et fabrication (Lot 3)", () => {
     expect(po.json().poNumber).toMatch(/^PO-\d{4}-\d{4}$/);
   });
 
+  it("saisit un devis en désignations multiples : total par tirage = somme des lignes, reportées sur le bon de commande", async () => {
+    const manuscript = await createManuscriptWithSignedBat("Manuscrit Devis Détaillé");
+
+    const quote = (await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/print-quotes`,
+      headers: { cookie: adminCookie },
+      payload: { printer_id: printerId, quantities: [500, 1000] },
+    })).json();
+
+    // Désignations détaillées par tirage. Le total par tirage doit être calculé
+    // comme la SOMME des lignes (les désignations priment sur tout montant global).
+    const recorded = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/print-quotes/${quote.id}`,
+      headers: { cookie: adminCookie },
+      payload: {
+        lead_time_days: 20,
+        designations: {
+          "500": [
+            { label: "Impression intérieur N&B", amount: 300000 },
+            { label: "Couverture quadrichromie + pelliculage", amount: 120000 },
+            { label: "Façonnage et reliure", amount: 80000 },
+          ],
+          "1000": [
+            { label: "Impression intérieur N&B", amount: 520000 },
+            { label: "Couverture quadrichromie + pelliculage", amount: 180000 },
+            { label: "Façonnage et reliure", amount: 100000 },
+          ],
+        },
+      },
+    });
+    expect(recorded.statusCode).toBe(200);
+    // Total = somme des lignes : 500 → 500 000 ; 1000 → 800 000.
+    expect(recorded.json().amounts["500"]).toBe(500000);
+    expect(recorded.json().amounts["1000"]).toBe(800000);
+    expect(recorded.json().designations["1000"]).toHaveLength(3);
+
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/print-quotes/${quote.id}/select`,
+      headers: { cookie: adminCookie },
+      payload: { selection_motive: "Détail complet fourni", chosen_quantity: 1000 },
+    });
+
+    const po = (await app.inject({
+      method: "POST",
+      url: `/api/v1/print-quotes/${quote.id}/purchase-order`,
+      headers: { cookie: adminCookie },
+      payload: {},
+    })).json();
+    // Les désignations du tirage retenu (1000) sont reportées sur le bon.
+    expect(Number(po.amount)).toBe(800000);
+    expect(po.lineItems).toHaveLength(3);
+    expect(po.lineItems[0].label).toBe("Impression intérieur N&B");
+    expect(po.lineItems.reduce((s: number, l: { amount: number }) => s + l.amount, 0)).toBe(800000);
+  });
+
   it("supprime un devis en double, établit le bon au titre « direction », et refuse de supprimer un devis déjà commandé", async () => {
     const manuscript = await createManuscriptWithSignedBat("Manuscrit Devis Doublon");
     const mk = () => app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/print-quotes`, headers: { cookie: adminCookie }, payload: { printer_id: printerId, quantities: [500] } });

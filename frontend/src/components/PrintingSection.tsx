@@ -19,6 +19,7 @@ import {
   type StockLocation,
   setGoodsReceiptQc,
   updatePurchaseOrderStatus,
+  type DesignationLine,
   type GoodsReceipt,
   type PrintQuote,
   type Printer,
@@ -125,9 +126,16 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   }
 
   // Saisie des montants du devis reçu (formulaire en ligne, plus de fenêtre pop-up).
-  async function recordAmounts(quoteId: string, amounts: Record<string, number>, leadDays?: number) {
+  // `designations` = détail facultatif par tirage (une ligne par prestation) ;
+  // quand il est fourni, le total par tirage est la somme des désignations.
+  async function recordAmounts(
+    quoteId: string,
+    amounts: Record<string, number>,
+    leadDays?: number,
+    designations?: Record<string, DesignationLine[]>,
+  ) {
     try {
-      await recordPrintQuoteAmounts(quoteId, amounts, leadDays);
+      await recordPrintQuoteAmounts(quoteId, amounts, leadDays, designations);
       await refresh();
       setError(null);
     } catch (err) {
@@ -375,13 +383,16 @@ function QuoteRow({ quote, canManage, canValidate, canManageBon, bonFunctions, o
   canValidate: boolean;
   canManageBon: boolean;
   bonFunctions: { value: string; label: string }[];
-  onRecord: (quoteId: string, amounts: Record<string, number>, leadDays?: number) => Promise<void>;
+  onRecord: (quoteId: string, amounts: Record<string, number>, leadDays?: number, designations?: Record<string, DesignationLine[]>) => Promise<void>;
   onSelect: (quoteId: string, motive: string, qty: number) => Promise<void>;
   onDelete: (quote: PrintQuote) => Promise<void>;
   onCreatePo: (quoteId: string, fn: string) => Promise<void>;
 }) {
   const [mode, setMode] = useState<null | "record" | "select">(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
+  // Désignations détaillées par tirage (brouillon de saisie : montants en texte).
+  // Clé = tirage. Quand un tirage a des désignations, son total = somme des lignes.
+  const [designations, setDesignations] = useState<Record<string, { label: string; amount: string }[]>>({});
   const [leadDays, setLeadDays] = useState("");
   const [chosenQty, setChosenQty] = useState(String(quote.quantities[0] ?? ""));
   const [motive, setMotive] = useState("");
@@ -391,17 +402,64 @@ function QuoteRow({ quote, canManage, canValidate, canManageBon, bonFunctions, o
 
   function openRecord() {
     const init: Record<string, string> = {};
-    for (const qty of quote.quantities) init[String(qty)] = quote.amounts?.[String(qty)] != null ? String(quote.amounts[String(qty)]) : "";
+    const initDes: Record<string, { label: string; amount: string }[]> = {};
+    for (const qty of quote.quantities) {
+      const key = String(qty);
+      init[key] = quote.amounts?.[key] != null ? String(quote.amounts[key]) : "";
+      const lines = quote.designations?.[key];
+      if (lines && lines.length) initDes[key] = lines.map((l) => ({ label: l.label, amount: String(l.amount) }));
+    }
     setAmounts(init);
+    setDesignations(initDes);
     setLeadDays(quote.leadTimeDays != null ? String(quote.leadTimeDays) : "");
     setMode("record");
   }
+  // Total d'un tirage dans le brouillon : somme des désignations saisies.
+  function tirageTotal(key: string): number {
+    return (designations[key] ?? []).reduce((s, l) => s + (Number(l.amount) > 0 ? Number(l.amount) : 0), 0);
+  }
+  function addDesignation(key: string) {
+    setDesignations({ ...designations, [key]: [...(designations[key] ?? []), { label: "", amount: "" }] });
+  }
+  function updateDesignation(key: string, idx: number, patch: Partial<{ label: string; amount: string }>) {
+    const lines = [...(designations[key] ?? [])];
+    lines[idx] = { ...lines[idx], ...patch };
+    setDesignations({ ...designations, [key]: lines });
+  }
+  function removeDesignation(key: string, idx: number) {
+    const lines = (designations[key] ?? []).filter((_, i) => i !== idx);
+    const next = { ...designations };
+    if (lines.length) next[key] = lines; else delete next[key];
+    setDesignations(next);
+  }
   async function submitRecord() {
     const parsed: Record<string, number> = {};
-    for (const qty of quote.quantities) { const v = Number(amounts[String(qty)]); if (v > 0) parsed[String(qty)] = v; }
+    const parsedDes: Record<string, DesignationLine[]> = {};
+    for (const qty of quote.quantities) {
+      const key = String(qty);
+      const lines = (designations[key] ?? [])
+        .map((l) => ({ label: l.label.trim(), amount: Number(l.amount) }))
+        .filter((l) => l.label && l.amount > 0);
+      if (lines.length) {
+        // Un tirage détaillé : total = somme des désignations (priment).
+        parsedDes[key] = lines;
+        parsed[key] = Math.round(lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
+      } else {
+        const v = Number(amounts[key]);
+        if (v > 0) parsed[key] = v;
+      }
+    }
     if (Object.keys(parsed).length === 0) return;
     setBusy(true);
-    try { await onRecord(quote.id, parsed, leadDays.trim() ? Number(leadDays) : undefined); setMode(null); } finally { setBusy(false); }
+    try {
+      await onRecord(
+        quote.id,
+        parsed,
+        leadDays.trim() ? Number(leadDays) : undefined,
+        Object.keys(parsedDes).length ? parsedDes : undefined,
+      );
+      setMode(null);
+    } finally { setBusy(false); }
   }
   async function submitSelect() {
     const qty = Number(chosenQty);
@@ -422,31 +480,95 @@ function QuoteRow({ quote, canManage, canValidate, canManageBon, bonFunctions, o
           {Object.entries(quote.amounts).map(([quantity, total]) => {
             const qty = Number(quantity);
             const unit = qty > 0 ? Math.round((total / qty) * 100) / 100 : null;
+            const lines = quote.designations?.[quantity];
             return (
               <span key={quantity}>
                 {qty.toLocaleString("fr-FR")} ex. → <span style={{ fontFamily: "var(--font-mono)" }}>{total.toLocaleString("fr-FR")}</span>
                 {unit !== null && <span style={{ fontFamily: "var(--font-mono)" }}> ({unit.toLocaleString("fr-FR")}/u)</span>}
+                {lines && lines.length > 0 && (
+                  <span style={{ opacity: 0.8 }}> — {lines.length} désignation{lines.length > 1 ? "s" : ""}</span>
+                )}
               </span>
             );
           })}
         </div>
       )}
+      {/* Détail des désignations du tirage sélectionné (reporté sur le bon). */}
+      {quote.status === "selected" && quote.selectedQuantity != null && quote.designations?.[String(quote.selectedQuantity)]?.length ? (
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+          <div style={{ fontWeight: 700, color: "var(--ink)" }}>Désignations (tirage retenu {Number(quote.selectedQuantity).toLocaleString("fr-FR")} ex.) :</div>
+          <ul style={{ margin: "2px 0 0", paddingLeft: 18 }}>
+            {quote.designations[String(quote.selectedQuantity)].map((l, i) => (
+              <li key={i}>{l.label} — <span style={{ fontFamily: "var(--font-mono)" }}>{l.amount.toLocaleString("fr-FR")}</span> FCFA</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* Saisie du devis reçu — formulaire en ligne */}
       {canManage && quote.status === "requested" && mode !== "record" && (
         <button onClick={openRecord} style={secondaryButtonStyle}>Saisir le devis reçu</button>
       )}
       {mode === "record" && (
-        <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-          {quote.quantities.map((qty) => (
-            <label key={qty} style={fieldLabel}>Montant pour {qty.toLocaleString("fr-FR")} ex. (FCFA)
-              <input type="number" min={0} style={fieldInput} value={amounts[String(qty)] ?? ""} onChange={(e) => setAmounts({ ...amounts, [String(qty)]: e.target.value })} />
-            </label>
-          ))}
+        <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>
+            Pour chaque tirage, indiquez un montant global <strong>ou</strong> détaillez-le ligne par ligne
+            (désignation + montant). Si vous ajoutez des désignations, le total du tirage est automatiquement
+            la somme de ces lignes.
+          </div>
+          {quote.quantities.map((qty) => {
+            const key = String(qty);
+            const lines = designations[key] ?? [];
+            const detailed = lines.length > 0;
+            return (
+              <div key={qty} style={{ border: "1px solid var(--line)", borderRadius: 6, padding: "8px 10px", background: "var(--ivory, #FAF8F2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <strong style={{ fontSize: 13 }}>Tirage {qty.toLocaleString("fr-FR")} ex.</strong>
+                  {detailed && (
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                      Total : <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--ink)" }}>{tirageTotal(key).toLocaleString("fr-FR")}</span> FCFA
+                    </span>
+                  )}
+                </div>
+                {!detailed && (
+                  <label style={{ ...fieldLabel, marginTop: 6 }}>Montant global (FCFA)
+                    <input type="number" min={0} style={fieldInput} value={amounts[key] ?? ""} onChange={(e) => setAmounts({ ...amounts, [key]: e.target.value })} />
+                  </label>
+                )}
+                {detailed && (
+                  <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {lines.map((line, idx) => (
+                      <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input
+                          type="text"
+                          style={{ ...fieldInput, flex: 1 }}
+                          placeholder="Désignation (ex. Impression intérieur N&B)"
+                          value={line.label}
+                          onChange={(e) => updateDesignation(key, idx, { label: e.target.value })}
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          style={{ ...fieldInput, width: 120, fontFamily: "var(--font-mono)" }}
+                          placeholder="Montant"
+                          value={line.amount}
+                          onChange={(e) => updateDesignation(key, idx, { amount: e.target.value })}
+                        />
+                        <button type="button" onClick={() => removeDesignation(key, idx)} title="Retirer cette désignation" style={{ ...secondaryButtonStyle, marginTop: 0, color: "var(--alert)", padding: "4px 8px" }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button type="button" onClick={() => addDesignation(key)} style={{ ...secondaryButtonStyle, marginTop: 6 }}>
+                  + Ajouter une désignation
+                </button>
+              </div>
+            );
+          })}
           <label style={fieldLabel}>Délai annoncé (jours, facultatif)
             <input type="number" min={0} style={fieldInput} value={leadDays} onChange={(e) => setLeadDays(e.target.value)} />
           </label>
-          <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             <button onClick={submitRecord} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", border: "none", fontWeight: 700 }}>Enregistrer le devis</button>
             <button onClick={() => setMode(null)} disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 0 }}>Annuler</button>
           </div>
@@ -530,10 +652,22 @@ function PurchaseOrderPreview({ po }: { po: PurchaseOrder }) {
       {isbn && label("ISBN", isbn)}
 
       <div style={sec}>Commande</div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)", padding: "6px 0", marginTop: 2 }}>
-        <span>Impression — {book?.title ?? "Ouvrage"}</span>
-        <span style={{ fontFamily: "var(--font-mono)" }}>{po.orderedQuantity} ex. · {fmt(po.amount)}</span>
-      </div>
+      {po.lineItems && po.lineItems.length > 0 ? (
+        <div style={{ borderTop: "1px solid var(--line)", marginTop: 2 }}>
+          {po.lineItems.map((li, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, borderBottom: "1px solid var(--line)", padding: "6px 0" }}>
+              <span>{li.label}</span>
+              <span style={{ fontFamily: "var(--font-mono)" }}>{fmt(li.amount)}</span>
+            </div>
+          ))}
+          <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>Tirage : {po.orderedQuantity} ex.</div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)", padding: "6px 0", marginTop: 2 }}>
+          <span>Impression — {book?.title ?? "Ouvrage"}</span>
+          <span style={{ fontFamily: "var(--font-mono)" }}>{po.orderedQuantity} ex. · {fmt(po.amount)}</span>
+        </div>
+      )}
       <div style={{ textAlign: "right", fontWeight: 700, marginTop: 4 }}>Total : {fmt(po.amount)}</div>
 
       {specRows.length > 0 && <>

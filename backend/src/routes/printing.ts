@@ -57,11 +57,20 @@ const printQuoteRequestSchema = z.object({
   quantities: z.array(z.number().int().positive()).min(1),
 });
 
-const printQuoteReceivedSchema = z.object({
-  amounts: z.record(z.number().positive()),
-  lead_time_days: z.number().int().positive().optional(),
-  valid_until: z.string().datetime().optional(),
-});
+// Ligne de désignation d'un devis / bon de commande : libellé + montant.
+const designationLineSchema = z.object({ label: z.string().trim().min(1).max(200), amount: z.number().nonnegative() });
+const printQuoteReceivedSchema = z
+  .object({
+    // Montant total par hypothèse de tirage. Facultatif si `designations` est
+    // fourni : le total par tirage est alors la SOMME des désignations.
+    amounts: z.record(z.number().positive()).optional(),
+    // Détail par tirage : { "<tirage>": [{ label, amount }, …] }. Reporté sur le
+    // bon de commande du tirage retenu.
+    designations: z.record(z.array(designationLineSchema)).optional(),
+    lead_time_days: z.number().int().positive().optional(),
+    valid_until: z.string().datetime().optional(),
+  })
+  .refine((d) => d.amounts || d.designations, { message: "Indiquez un montant par tirage, ou des désignations détaillées." });
 
 const selectQuoteSchema = z.object({
   selection_motive: z.string().min(1),
@@ -294,10 +303,24 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       }
+      // Total par tirage : fourni directement (amounts) et/ou calculé comme la
+      // SOMME des désignations détaillées. Les désignations priment pour le total.
+      const amounts: Record<string, number> = { ...(parsed.data.amounts ?? {}) };
+      const designations = parsed.data.designations;
+      if (designations) {
+        for (const [tirage, lines] of Object.entries(designations)) {
+          const sum = lines.reduce((s, l) => s + l.amount, 0);
+          if (sum > 0) amounts[tirage] = Math.round(sum * 100) / 100;
+        }
+      }
+      if (!Object.values(amounts).some((v) => v > 0)) {
+        return reply.code(400).send({ code: "validation_error", message: "Indiquez au moins un montant positif (par tirage ou par désignation)." });
+      }
       const updated = await prisma.printQuote.update({
         where: { id },
         data: {
-          amounts: JSON.parse(JSON.stringify(parsed.data.amounts)),
+          amounts: JSON.parse(JSON.stringify(amounts)),
+          designations: designations ? JSON.parse(JSON.stringify(designations)) : undefined,
           leadTimeDays: parsed.data.lead_time_days,
           validUntil: parsed.data.valid_until ? new Date(parsed.data.valid_until) : undefined,
           status: PrintQuoteStatus.received,
@@ -401,6 +424,9 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       }
       const amounts = (quote.amounts as Record<string, number> | null) ?? {};
       const amount = amounts[String(quote.selectedQuantity)];
+      // Désignations détaillées du tirage retenu, reportées sur le bon de commande.
+      const designations = (quote.designations as Record<string, { label: string; amount: number }[]> | null) ?? null;
+      const lineItems = designations?.[String(quote.selectedQuantity)] ?? null;
 
       const signedBat = await prisma.batRecord.findFirst({
         where: { manuscriptId: quote.manuscriptId, status: BatStatus.signed },
@@ -422,6 +448,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           printerInstructions: parsed.data.printer_instructions ?? undefined,
           establishedByName: request.user!.username,
           establishedByFunction: parsed.data.established_by_function ?? undefined,
+          lineItems: lineItems && lineItems.length ? JSON.parse(JSON.stringify(lineItems)) : undefined,
           filesHashReference,
           createdBy: request.user!.id,
         },

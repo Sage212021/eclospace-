@@ -905,11 +905,17 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
     <table class="lines">
       <thead><tr><th>${tr("Désignation", "Description")}</th><th class="r">${tr("Quantité", "Quantity")}</th><th class="r">${tr("Montant", "Amount")}</th></tr></thead>
       <tbody>
-        <tr>
+        ${po.lineItems && po.lineItems.length > 0
+          ? po.lineItems.map((li, i) => `<tr>
+          <td>${escapeHtml(li.label)}</td>
+          <td class="r num">${i === 0 ? po.orderedQuantity : ""}</td>
+          <td class="r num">${money(li.amount, cur)}</td>
+        </tr>`).join("")
+          : `<tr>
           <td>${tr("Impression", "Printing")} — ${escapeHtml(book?.title ?? tr("Ouvrage", "Title"))}${book?.manuscriptNumber ? ` <span class="num">(${escapeHtml(book.manuscriptNumber)})</span>` : ""}</td>
           <td class="r num">${po.orderedQuantity}</td>
           <td class="r num">${money(po.amount, cur)}</td>
-        </tr>
+        </tr>`}
       </tbody>
     </table>
     ${specsHtml}

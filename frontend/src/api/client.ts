@@ -3226,11 +3226,15 @@ export function createPrinterQuick(body: { name: string; city?: string; phone?: 
   return request<Printer>("/api/v1/printers/quick", { method: "POST", body: JSON.stringify(body) });
 }
 
+export interface DesignationLine { label: string; amount: number }
 export interface PrintQuote {
   id: string;
   status: "requested" | "received" | "selected" | "declined";
   quantities: number[];
   amounts: Record<string, number> | null;
+  // Détail du devis par tirage : { "500": [{ label, amount }, …] }.
+  designations?: Record<string, DesignationLine[]> | null;
+  selectedQuantity?: number | null;
   leadTimeDays: number | null;
   printer: { id: string; partner: { firstName: string; lastName: string } };
 }
@@ -3248,10 +3252,15 @@ export function requestPrintQuote(manuscriptId: string, printerId: string, quant
   });
 }
 
-export function recordPrintQuoteAmounts(quoteId: string, amounts: Record<string, number>, leadTimeDays?: number) {
+export function recordPrintQuoteAmounts(
+  quoteId: string,
+  amounts: Record<string, number>,
+  leadTimeDays?: number,
+  designations?: Record<string, DesignationLine[]>,
+) {
   return request<PrintQuote>(`/api/v1/print-quotes/${quoteId}`, {
     method: "PATCH",
-    body: JSON.stringify({ amounts, lead_time_days: leadTimeDays }),
+    body: JSON.stringify({ amounts, lead_time_days: leadTimeDays, designations }),
   });
 }
 
@@ -3336,6 +3345,9 @@ export interface PurchaseOrder {
   printerInstructions?: string | null;
   establishedByName?: string | null;
   establishedByFunction?: string | null;
+  // Désignations détaillées reportées du devis (une ligne par prestation).
+  // Vide → ligne unique « Impression — <ouvrage> » dans le rendu.
+  lineItems?: DesignationLine[] | null;
   goodsReceipts?: GoodsReceipt[];
 }
 

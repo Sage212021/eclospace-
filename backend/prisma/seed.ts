@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-devis-impression-designations-multiples",
+      version: "2026.11",
+      title: "Nouveauté — Devis d'impression détaillé en plusieurs désignations",
+      body: "Au moment de saisir un devis reçu de l'imprimeur, vous pouvez maintenant détailler chaque tirage en autant de lignes que nécessaire (ex. « Impression intérieur N&B », « Couverture quadrichromie + pelliculage », « Façonnage et reliure »), chacune avec son montant. Le total du tirage est calculé automatiquement comme la somme de ces lignes. Si vous préférez, un simple montant global par tirage reste possible (bouton « + Ajouter une désignation » pour passer au détail). Les désignations du tirage retenu sont ensuite reportées telles quelles sur le bon de commande — à l'écran (aperçu), à l'impression et dans le PDF.",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-apercu-bon-commande-corrige-mobile",
       version: "2026.11",
       title: "Correction — L'aperçu du bon de commande s'affiche à nouveau (mobile)",

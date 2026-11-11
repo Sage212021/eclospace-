@@ -635,6 +635,13 @@ export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
   const tolerance = po.quantityTolerancePct != null && String(po.quantityTolerancePct) !== "" ? `± ${Number(po.quantityTolerancePct)} %` : "—";
   const location = po.deliveryLocation?.label ?? "—";
   const desc = `Impression — ${book?.title ?? "Ouvrage"}${book?.manuscriptNumber ? ` (${book.manuscriptNumber})` : ""}`;
+  // Lignes de commande : désignations détaillées reportées du devis si présentes,
+  // sinon ligne unique « Impression — <ouvrage> ». La quantité (tirage) est portée
+  // sur la 1re ligne seulement pour ne pas suggérer une quantité par désignation.
+  const hasLines = Array.isArray(po.lineItems) && po.lineItems.length > 0;
+  const orderRows: string[][] = hasLines
+    ? po.lineItems!.map((li, i) => [li.label, i === 0 ? String(po.orderedQuantity) : "", money(li.amount, cur)])
+    : [[desc, String(po.orderedQuantity), money(po.amount, cur)]];
 
   // Références de l'ouvrage + fiche technique (Maquette) + consignes — MÊME source
   // que l'aperçu/impression (purchaseOrderExtras), pour un document identique.
@@ -677,7 +684,7 @@ export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
       { label: "Quantité", width: 24, align: "right" },
       { label: "Montant", width: CONTENT_W - 118 - 24, align: "right" },
     ],
-    rows: [[desc, String(po.orderedQuantity), money(po.amount, cur)]],
+    rows: orderRows,
     infoLines,
     totals: [{ label: "Total commande", value: money(po.amount, cur), strong: true }],
     signatureFor: HOUSE.legalName,

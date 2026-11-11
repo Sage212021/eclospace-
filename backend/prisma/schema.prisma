@@ -3433,6 +3433,9 @@ model PrintQuote {
   printer          Printer          @relation(fields: [printerId], references: [id])
   quantities       Json // [500, 1000, 2000]
   amounts          Json? // { "500": 120000, "1000": 200000 }
+  // Détail du devis par tirage : { "500": [{ label, amount }, …] }. Le total par
+  // tirage dans `amounts` = somme des désignations. Reporté sur le bon de commande.
+  designations     Json?
   leadTimeDays     Int?             @map("lead_time_days")
   validUntil       DateTime?        @map("valid_until")
   status           PrintQuoteStatus @default(requested)
@@ -3479,6 +3482,9 @@ model PurchaseOrder {
   // La fiche technique (format, papier, reliure…) n'est PAS dupliquée ici : elle
   // est lue automatiquement depuis ProductionSpecs de l'ouvrage (saisie Maquette).
   printerInstructions  String?             @map("printer_instructions")
+  // Désignations détaillées reportées du devis (tirage retenu) : [{ label, amount }].
+  // Vide → le bon affiche une seule ligne « Impression — <ouvrage> ».
+  lineItems            Json?               @map("line_items")
   // Qui a établi le bon : nom (instantané) + fonction choisie (impression / stock
   // / daf) — l'établissement est ouvert à ces trois fonctions.
   establishedByName    String?             @map("established_by_name")

@@ -5,6 +5,7 @@ import {
   createPurchaseOrder,
   createPrinterQuick,
   getProductionSpecs,
+  getBranding,
   listPrintQuotes,
   listPrinters,
   listPurchaseOrders,
@@ -31,7 +32,7 @@ import {
   BON_FUNCTION_LABELS,
   purchaseOrderExtras,
 } from "../api/client";
-import { printPurchaseOrder } from "../lib/print";
+import { printPurchaseOrder, type ContractStampData } from "../lib/print";
 import { downloadPurchaseOrderPdf, purchaseOrderPdfFile } from "../lib/financePdf";
 import { TransferDocDialog } from "./TransferDocDialog";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -57,6 +58,9 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   const [qcItems, setQcItems] = useState<QcChecklistItem[]>([]);
   const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
   const [transferPo, setTransferPo] = useState<PurchaseOrder | null>(null);
+  // Cachet « Direction générale » + signature du DG (réglage maison), apposés sur
+  // le bon de commande établi au titre de la Direction générale.
+  const [sign, setSign] = useState<ContractStampData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Carnet d'imprimeurs (ajout rapide) + formulaire de demande de devis.
   const [showAddPrinter, setShowAddPrinter] = useState(false);
@@ -80,6 +84,10 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
       .then((r) => setQcItems(r.items))
       .catch(() => setQcItems([]));
     listStockLocations().then(setLocations).catch(() => setLocations([]));
+    // Signature + cachet officiels (Direction générale) pour estampiller le bon.
+    getBranding()
+      .then((b) => setSign({ cachet: b.cachet_generale, signature: b.signature_dg, dgName: b.dg_name, dgTitle: b.dg_title }))
+      .catch(() => setSign(null));
   }, []);
 
   useEffect(() => {
@@ -310,7 +318,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             </div>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o)} onDownloadPdf={() => downloadPurchaseOrderPdf(po)} />
+            <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o, sign)} onDownloadPdf={() => downloadPurchaseOrderPdf(po, sign)} />
             <button onClick={() => setTransferPo(po)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>↗ Transférer</button>
           </div>
           {canValidate && ["draft", "approved", "sent", "in_production"].includes(po.status) && (
@@ -324,7 +332,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             </button>
           )}
 
-          <PoEditPanel po={po} canManage={canManageBon} locations={locations} onSaved={refresh} onError={setError} />
+          <PoEditPanel po={po} canManage={canManageBon} locations={locations} sign={sign} onSaved={refresh} onError={setError} />
 
           {(po.goodsReceipts ?? []).length > 0 && (
             <div style={{ marginTop: 8 }}>
@@ -352,7 +360,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
           title={`Bon de commande ${transferPo.poNumber}`}
           fileName={`Bon-de-commande-${transferPo.poNumber}.pdf`}
           subject="Bon de commande"
-          getFile={() => purchaseOrderPdfFile(transferPo)}
+          getFile={() => purchaseOrderPdfFile(transferPo, sign)}
           partnerWhatsapp={null}
           onClose={() => setTransferPo(null)}
           onError={setError}
@@ -619,7 +627,7 @@ function QuoteRow({ quote, canManage, canValidate, canManageBon, bonFunctions, o
 // Aperçu INLINE (HTML, pas de PDF en iframe) du bon de commande : fiable sur
 // mobile et dans les webviews, où un PDF « blob: » en iframe est bloqué
 // (« Ce contenu est bloqué »). Rend le même contenu que le document imprimé.
-function PurchaseOrderPreview({ po }: { po: PurchaseOrder }) {
+function PurchaseOrderPreview({ po, sign }: { po: PurchaseOrder; sign?: ContractStampData | null }) {
   const cur = po.currency || "XAF";
   const fmt = (v: string | number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(Number(v));
   const p = po.printer?.partner;
@@ -686,6 +694,33 @@ function PurchaseOrderPreview({ po }: { po: PurchaseOrder }) {
       {label("Lieu", po.deliveryLocation?.label ?? "—")}
       {label("Tolérance de quantité", po.quantityTolerancePct != null && String(po.quantityTolerancePct) !== "" ? `± ${Number(po.quantityTolerancePct)} %` : "—")}
       {establishedBy && label("Établi par", establishedBy)}
+
+      {/* Signature & cachet « Direction générale » (apposés seulement si le bon est
+          établi au titre de la Direction générale ; sinon zone vierge à signer). */}
+      {(() => {
+        const stamped = po.establishedByFunction === "direction" && sign && (sign.signature || sign.cachet || sign.dgName);
+        return (
+          <div style={{ marginTop: 14, maxWidth: 320, marginLeft: "auto" }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)" }}>Pour Éclosion Édition Sarl</div>
+            {stamped ? (
+              <>
+                <div style={{ position: "relative", height: 92, marginTop: 2 }}>
+                  {sign!.signature && <img src={sign!.signature} alt="" style={{ position: "absolute", left: 0, top: 4, height: 50, width: "auto", mixBlendMode: "multiply" }} />}
+                  {sign!.cachet && <img src={sign!.cachet} alt="" style={{ position: "absolute", left: 92, top: 0, maxHeight: 90, maxWidth: 150, width: "auto", mixBlendMode: "multiply" }} />}
+                </div>
+                {sign!.dgName && (
+                  <div style={{ borderTop: "1px solid var(--ink)", paddingTop: 3 }}>
+                    <strong>{sign!.dgName}</strong>
+                    {sign!.dgTitle && <div style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "pre-line" }}>{sign!.dgTitle}</div>}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ borderTop: "1px solid var(--ink)", marginTop: 44, paddingTop: 3, fontSize: 11, color: "var(--muted)" }}>Signature &amp; cachet</div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -694,7 +729,7 @@ function PurchaseOrderPreview({ po }: { po: PurchaseOrder }) {
 // champs (livraison, tolérance, consignes) n'est possible qu'au BROUILLON ; une
 // fois le bon approuvé/transmis, il est figé (lecture seule) mais reste
 // prévisualisable. Les consignes seules restent modifiables après coup.
-function PoEditPanel({ po, canManage, locations, onSaved, onError }: { po: PurchaseOrder; canManage: boolean; locations: StockLocation[]; onSaved: () => Promise<void>; onError: (m: string) => void }) {
+function PoEditPanel({ po, canManage, locations, sign, onSaved, onError }: { po: PurchaseOrder; canManage: boolean; locations: StockLocation[]; sign: ContractStampData | null; onSaved: () => Promise<void>; onError: (m: string) => void }) {
   const [showPreview, setShowPreview] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -742,7 +777,7 @@ function PoEditPanel({ po, canManage, locations, onSaved, onError }: { po: Purch
         {canManage && isDraft && !editing && <button onClick={startEdit} style={{ ...secondaryButtonStyle, marginTop: 0 }}>✎ Modifier le bon</button>}
       </div>
 
-      {showPreview && <PurchaseOrderPreview po={po} />}
+      {showPreview && <PurchaseOrderPreview po={po} sign={sign} />}
 
       {editing ? (
         <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>

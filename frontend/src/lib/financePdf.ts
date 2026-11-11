@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO } from "./payslipAssets";
 import { drawWatermark } from "./pdfWatermark";
-import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData, type TreasuryBalancePrintData } from "./print";
+import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData, type TreasuryBalancePrintData, type ContractStampData } from "./print";
 import type { InvoiceDetail, EditorialQuote, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 import { purchaseOrderExtras } from "../api/client";
 
@@ -125,8 +125,26 @@ interface HouseDocSpec {
   infoLines?: string[];
   notes?: string[];
   signatureFor?: string; // signature unique maison (facture, devis)
+  // Cachet + signature officiels apposés dans la zone « signatureFor » (ex. cachet
+  // « Direction générale » + signature du DG sur un bon de commande établi par la DG).
+  signStamp?: ContractStampData | null;
   signatures?: string[]; // signatures côte à côte (ex. « L'éditeur », « L'auteur »)
   watermark?: string; // ex. « Duplicata »
+}
+
+// Dessine une image (Data URL) ajustée dans une boîte max (mm), ratio préservé.
+// Silencieux si l'image est indisponible/illisible.
+function drawStampFitted(doc: jsPDF, dataUrl: string, x: number, y: number, maxW: number, maxH: number): void {
+  try {
+    const p = doc.getImageProperties(dataUrl);
+    const ratio = p.width / p.height;
+    let w = maxW;
+    let h = w / ratio;
+    if (h > maxH) { h = maxH; w = h * ratio; }
+    doc.addImage(dataUrl, "PNG", x, y, w, h);
+  } catch {
+    /* image indisponible : on ignore */
+  }
 }
 
 // Bloc de totaux aligné à droite ; renvoie la nouvelle position verticale.
@@ -371,20 +389,53 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
       doc.text("Signature & cachet", cx, y + 24);
     });
   } else if (spec.signatureFor) {
-    // Signature unique maison (facture, devis).
-    if (y < PAGE_H - 55) y = Math.max(y + 8, PAGE_H - 55);
+    // Signature unique maison (facture, devis, bon de commande).
+    const stamp = spec.signStamp;
+    const stamped = !!(stamp && (stamp.signature || stamp.cachet || stamp.dgName));
+    const bx = R - 80;
+    const reserve = stamped ? 74 : 55;
+    if (y < PAGE_H - reserve) y = Math.max(y + 8, PAGE_H - reserve);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(...MUTED);
-    doc.text(`POUR ${spec.signatureFor.toUpperCase()}`, R - 76, y);
+    doc.text(`POUR ${spec.signatureFor.toUpperCase()}`, bx, y);
     y += 4.5;
-    doc.text("Le responsable — signature & cachet", R - 76, y);
-    y += 20;
-    doc.setDrawColor(...INK);
-    doc.setLineWidth(0.3);
-    doc.line(R - 76, y, R, y);
-    y += 4;
-    doc.text("Nom, date et signature", R - 76, y);
+    if (stamped) {
+      // Cachet « Direction générale » + signature manuscrite du DG (réglage maison).
+      doc.text("Direction générale — signature & cachet", bx, y);
+      const bandTop = y + 2;
+      if (stamp!.signature) drawStampFitted(doc, stamp!.signature, bx, bandTop, 32, 16);
+      if (stamp!.cachet) drawStampFitted(doc, stamp!.cachet, bx + 30, bandTop - 1, 44, 27);
+      y = bandTop + 27;
+      doc.setDrawColor(...INK);
+      doc.setLineWidth(0.3);
+      doc.line(bx, y, R, y);
+      y += 4;
+      if (stamp!.dgName) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...INK);
+        doc.text(stamp!.dgName, bx, y);
+        y += 3.8;
+      }
+      if (stamp!.dgTitle) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.6);
+        doc.setTextColor(...MUTED);
+        for (const line of stamp!.dgTitle.split("\n").map((s) => s.trim()).filter(Boolean)) {
+          doc.text(line, bx, y);
+          y += 3.4;
+        }
+      }
+    } else {
+      doc.text("Le responsable — signature & cachet", bx, y);
+      y += 20;
+      doc.setDrawColor(...INK);
+      doc.setLineWidth(0.3);
+      doc.line(bx, y, R, y);
+      y += 4;
+      doc.text("Nom, date et signature", bx, y);
+    }
   }
 
   footer(doc);
@@ -627,7 +678,9 @@ const PO_STATUS: Record<string, string> = {
   received: "Reçu", closed: "Clôturé", cancelled: "Annulé",
 };
 
-export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
+// `sign` : cachet « Direction générale » + signature du DG, apposés UNIQUEMENT si
+// le bon est établi au titre de la Direction générale (sinon zone vierge).
+export function purchaseOrderPdf(po: PurchaseOrder, sign?: ContractStampData | null): jsPDF {
   const cur = po.currency || "XAF";
   const printer = po.printer ? `${po.printer.partner.firstName} ${po.printer.partner.lastName}` : "—";
   const book = po.quote?.manuscript;
@@ -688,21 +741,23 @@ export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
     infoLines,
     totals: [{ label: "Total commande", value: money(po.amount, cur), strong: true }],
     signatureFor: HOUSE.legalName,
+    // Cachet DG uniquement si le bon est établi « au titre de la Direction générale ».
+    signStamp: po.establishedByFunction === "direction" ? sign ?? null : null,
   });
 }
 
 // URL « blob: » du PDF du bon de commande, pour un APERÇU inline (iframe) dans
 // l'application. À révoquer (URL.revokeObjectURL) quand l'aperçu est fermé.
-export function purchaseOrderPdfBlobUrl(po: PurchaseOrder): string {
-  return purchaseOrderPdf(po).output("bloburl") as unknown as string;
+export function purchaseOrderPdfBlobUrl(po: PurchaseOrder, sign?: ContractStampData | null): string {
+  return purchaseOrderPdf(po, sign).output("bloburl") as unknown as string;
 }
 
 // Bon de commande en PDF, renvoyé comme fichier (pour le transfert messagerie/WhatsApp).
-export function purchaseOrderPdfFile(po: PurchaseOrder): File {
-  return new File([purchaseOrderPdf(po).output("blob")], `Bon-de-commande-${po.poNumber}.pdf`, { type: "application/pdf" });
+export function purchaseOrderPdfFile(po: PurchaseOrder, sign?: ContractStampData | null): File {
+  return new File([purchaseOrderPdf(po, sign).output("blob")], `Bon-de-commande-${po.poNumber}.pdf`, { type: "application/pdf" });
 }
-export function downloadPurchaseOrderPdf(po: PurchaseOrder): void {
-  purchaseOrderPdf(po).save(`Bon-de-commande-${po.poNumber}.pdf`);
+export function downloadPurchaseOrderPdf(po: PurchaseOrder, sign?: ContractStampData | null): void {
+  purchaseOrderPdf(po, sign).save(`Bon-de-commande-${po.poNumber}.pdf`);
 }
 
 // ── Relevé de droits d'auteur (par contrat, sur une période) ─────────────────

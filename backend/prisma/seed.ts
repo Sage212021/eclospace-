@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-apercu-bon-commande-corrige-mobile",
+      version: "2026.11",
+      title: "Correction — L'aperçu du bon de commande s'affiche à nouveau (mobile)",
+      body: "L'aperçu affichait « Ce contenu est bloqué » sur téléphone (et dans certaines vues intégrées) : il était généré en PDF dans un cadre que ces navigateurs refusent. L'aperçu du bon de commande d'impression ET du bon de commande client est désormais affiché directement en page (fournisseur et mentions légales, ouvrage, lignes, totaux, fiche technique, consignes, livraison), donc visible partout. Le bouton « Imprimer / PDF » (ou « Télécharger le PDF ») reste disponible pour la version imprimable exacte.",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-isbn-nouvelle-tranche-7986-8014",
       version: "2026.11",
       title: "Nouveauté — 29 nouveaux ISBN ajoutés au stock disponible",

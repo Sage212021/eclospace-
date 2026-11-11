@@ -28,9 +28,10 @@ import {
   type QcChecklistItem,
   type QcVerdict,
   BON_FUNCTION_LABELS,
+  purchaseOrderExtras,
 } from "../api/client";
 import { printPurchaseOrder } from "../lib/print";
-import { downloadPurchaseOrderPdf, purchaseOrderPdfFile, purchaseOrderPdfBlobUrl } from "../lib/financePdf";
+import { downloadPurchaseOrderPdf, purchaseOrderPdfFile } from "../lib/financePdf";
 import { TransferDocDialog } from "./TransferDocDialog";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -493,13 +494,74 @@ function QuoteRow({ quote, canManage, canValidate, canManageBon, bonFunctions, o
   );
 }
 
-// Aperçu (PDF inline) + modification du bon de commande. La modification des
+// Aperçu INLINE (HTML, pas de PDF en iframe) du bon de commande : fiable sur
+// mobile et dans les webviews, où un PDF « blob: » en iframe est bloqué
+// (« Ce contenu est bloqué »). Rend le même contenu que le document imprimé.
+function PurchaseOrderPreview({ po }: { po: PurchaseOrder }) {
+  const cur = po.currency || "XAF";
+  const fmt = (v: string | number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(Number(v));
+  const p = po.printer?.partner;
+  const supplier = p ? `${p.firstName}${p.lastName ? " " + p.lastName : ""}`.trim() : "—";
+  const { author, isbn, specRows, instructions, establishedBy } = purchaseOrderExtras(po);
+  const book = po.quote?.manuscript;
+  const legal: [string, string][] = [];
+  const addL = (k: string, v?: string | null) => { if (v && v.trim()) legal.push([k, v]); };
+  addL("Adresse", p?.city);
+  addL("Contact", [p?.phone, p?.email].filter(Boolean).join(" · ") || null);
+  addL("NIU", p?.niu);
+  addL("RCCM", p?.rccm);
+  addL("Compte bancaire", p?.bankAccount);
+  const label = (k: string, v: React.ReactNode) => (
+    <div style={{ fontSize: 12.5 }}><span style={{ color: "var(--muted)" }}>{k} : </span><strong>{v}</strong></div>
+  );
+  const sec: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", color: "var(--eclosion-dark, #9A7A12)", margin: "10px 0 4px" };
+  return (
+    <div style={{ marginTop: 8, border: "1px solid var(--line)", borderRadius: 8, padding: 14, background: "#fff" }}>
+      <div style={{ fontWeight: 700, fontSize: 15 }}>Bon de commande <span style={{ fontFamily: "var(--font-mono)" }}>{po.poNumber}</span></div>
+      <div style={{ fontSize: 12, color: "var(--muted)" }}>{po.deliveryDue ? `Livraison attendue : ${new Date(po.deliveryDue).toLocaleDateString("fr-FR")}` : "Livraison : date non précisée"}</div>
+
+      <div style={sec}>Fournisseur (imprimeur)</div>
+      {label("Raison sociale", supplier)}
+      {legal.map(([k, v]) => <div key={k} style={{ fontSize: 12 }}><span style={{ color: "var(--muted)" }}>{k} : </span>{v}</div>)}
+
+      {(author || isbn || book) && <div style={sec}>Ouvrage</div>}
+      {book && label("Titre", `${book.title}${book.manuscriptNumber ? ` (${book.manuscriptNumber})` : ""}`)}
+      {author && label("Auteur", author)}
+      {isbn && label("ISBN", isbn)}
+
+      <div style={sec}>Commande</div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)", padding: "6px 0", marginTop: 2 }}>
+        <span>Impression — {book?.title ?? "Ouvrage"}</span>
+        <span style={{ fontFamily: "var(--font-mono)" }}>{po.orderedQuantity} ex. · {fmt(po.amount)}</span>
+      </div>
+      <div style={{ textAlign: "right", fontWeight: 700, marginTop: 4 }}>Total : {fmt(po.amount)}</div>
+
+      {specRows.length > 0 && <>
+        <div style={sec}>Fiche technique (à respecter)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 16px" }}>
+          {specRows.map(([k, v]) => <div key={k} style={{ fontSize: 12 }}><span style={{ color: "var(--muted)" }}>{k} : </span><strong>{v}</strong></div>)}
+        </div>
+      </>}
+
+      {instructions && <>
+        <div style={sec}>Consignes à l'imprimeur</div>
+        <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>{instructions}</div>
+      </>}
+
+      <div style={sec}>Livraison</div>
+      {label("Lieu", po.deliveryLocation?.label ?? "—")}
+      {label("Tolérance de quantité", po.quantityTolerancePct != null && String(po.quantityTolerancePct) !== "" ? `± ${Number(po.quantityTolerancePct)} %` : "—")}
+      {establishedBy && label("Établi par", establishedBy)}
+    </div>
+  );
+}
+
+// Aperçu (HTML inline) + modification du bon de commande. La modification des
 // champs (livraison, tolérance, consignes) n'est possible qu'au BROUILLON ; une
 // fois le bon approuvé/transmis, il est figé (lecture seule) mais reste
 // prévisualisable. Les consignes seules restent modifiables après coup.
 function PoEditPanel({ po, canManage, locations, onSaved, onError }: { po: PurchaseOrder; canManage: boolean; locations: StockLocation[]; onSaved: () => Promise<void>; onError: (m: string) => void }) {
   const [showPreview, setShowPreview] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const isDraft = po.status === "draft";
@@ -509,13 +571,6 @@ function PoEditPanel({ po, canManage, locations, onSaved, onError }: { po: Purch
     quantity_tolerance_pct: po.quantityTolerancePct != null ? String(po.quantityTolerancePct) : "",
     printer_instructions: po.printerInstructions ?? "",
   });
-
-  useEffect(() => {
-    if (!showPreview) { setPreviewUrl(null); return; }
-    let url: string | null = null;
-    try { url = purchaseOrderPdfBlobUrl(po); setPreviewUrl(url); } catch { setPreviewUrl(null); }
-    return () => { if (url) URL.revokeObjectURL(url); };
-  }, [showPreview, po]);
 
   function startEdit() {
     setForm({
@@ -553,11 +608,7 @@ function PoEditPanel({ po, canManage, locations, onSaved, onError }: { po: Purch
         {canManage && isDraft && !editing && <button onClick={startEdit} style={{ ...secondaryButtonStyle, marginTop: 0 }}>✎ Modifier le bon</button>}
       </div>
 
-      {showPreview && (
-        previewUrl
-          ? <iframe title={`Aperçu ${po.poNumber}`} src={previewUrl} style={{ width: "100%", height: 520, border: "1px solid var(--line)", borderRadius: 8, marginTop: 8, background: "#fff" }} />
-          : <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>Aperçu indisponible.</p>
-      )}
+      {showPreview && <PurchaseOrderPreview po={po} />}
 
       {editing ? (
         <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>

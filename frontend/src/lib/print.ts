@@ -867,7 +867,7 @@ function supplierLegalHtml(po: PurchaseOrder): string {
 
 // Bon de commande imprimeur prêt à imprimer (Ch. 15 §15.4). Récapitule le
 // fournisseur, l'ouvrage, la quantité, le montant et les conditions de livraison.
-export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
+export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts, sign?: ContractStampData | null): void {
   const cur = po.currency || "XAF";
   const printer = po.printer ? `${po.printer.partner.firstName} ${po.printer.partner.lastName}` : "—";
   const book = po.quote?.manuscript;
@@ -927,6 +927,12 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
     </div>
     <div class="totals">
       <div class="ttc"><span>${tr("Total commande", "Order total")}</span><span class="num">${money(po.amount, cur)}</span></div>
+    </div>
+    <div style="margin-top:30px; display:flex; justify-content:flex-end; break-inside:avoid">
+      <div style="min-width:240px; max-width:320px">
+        <div class="party__label">${tr("Pour", "For")} ${escapeHtml(HOUSE.legalName)}</div>
+        ${editorSignatureBlock(po.establishedByFunction === "direction" ? sign ?? null : null)}
+      </div>
     </div>`;
 
   openPrintWindow(`${tr("Bon de commande", "Purchase order")} ${po.poNumber}`, body, opts);

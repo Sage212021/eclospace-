@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bon-commande-signature-cachet-dg",
+      version: "2026.11",
+      title: "Nouveauté — Signature et cachet « Direction générale » sur le bon de commande",
+      body: "Le bon de commande d'impression porte maintenant une zone « Pour Éclosion Édition Sarl — signature & cachet ». Quand le bon est établi au titre de la Direction générale, la signature du DG et le cachet « Direction générale » enregistrés dans Réglages → Cachets & signature y sont apposés automatiquement (comme sur les contrats et les lettres de décision) ; pour un bon établi par un autre pôle (Impression, Stock, DAF), la zone reste vierge, à signer à la main. Cette signature apparaît à l'identique dans l'aperçu à l'écran, à l'impression ET dans le PDF — donc le PDF que vous téléchargez ou transférez (bouton « ↗ Transférer ») est déjà signé et cacheté.",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-bilan-tresorerie-periode-selectionnee",
       version: "2026.11",
       title: "Nouveauté — Bilan entrées/sorties sur la période de votre choix",

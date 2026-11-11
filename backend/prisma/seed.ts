@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bilan-tresorerie-export-pdf-impression",
+      version: "2026.11",
+      title: "Correction — Le bilan de trésorerie s'exporte en PDF et s'imprime partout",
+      body: "Sur le bilan de trésorerie (pôle Finance), les boutons « PDF » et « Imprimer » ne répondaient pas toujours, surtout sur téléphone et dans l'application (l'ancien mécanisme ouvrait une fenêtre que ces navigateurs bloquent). Désormais : « PDF » télécharge directement un vrai fichier PDF net (en-tête officiel de la maison, périodes, totaux, solde), comme pour les factures et les relevés ; « Imprimer » affiche le bilan à l'écran dans l'application, avec un bouton « Imprimer / Enregistrer en PDF ». Choisissez d'abord la périodicité (mensuel, trimestriel, semestriel, annuel) et l'année, puis cliquez sur « PDF » ou « Imprimer ».",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-11-devis-impression-designations-multiples",
       version: "2026.11",
       title: "Nouveauté — Devis d'impression détaillé en plusieurs désignations",

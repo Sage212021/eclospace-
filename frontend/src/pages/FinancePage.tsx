@@ -76,7 +76,7 @@ import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
 import { printInvoice, printRoyaltyStatement, printTreasuryBalance, type PrintOpts } from "../lib/print";
-import { downloadInvoicePdf, downloadRoyaltyStatementPdf, downloadAdvanceAttestationPdf } from "../lib/financePdf";
+import { downloadInvoicePdf, downloadRoyaltyStatementPdf, downloadAdvanceAttestationPdf, downloadTreasuryBalancePdf } from "../lib/financePdf";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { AccountingExportSection } from "../components/AccountingExportSection";
 
@@ -1702,19 +1702,32 @@ function MonthlyBalanceSection() {
     : granularity === "semestriel" ? t("fin.semester", "Semestre")
     : t("fin.year", "Année");
 
-  // Impression / export PDF (choix natif du navigateur) du bilan sur la
-  // périodicité affichée, avec l'en-tête officiel de la maison.
-  function print(asPdf: boolean) {
+  // Données du bilan sur la périodicité affichée (mêmes chiffres pour l'aperçu,
+  // l'impression et le PDF).
+  function balanceData() {
+    return {
+      year,
+      granularityLabel: GRANULARITY_LABELS[granularity],
+      periods: periods.map((p) => ({ label: p.label, entrees: p.entrees, depenses: p.depenses, solde: p.solde })),
+      totals: totals!,
+    };
+  }
+
+  // Export PDF : PDF VECTORIEL téléchargé (jsPDF), fiable partout — téléphone et
+  // vues intégrées (webview) comprises, où « Imprimer → PDF » du navigateur
+  // échoue ou n'est pas proposé. Même mécanisme que les autres documents Finance.
+  function exportPdf() {
     if (!totals) return;
-    printTreasuryBalance(
-      {
-        year,
-        granularityLabel: GRANULARITY_LABELS[granularity],
-        periods: periods.map((p) => ({ label: p.label, entrees: p.entrees, depenses: p.depenses, solde: p.solde })),
-        totals,
-      },
-      { letterhead: true, embed: asPdf },
-    );
+    downloadTreasuryBalancePdf(balanceData());
+  }
+
+  // Impression : aperçu à l'écran DANS l'application (superposition), avec le
+  // bouton « Imprimer / Enregistrer en PDF ». L'aperçu s'affiche en HTML inline
+  // (pas de pop-up, pas de blob) donc visible aussi en webview ; si l'impression
+  // n'y est pas disponible, le bouton PDF reste la solution d'export fiable.
+  function print() {
+    if (!totals) return;
+    printTreasuryBalance(balanceData(), { letterhead: true, preview: true });
   }
 
   return (
@@ -1732,8 +1745,8 @@ function MonthlyBalanceSection() {
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ fontSize: 13 }} title={t("fin.year", "Année")}>
             {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
-          <Button variant="view" size="sm" onClick={() => print(false)} disabled={!rows}>{t("fin.print", "Imprimer")}</Button>
-          <Button variant="view" size="sm" onClick={() => print(true)} disabled={!rows}>{t("fin.pdf", "PDF")}</Button>
+          <Button variant="view" size="sm" onClick={print} disabled={!rows}>{t("fin.print", "Imprimer")}</Button>
+          <Button variant="view" size="sm" onClick={exportPdf} disabled={!rows}>{t("fin.pdf", "PDF")}</Button>
         </div>
       }
     >

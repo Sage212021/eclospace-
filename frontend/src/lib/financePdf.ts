@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO } from "./payslipAssets";
 import { drawWatermark } from "./pdfWatermark";
-import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData } from "./print";
+import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData, type TreasuryBalancePrintData } from "./print";
 import type { InvoiceDetail, EditorialQuote, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 import { purchaseOrderExtras } from "../api/client";
 
@@ -813,4 +813,43 @@ export function commissionStatementPdf(d: CommissionStatementData): jsPDF {
 }
 export function downloadCommissionStatementPdf(d: CommissionStatementData): void {
   commissionStatementPdf(d).save(`Etat-commission-${d.agentName}.pdf`);
+}
+
+// ── Bilan de trésorerie (rapport financier, DAF) ─────────────────────────────
+// PDF VECTORIEL du bilan, fiable sur téléphone et dans les vues intégrées
+// (webview) où « Imprimer → PDF » du navigateur mobile échoue ou n'est pas
+// proposé. Reprend les mêmes données pré-agrégées que l'aperçu/impression.
+export function treasuryBalancePdf(d: TreasuryBalancePrintData): jsPDF {
+  const cur = "XAF";
+  return renderHouseDoc({
+    docName: "Bilan de trésorerie",
+    fileName: `Bilan de trésorerie ${d.year} (${d.granularityLabel})`,
+    number: String(d.year),
+    meta: [
+      { label: "Périodicité", value: d.granularityLabel },
+      { label: "Édité le", value: new Date().toLocaleDateString("fr-FR") },
+    ],
+    partyLabel: "Établi pour",
+    partyName: HOUSE.legalName,
+    columns: [
+      { label: "Période", width: 70, align: "left" },
+      { label: "Entrées", width: 36, align: "right" },
+      { label: "Dépenses", width: 36, align: "right" },
+      { label: "Solde", width: CONTENT_W - 70 - 36 - 36, align: "right" },
+    ],
+    rows: d.periods.length
+      ? d.periods.map((p) => [p.label, money(p.entrees, cur), money(p.depenses, cur), money(p.solde, cur)])
+      : [["Aucune opération sur l'exercice.", "", "", ""]],
+    totals: [
+      { label: "Total entrées", value: money(d.totals.entrees, cur) },
+      { label: "Total dépenses", value: `− ${money(d.totals.depenses, cur)}` },
+      { label: "Solde de l'exercice", value: money(d.totals.solde, cur), strong: true },
+    ],
+    notes: [
+      "Entrées = encaissements enregistrés. Dépenses = module Dépenses, statuts « validée » et « payée », ainsi que les décaissements de trésorerie (droits d'auteur versés…). Solde = entrées − dépenses. Montants en francs CFA (XAF), calculés automatiquement à partir des opérations enregistrées.",
+    ],
+  });
+}
+export function downloadTreasuryBalancePdf(d: TreasuryBalancePrintData): void {
+  treasuryBalancePdf(d).save(`Bilan-tresorerie-${d.year}-${d.granularityLabel}.pdf`);
 }

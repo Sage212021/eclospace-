@@ -4731,6 +4731,19 @@ export function getMonthlyBalance(year?: number) {
   }>(`/api/v1/finance/monthly-balance${query}`);
 }
 
+// Bilan entrées/sorties sur une PLAGE DE DATES libre (du … au …, inclus).
+export interface BalanceRange {
+  from: string;
+  to: string;
+  entrees: number;
+  depenses: number;
+  solde: number;
+  depensesParCategorie: Record<string, number>;
+}
+export function getBalanceRange(from: string, to: string) {
+  return request<BalanceRange>(`/api/v1/finance/balance-range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+}
+
 // Bilan mensuel DÉTAILLÉ (un mois AAAA-MM) : lignes entrées/sorties + synthèse.
 export interface StatementEntry { date: string; reference: string; label: string; origin: string; amount: number; source_type: string; source_id: string }
 export interface StatementExit { date: string; reference: string; label: string; category: string; amount: number; source_type: string; source_id: string }

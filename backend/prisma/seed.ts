@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bilan-tresorerie-periode-selectionnee",
+      version: "2026.11",
+      title: "Nouveauté — Bilan entrées/sorties sur la période de votre choix",
+      body: "Le bilan de trésorerie se calcule maintenant sur exactement la période que vous choisissez. Deux façons de faire, via le menu « Par tranches » / « Plage de dates » en haut du bilan : (1) « Par tranches » — comme avant (mensuel, trimestriel, semestriel, annuel), avec en plus un menu « Tranche » pour n'afficher qu'UNE tranche précise (ex. seulement « Mars 2026 » ou « 2e trimestre ») ; le bilan et le PDF ne portent alors que sur elle. (2) « Plage de dates » — vous saisissez « du … au … » (dates incluses) et le bilan affiche le total des entrées, des sorties et le solde pour cette fenêtre exacte, avec le détail des dépenses par catégorie. Dans les deux cas, « Imprimer » et « PDF » éditent le bilan de la période affichée.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-11-bilan-tresorerie-export-pdf-impression",
       version: "2026.11",
       title: "Correction — Le bilan de trésorerie s'exporte en PDF et s'imprime partout",

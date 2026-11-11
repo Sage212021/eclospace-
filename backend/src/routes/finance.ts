@@ -783,6 +783,56 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     return reply.send({ year, months, totals });
   });
 
+  // BILAN ENTRÉES / SORTIES SUR UNE PLAGE DE DATES LIBRE (demande DAF) : pour une
+  // fenêtre « du … au … » (inclus), total des entrées, des sorties et solde, avec
+  // le détail des sorties par catégorie. Mêmes sources et mêmes règles que le
+  // bilan annuel (encaissements validés + dépenses validées/payées + décaissements
+  // de trésorerie), mais au JOUR près plutôt que par mois pré-agrégés.
+  fastify.get("/api/v1/finance/balance-range", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const q = request.query as { from?: string; to?: string };
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (!q.from || !q.to || !dateRe.test(q.from) || !dateRe.test(q.to)) {
+      return reply.code(400).send({ code: "validation_error", message: "Indiquez une date de début et une date de fin (AAAA-MM-JJ)." });
+    }
+    const start = new Date(`${q.from}T00:00:00.000Z`);
+    // Fin INCLUSE : on borne au tout début du lendemain de `to`.
+    const endInclusive = new Date(`${q.to}T00:00:00.000Z`);
+    const end = new Date(endInclusive.getTime() + 24 * 60 * 60 * 1000);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(endInclusive.getTime())) {
+      return reply.code(400).send({ code: "validation_error", message: "Dates invalides." });
+    }
+    if (end <= start) {
+      return reply.code(400).send({ code: "validation_error", message: "La date de fin doit être postérieure ou égale à la date de début." });
+    }
+
+    const [incomes, expenses, outPayments] = await Promise.all([
+      prisma.payment.findMany({ where: { direction: "in", receivedAt: { gte: start, lt: end } }, select: { amount: true } }),
+      prisma.expense.findMany({ where: { status: { in: ["validee", "payee"] }, expenseDate: { gte: start, lt: end } }, select: { amount: true, category: true } }),
+      prisma.payment.findMany({ where: { direction: "out", receivedAt: { gte: start, lt: end } }, select: { amount: true } }),
+    ]);
+
+    const round = (n: number) => Math.round(n * 100) / 100;
+    const depensesParCategorie: Record<string, number> = {};
+    let entrees = 0;
+    let depenses = 0;
+    for (const p of incomes) entrees += Number(p.amount);
+    for (const e of expenses) {
+      const amt = Number(e.amount);
+      depenses += amt;
+      depensesParCategorie[e.category] = (depensesParCategorie[e.category] ?? 0) + amt;
+    }
+    for (const p of outPayments) {
+      const amt = Number(p.amount);
+      depenses += amt;
+      depensesParCategorie["droits_auteur"] = (depensesParCategorie["droits_auteur"] ?? 0) + amt;
+    }
+    entrees = round(entrees);
+    depenses = round(depenses);
+    for (const k of Object.keys(depensesParCategorie)) depensesParCategorie[k] = round(depensesParCategorie[k]);
+
+    return reply.send({ from: q.from, to: q.to, entrees, depenses, solde: round(entrees - depenses), depensesParCategorie });
+  });
+
   // BILAN MENSUEL DÉTAILLÉ (Ch. 18) : pour un mois donné (AAAA-MM), état de
   // trésorerie complet calculé À PARTIR DES ÉCRITURES RÉELLES — jamais statique.
   //   • solde initial = trésorerie cumulée AVANT le 1er du mois ;

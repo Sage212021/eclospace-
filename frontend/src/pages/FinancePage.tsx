@@ -24,7 +24,9 @@ import {
   listRoyaltyStatements,
   listShippingRates,
   getMonthlyBalance,
+  getBalanceRange,
   type MonthlyBalanceRow,
+  type BalanceRange,
   nextDunning,
   payRoyaltyStatement,
   setContractBeneficiaries,
@@ -1608,6 +1610,12 @@ function PaymentMethodsModal({
 // imprimable / exportable en PDF avec l'en-tête officiel de la maison.
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
+// « AAAA-MM-JJ » → « JJ/MM/AAAA » sans décalage de fuseau (découpage de chaîne).
+function fdateFr(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : iso;
+}
+
 type BalanceGranularity = "mensuel" | "trimestriel" | "semestriel" | "annuel";
 const GRANULARITY_LABELS: Record<BalanceGranularity, string> = {
   mensuel: "Mensuel",
@@ -1676,6 +1684,22 @@ function MonthlyBalanceSection() {
   const [totals, setTotals] = useState<{ entrees: number; depenses: number; solde: number } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Mode d'affichage : « tranches » (année découpée, avec choix d'UNE tranche) ou
+  // « plage » (plage de dates libre du … au …). Demande DAF (bilan selon la
+  // période sélectionnée).
+  const [mode, setMode] = useState<"tranches" | "plage">("tranches");
+  // Tranche sélectionnée dans le mode « tranches » : "all" = toutes, sinon la clé
+  // d'une période (ex. "T2", "5" pour juin…). Le bilan/PDF ne porte alors que sur
+  // cette tranche.
+  const [selectedTranche, setSelectedTranche] = useState<string>("all");
+  // Plage de dates (mode « plage ») : bornes et résultat agrégé au jour près.
+  const todayIso = now.toISOString().slice(0, 10);
+  const [rangeFrom, setRangeFrom] = useState<string>(`${now.getUTCFullYear()}-01-01`);
+  const [rangeTo, setRangeTo] = useState<string>(todayIso);
+  const [rangeResult, setRangeResult] = useState<BalanceRange | null>(null);
+  const [rangeBusy, setRangeBusy] = useState(false);
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const [rangeOpenCats, setRangeOpenCats] = useState(false);
 
   useEffect(() => {
     setRows(null);
@@ -1695,21 +1719,48 @@ function MonthlyBalanceSection() {
   const yearOptions: number[] = [];
   for (let y = now.getUTCFullYear() + 1; y >= now.getUTCFullYear() - 4; y--) yearOptions.push(y);
 
-  const periods = rows ? aggregatePeriods(rows, granularity, year) : [];
+  const allPeriods = rows ? aggregatePeriods(rows, granularity, year) : [];
+  // Tranche sélectionnée : "all" = toutes les tranches de l'année, sinon une seule.
+  const periods = selectedTranche === "all" ? allPeriods : allPeriods.filter((p) => p.key === selectedTranche);
+  // Totaux visibles : cumul annuel si « toutes », sinon ceux de la tranche choisie.
+  const visibleTotals =
+    selectedTranche === "all"
+      ? totals
+      : periods[0]
+        ? { entrees: periods[0].entrees, depenses: periods[0].depenses, solde: periods[0].solde }
+        : { entrees: 0, depenses: 0, solde: 0 };
+  const selectedTrancheLabel = selectedTranche === "all" ? null : allPeriods.find((p) => p.key === selectedTranche)?.label ?? null;
   const periodHeader =
     granularity === "mensuel" ? t("fin.month", "Mois")
     : granularity === "trimestriel" ? t("fin.quarter", "Trimestre")
     : granularity === "semestriel" ? t("fin.semester", "Semestre")
     : t("fin.year", "Année");
 
-  // Données du bilan sur la périodicité affichée (mêmes chiffres pour l'aperçu,
-  // l'impression et le PDF).
+  // Données du bilan « par tranches » (mêmes chiffres pour l'aperçu, l'impression
+  // et le PDF). Si une tranche précise est choisie, le document ne porte que sur
+  // elle ; le libellé de périodicité le précise.
   function balanceData() {
+    const granularityLabel = selectedTrancheLabel
+      ? `${GRANULARITY_LABELS[granularity]} — ${selectedTrancheLabel}`
+      : GRANULARITY_LABELS[granularity];
     return {
       year,
-      granularityLabel: GRANULARITY_LABELS[granularity],
+      granularityLabel,
       periods: periods.map((p) => ({ label: p.label, entrees: p.entrees, depenses: p.depenses, solde: p.solde })),
-      totals: totals!,
+      totals: visibleTotals!,
+    };
+  }
+
+  // Données du bilan « plage de dates » pour l'aperçu/impression/PDF : une seule
+  // ligne couvrant toute la fenêtre choisie.
+  function rangeBalanceData() {
+    const r = rangeResult!;
+    const label = `Du ${fdateFr(r.from)} au ${fdateFr(r.to)}`;
+    return {
+      year: Number(r.from.slice(0, 4)),
+      granularityLabel: `Plage de dates (${label})`,
+      periods: [{ label, entrees: r.entrees, depenses: r.depenses, solde: r.solde }],
+      totals: { entrees: r.entrees, depenses: r.depenses, solde: r.solde },
     };
   }
 
@@ -1717,7 +1768,8 @@ function MonthlyBalanceSection() {
   // vues intégrées (webview) comprises, où « Imprimer → PDF » du navigateur
   // échoue ou n'est pas proposé. Même mécanisme que les autres documents Finance.
   function exportPdf() {
-    if (!totals) return;
+    if (mode === "plage") { if (rangeResult) downloadTreasuryBalancePdf(rangeBalanceData()); return; }
+    if (!visibleTotals) return;
     downloadTreasuryBalancePdf(balanceData());
   }
 
@@ -1726,9 +1778,29 @@ function MonthlyBalanceSection() {
   // (pas de pop-up, pas de blob) donc visible aussi en webview ; si l'impression
   // n'y est pas disponible, le bouton PDF reste la solution d'export fiable.
   function print() {
-    if (!totals) return;
+    if (mode === "plage") { if (rangeResult) printTreasuryBalance(rangeBalanceData(), { letterhead: true, preview: true }); return; }
+    if (!visibleTotals) return;
     printTreasuryBalance(balanceData(), { letterhead: true, preview: true });
   }
+
+  // Calcul du bilan sur la plage de dates saisie (du … au …, inclus).
+  async function computeRange() {
+    if (!rangeFrom || !rangeTo) { setRangeError("Indiquez une date de début et une date de fin."); return; }
+    if (rangeTo < rangeFrom) { setRangeError("La date de fin doit être postérieure ou égale à la date de début."); return; }
+    setRangeBusy(true);
+    setRangeError(null);
+    try {
+      const r = await getBalanceRange(rangeFrom, rangeTo);
+      setRangeResult(r);
+      setRangeOpenCats(false);
+    } catch (e) {
+      setRangeResult(null);
+      setRangeError(e instanceof Error ? e.message : "Calcul du bilan impossible.");
+    } finally {
+      setRangeBusy(false);
+    }
+  }
+  const canExport = mode === "plage" ? !!rangeResult : !!rows;
 
   return (
     <Card
@@ -1737,22 +1809,34 @@ function MonthlyBalanceSection() {
       subtitle={t("fin.treasury_balance_sub", "Entrées (encaissements) − sorties (dépenses validées + décaissements de trésorerie : droits d'auteur versés…) = solde. Périodicité au choix : mensuel, trimestriel, semestriel ou annuel. Calcul automatique à partir des opérations enregistrées.")}
       action={
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <select value={granularity} onChange={(e) => { setGranularity(e.target.value as BalanceGranularity); setOpenKey(null); }} style={{ fontSize: 13 }} title={t("fin.periodicity", "Périodicité")}>
-            {(Object.keys(GRANULARITY_LABELS) as BalanceGranularity[]).map((g) => (
-              <option key={g} value={g}>{t("fin.gran." + g, GRANULARITY_LABELS[g])}</option>
-            ))}
+          {/* Mode : par tranches de l'année, ou plage de dates libre. */}
+          <select value={mode} onChange={(e) => setMode(e.target.value as "tranches" | "plage")} style={{ fontSize: 13 }} title={t("fin.balance_mode", "Mode de période")}>
+            <option value="tranches">{t("fin.mode_tranches", "Par tranches")}</option>
+            <option value="plage">{t("fin.mode_range", "Plage de dates")}</option>
           </select>
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ fontSize: 13 }} title={t("fin.year", "Année")}>
-            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <Button variant="view" size="sm" onClick={print} disabled={!rows}>{t("fin.print", "Imprimer")}</Button>
-          <Button variant="view" size="sm" onClick={exportPdf} disabled={!rows}>{t("fin.pdf", "PDF")}</Button>
+          {mode === "tranches" && <>
+            <select value={granularity} onChange={(e) => { setGranularity(e.target.value as BalanceGranularity); setOpenKey(null); setSelectedTranche("all"); }} style={{ fontSize: 13 }} title={t("fin.periodicity", "Périodicité")}>
+              {(Object.keys(GRANULARITY_LABELS) as BalanceGranularity[]).map((g) => (
+                <option key={g} value={g}>{t("fin.gran." + g, GRANULARITY_LABELS[g])}</option>
+              ))}
+            </select>
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ fontSize: 13 }} title={t("fin.year", "Année")}>
+              {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            {/* Tranche précise (ou toutes). */}
+            <select value={selectedTranche} onChange={(e) => { setSelectedTranche(e.target.value); setOpenKey(null); }} style={{ fontSize: 13 }} title={t("fin.tranche", "Tranche")}>
+              <option value="all">{t("fin.all_tranches", "Toutes les tranches")}</option>
+              {allPeriods.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select>
+          </>}
+          <Button variant="view" size="sm" onClick={print} disabled={!canExport}>{t("fin.print", "Imprimer")}</Button>
+          <Button variant="view" size="sm" onClick={exportPdf} disabled={!canExport}>{t("fin.pdf", "PDF")}</Button>
         </div>
       }
     >
-      {error && <p style={{ color: "var(--alert)", fontSize: 13, margin: 0 }}>{error}</p>}
-      {!error && !rows && <Empty>{t("fin.loading", "Chargement…")}</Empty>}
-      {rows && totals && (
+      {mode === "tranches" && error && <p style={{ color: "var(--alert)", fontSize: 13, margin: 0 }}>{error}</p>}
+      {mode === "tranches" && !error && !rows && <Empty>{t("fin.loading", "Chargement…")}</Empty>}
+      {mode === "tranches" && rows && totals && (
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13, minWidth: 520 }}>
             <thead>
@@ -1803,16 +1887,64 @@ function MonthlyBalanceSection() {
             </tbody>
             <tfoot>
               <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
-                <td style={{ padding: "10px" }}>{t("fin.annual_total", "Total annuel")}</td>
-                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--positive, #2F7D4A)" }}>{money(totals.entrees)}</td>
-                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{money(totals.depenses)}</td>
-                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)", color: totals.solde < 0 ? "var(--alert)" : "var(--ink)" }}>{money(totals.solde)}</td>
+                <td style={{ padding: "10px" }}>{selectedTranche === "all" ? t("fin.annual_total", "Total annuel") : t("fin.tranche_total", "Total de la tranche")}</td>
+                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--positive, #2F7D4A)" }}>{money(visibleTotals!.entrees)}</td>
+                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{money(visibleTotals!.depenses)}</td>
+                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)", color: visibleTotals!.solde < 0 ? "var(--alert)" : "var(--ink)" }}>{money(visibleTotals!.solde)}</td>
                 <td />
               </tr>
             </tfoot>
           </table>
           <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>
-            {t("fin.monthly_balance_note", "Entrées = encaissements enregistrés. Dépenses = module Dépenses, statuts « validée » et « payée ». Cliquez sur une ligne pour le détail par catégorie ; « Imprimer » / « PDF » édite le bilan de la périodicité choisie.")}
+            {t("fin.monthly_balance_note", "Entrées = encaissements enregistrés. Dépenses = module Dépenses, statuts « validée » et « payée ». Cliquez sur une ligne pour le détail par catégorie ; « Imprimer » / « PDF » édite le bilan de la période choisie.")}
+          </p>
+        </div>
+      )}
+      {mode === "plage" && (
+        <div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
+            <label style={{ display: "flex", flexDirection: "column", fontSize: 12.5, color: "var(--muted)", gap: 3 }}>
+              {t("fin.range_from", "Du")}
+              <input type="date" value={rangeFrom} max={rangeTo || undefined} onChange={(e) => setRangeFrom(e.target.value)} style={{ fontSize: 13, padding: "5px 7px" }} />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", fontSize: 12.5, color: "var(--muted)", gap: 3 }}>
+              {t("fin.range_to", "Au")}
+              <input type="date" value={rangeTo} min={rangeFrom || undefined} onChange={(e) => setRangeTo(e.target.value)} style={{ fontSize: 13, padding: "5px 7px" }} />
+            </label>
+            <Button variant="view" size="sm" onClick={computeRange} disabled={rangeBusy}>
+              {rangeBusy ? t("fin.computing", "Calcul…") : t("fin.show_range", "Afficher la période")}
+            </Button>
+          </div>
+          {rangeError && <p style={{ color: "var(--alert)", fontSize: 13, margin: "0 0 10px" }}>{rangeError}</p>}
+          {rangeResult && (() => {
+            const cats = Object.entries(rangeResult.depensesParCategorie).sort((a, b) => b[1] - a[1]);
+            return (
+              <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 14, background: "var(--ivory, #FAF8F2)" }}>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>{t("fin.range_period", "Période")} : {fdateFr(rangeResult.from)} → {fdateFr(rangeResult.to)}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 28px", fontSize: 14 }}>
+                  <span>{t("fin.entries", "Entrées")} : <strong style={{ fontFamily: "var(--font-mono)", color: "var(--positive, #2F7D4A)" }}>{money(rangeResult.entrees)}</strong></span>
+                  <span>{t("fin.expenses", "Dépenses")} : <strong style={{ fontFamily: "var(--font-mono)" }}>{money(rangeResult.depenses)}</strong></span>
+                  <span>{t("fin.balance_short", "Solde")} : <strong style={{ fontFamily: "var(--font-mono)", color: rangeResult.solde < 0 ? "var(--alert)" : "var(--ink)" }}>{money(rangeResult.solde)}</strong></span>
+                </div>
+                {cats.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <button type="button" onClick={() => setRangeOpenCats(!rangeOpenCats)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--muted)", fontSize: 12.5 }}>
+                      <span style={{ display: "inline-block", transform: rangeOpenCats ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span> {t("fin.expenses_by_cat", "Dépenses par catégorie")}
+                    </button>
+                    {rangeOpenCats && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px", marginTop: 6 }}>
+                        {cats.map(([code, amt]) => (
+                          <span key={code} style={{ fontSize: 12.5 }}>{catLabel(code)} : <strong style={{ fontFamily: "var(--font-mono)" }}>{money(amt)}</strong></span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>
+            {t("fin.range_note", "Choisissez une date de début et une date de fin (incluses), puis « Afficher la période ». Entrées = encaissements enregistrés ; dépenses = dépenses validées/payées + décaissements de trésorerie. « Imprimer » / « PDF » édite le bilan de la période affichée.")}
           </p>
         </div>
       )}

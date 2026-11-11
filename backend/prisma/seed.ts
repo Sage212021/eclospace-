@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bilan-tresorerie-detaille-apercu",
+      version: "2026.11",
+      title: "Nouveauté — Bilan de trésorerie détaillé (chaque entrée et sortie) + aperçu",
+      body: "Le bilan de trésorerie liste désormais EXPLICITEMENT chaque entrée et chaque sortie (date, référence, libellé, origine/catégorie, montant) avant d'afficher les totaux et le solde final — fini le simple total. Un bouton « Aperçu » permet de voir le bilan à l'écran AVANT de l'imprimer ou de l'exporter ; le bouton « PDF » télécharge ce même document détaillé. Les montants s'affichent proprement dans le PDF (correction de l'affichage des milliers qui apparaissaient avec une barre « / »). Fonctionne pour une tranche précise (ex. un mois, un trimestre), pour toute l'année, ou pour une plage de dates libre.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-11-bon-commande-signature-cachet-dg",
       version: "2026.11",
       title: "Nouveauté — Signature et cachet « Direction générale » sur le bon de commande",

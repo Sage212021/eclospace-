@@ -122,6 +122,12 @@ describe("Bilan mensuel de trésorerie", () => {
     expect(sept.depenses).toBe(2_000_000);
     expect(sept.solde).toBe(1_000_000);
     expect(sept.depensesParCategorie.droits_auteur).toBe(250_000);
+    // Détail (demande DAF) : chaque entrée et chaque sortie est nommée explicitement.
+    expect(sept.lignes.entrees).toHaveLength(2); // 2 encaissements
+    expect(sept.lignes.sorties).toHaveLength(3); // 2 dépenses + 1 décaissement (droits)
+    expect(sept.lignes.entrees.reduce((s: number, e: { amount: number }) => s + e.amount, 0)).toBe(3_000_000);
+    expect(sept.lignes.sorties.reduce((s: number, e: { amount: number }) => s + e.amount, 0)).toBe(2_000_000);
+    expect(sept.lignes.sorties.some((s: { label: string }) => /Droits d'auteur|Décaissement/.test(s.label))).toBe(true);
 
     // Fenêtre partielle du 11 au 16 sept. : encaissement du 15 (2 500 000) + loyer
     // du 12 (750 000) ; exclut le décaissement du 10, le transport du 5, l'entrée

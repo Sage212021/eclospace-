@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO } from "./payslipAssets";
 import { drawWatermark } from "./pdfWatermark";
-import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData, type TreasuryBalancePrintData, type ContractStampData } from "./print";
+import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData, type TreasuryBalancePrintData, type TreasuryStatementData, type ContractStampData } from "./print";
 import type { InvoiceDetail, EditorialQuote, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 import { purchaseOrderExtras } from "../api/client";
 
@@ -27,13 +27,21 @@ const LINE: [number, number, number] = [231, 226, 212];
 const ZEBRA: [number, number, number] = [250, 248, 242];
 const WHITE: [number, number, number] = [255, 255, 255];
 
+// Les polices standard de jsPDF (Helvetica/WinAnsi) ne savent pas afficher
+// l'espace fine insécable (U+202F) ni l'espace insécable (U+00A0) que le format
+// français utilise comme séparateur de milliers et avant le symbole monétaire —
+// elles apparaissaient comme une barre « / » (« 5 / 686 / 250 »). On les remplace
+// donc par une espace ASCII ordinaire pour un rendu propre dans le PDF.
+function pdfSafeSpaces(s: string): string {
+  return s.replace(/[  ]/g, " ");
+}
 function money(value: string | number, currency: string): string {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return String(value);
   try {
-    return new Intl.NumberFormat("fr-FR", { style: "currency", currency: currency || "XAF", maximumFractionDigits: 0 }).format(n);
+    return pdfSafeSpaces(new Intl.NumberFormat("fr-FR", { style: "currency", currency: currency || "XAF", maximumFractionDigits: 0 }).format(n));
   } catch {
-    return `${n.toLocaleString("fr-FR")} ${currency}`;
+    return `${pdfSafeSpaces(n.toLocaleString("fr-FR"))} ${currency}`;
   }
 }
 
@@ -208,7 +216,7 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
   // Ligne méta (N°, dates, badge).
   doc.setFontSize(9.5);
   let mx = L;
-  const metaAll = [{ label: "N°", value: spec.number }, ...spec.meta];
+  const metaAll = [...(spec.number ? [{ label: "N°", value: spec.number }] : []), ...spec.meta];
   for (const m of metaAll) {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...MUTED);
@@ -907,4 +915,47 @@ export function treasuryBalancePdf(d: TreasuryBalancePrintData): jsPDF {
 }
 export function downloadTreasuryBalancePdf(d: TreasuryBalancePrintData): void {
   treasuryBalancePdf(d).save(`Bilan-tresorerie-${d.year}-${d.granularityLabel}.pdf`);
+}
+
+// Bilan de trésorerie DÉTAILLÉ (demande DAF) : nomme explicitement chaque entrée
+// et chaque sortie, puis les totaux et le solde — PDF vectoriel (séparateurs de
+// milliers propres, pas de « / »).
+export function treasuryStatementPdf(d: TreasuryStatementData): jsPDF {
+  const cur = "XAF";
+  const dfr = (iso: string) => { try { return new Date(iso).toLocaleDateString("fr-FR"); } catch { return iso; } };
+  const rows: string[][] = [];
+  rows.push(["ENTRÉES", "", "", ""]);
+  if (d.entrees.length) for (const e of d.entrees) rows.push([e.label, dfr(e.date), e.reference || "—", money(e.amount, cur)]);
+  else rows.push(["Aucune entrée sur la période.", "", "", ""]);
+  rows.push(["Total des entrées", "", "", money(d.totalEntrees, cur)]);
+  rows.push(["SORTIES", "", "", ""]);
+  if (d.sorties.length) for (const s of d.sorties) rows.push([s.label, dfr(s.date), s.reference || "—", money(s.amount, cur)]);
+  else rows.push(["Aucune sortie sur la période.", "", "", ""]);
+  rows.push(["Total des sorties", "", "", money(d.totalSorties, cur)]);
+
+  return renderHouseDoc({
+    docName: "Bilan de trésorerie",
+    fileName: `Bilan de trésorerie ${d.periodLabel}`,
+    number: "",
+    meta: [
+      { label: "Période", value: d.periodLabel },
+      { label: "Édité le", value: new Date().toLocaleDateString("fr-FR") },
+    ],
+    partyLabel: "Établi pour",
+    partyName: HOUSE.legalName,
+    columns: [
+      { label: "Désignation", width: 92, align: "left" },
+      { label: "Date", width: 22, align: "left" },
+      { label: "Référence", width: 30, align: "left" },
+      { label: "Montant", width: CONTENT_W - 92 - 22 - 30, align: "right" },
+    ],
+    rows,
+    totals: [{ label: "Solde de la période", value: money(d.solde, cur), strong: true }],
+    notes: [
+      "Entrées = encaissements enregistrés. Sorties = dépenses validées/payées + décaissements de trésorerie (droits d'auteur versés…). Solde de la période = total des entrées − total des sorties. Montants en francs CFA (XAF), calculés automatiquement.",
+    ],
+  });
+}
+export function downloadTreasuryStatementPdf(d: TreasuryStatementData): void {
+  treasuryStatementPdf(d).save(`Bilan-tresorerie-${d.periodLabel.replace(/[^\w]+/g, "-")}.pdf`);
 }

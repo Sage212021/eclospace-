@@ -4739,6 +4739,8 @@ export interface BalanceRange {
   depenses: number;
   solde: number;
   depensesParCategorie: Record<string, number>;
+  // Détail ligne par ligne : toutes les entrées et toutes les sorties nommées.
+  lignes: { entrees: StatementEntry[]; sorties: StatementExit[] };
 }
 export function getBalanceRange(from: string, to: string) {
   return request<BalanceRange>(`/api/v1/finance/balance-range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

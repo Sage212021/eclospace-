@@ -2561,6 +2561,74 @@ export function printTreasuryBalance(d: TreasuryBalancePrintData, opts?: PrintOp
   openPrintWindow(`${title} ${d.year} — ${d.granularityLabel}`, body, opts);
 }
 
+// Bilan de trésorerie DÉTAILLÉ (demande DAF) : nomme explicitement CHAQUE entrée
+// et CHAQUE sortie (date, référence, libellé, origine/catégorie, montant), puis
+// les totaux et le solde final. Imprimable / exportable, et affichable en aperçu
+// (preview) avant impression.
+export interface TreasuryStatementLine {
+  date: string;
+  reference: string;
+  label: string;
+  extra: string; // origine (entrées) ou catégorie (sorties)
+  amount: number;
+}
+export interface TreasuryStatementData {
+  periodLabel: string;
+  from: string;
+  to: string;
+  entrees: TreasuryStatementLine[];
+  sorties: TreasuryStatementLine[];
+  totalEntrees: number;
+  totalSorties: number;
+  solde: number;
+}
+
+export function printTreasuryStatement(d: TreasuryStatementData, opts?: PrintOpts): void {
+  const cur = "XAF";
+  const section = (lines: TreasuryStatementLine[], extraHeader: string, emptyLabel: string, total: number, totalLabel: string) => `
+    <table class="lines" style="margin-top:4px">
+      <thead><tr>
+        <th>Date</th><th>${tr("Référence", "Reference")}</th><th>${tr("Libellé", "Description")}</th><th>${extraHeader}</th><th class="r">${tr("Montant", "Amount")}</th>
+      </tr></thead>
+      <tbody>${lines.length
+        ? lines.map((l) => `<tr>
+            <td class="num">${fdate(l.date)}</td>
+            <td class="num">${escapeHtml(l.reference || "—")}</td>
+            <td>${escapeHtml(l.label)}</td>
+            <td>${escapeHtml(l.extra || "—")}</td>
+            <td class="r num">${money(l.amount, cur)}</td>
+          </tr>`).join("")
+        : `<tr><td colspan="5" style="text-align:center;color:#6b7280">${emptyLabel}</td></tr>`}
+      </tbody>
+      <tfoot><tr style="font-weight:700;border-top:2px solid #0b0b0c">
+        <td colspan="4">${totalLabel}</td><td class="r num">${money(total, cur)}</td>
+      </tr></tfoot>
+    </table>`;
+
+  const title = tr("Bilan de trésorerie", "Treasury balance");
+  const body = `
+    <div class="doc__title">${title}</div>
+    <div class="meta">
+      <span>${tr("Période", "Period")} : <b>${escapeHtml(d.periodLabel)}</b></span>
+      <span>${tr("Édité le", "Issued on")} <b class="num">${fdate(new Date())}</b></span>
+    </div>
+    <div class="meta" style="margin-top:14px"><b>${tr("Entrées", "Inflows")} (${d.entrees.length})</b></div>
+    ${section(d.entrees, tr("Origine", "Origin"), tr("Aucune entrée sur la période.", "No inflow in this period."), d.totalEntrees, tr("Total des entrées", "Total inflows"))}
+    <div class="meta" style="margin-top:16px"><b>${tr("Sorties", "Outflows")} (${d.sorties.length})</b></div>
+    ${section(d.sorties, tr("Catégorie", "Category"), tr("Aucune sortie sur la période.", "No outflow in this period."), d.totalSorties, tr("Total des sorties", "Total outflows"))}
+    <div class="totals">
+      <div class="ttc"><span>${tr("Solde de la période", "Period balance")}</span><span class="num">${money(d.solde, cur)}</span></div>
+    </div>
+    <div style="margin-top:18px;font-size:10.5px;color:#6b7280;line-height:1.6">
+      ${tr(
+        "Entrées = encaissements enregistrés. Sorties = dépenses validées/payées + décaissements de trésorerie (droits d'auteur versés…). Solde de la période = total des entrées − total des sorties. Montants en francs CFA (XAF), calculés automatiquement à partir des opérations enregistrées.",
+        "Inflows = recorded collections. Outflows = validated/paid expenses + treasury disbursements (author royalties paid…). Period balance = total inflows − total outflows. Amounts in CFA francs (XAF), computed automatically from recorded operations.",
+      )}
+    </div>`;
+
+  openPrintWindow(`${title} — ${d.periodLabel}`, body, opts);
+}
+
 // Bon de livraison imprimable (Ch. 17 §17.8, demande opérateur) : document
 // professionnel remis avec la marchandise. En-tête et coordonnées de la maison
 // (via documentShell), numéro de BL, date, référence commande/facture, identité

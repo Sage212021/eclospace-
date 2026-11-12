@@ -77,8 +77,8 @@ import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
-import { printInvoice, printRoyaltyStatement, printTreasuryBalance, type PrintOpts } from "../lib/print";
-import { downloadInvoicePdf, downloadRoyaltyStatementPdf, downloadAdvanceAttestationPdf, downloadTreasuryBalancePdf } from "../lib/financePdf";
+import { printInvoice, printRoyaltyStatement, printTreasuryStatement, type PrintOpts, type TreasuryStatementData, type TreasuryStatementLine } from "../lib/print";
+import { downloadInvoicePdf, downloadRoyaltyStatementPdf, downloadAdvanceAttestationPdf, downloadTreasuryStatementPdf } from "../lib/financePdf";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { AccountingExportSection } from "../components/AccountingExportSection";
 
@@ -1700,6 +1700,10 @@ function MonthlyBalanceSection() {
   const [rangeBusy, setRangeBusy] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [rangeOpenCats, setRangeOpenCats] = useState(false);
+  // Génération du document détaillé (aperçu / PDF), qui va chercher le détail
+  // ligne par ligne des entrées et sorties.
+  const [docBusy, setDocBusy] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
 
   useEffect(() => {
     setRows(null);
@@ -1729,58 +1733,63 @@ function MonthlyBalanceSection() {
       : periods[0]
         ? { entrees: periods[0].entrees, depenses: periods[0].depenses, solde: periods[0].solde }
         : { entrees: 0, depenses: 0, solde: 0 };
-  const selectedTrancheLabel = selectedTranche === "all" ? null : allPeriods.find((p) => p.key === selectedTranche)?.label ?? null;
   const periodHeader =
     granularity === "mensuel" ? t("fin.month", "Mois")
     : granularity === "trimestriel" ? t("fin.quarter", "Trimestre")
     : granularity === "semestriel" ? t("fin.semester", "Semestre")
     : t("fin.year", "Année");
 
-  // Données du bilan « par tranches » (mêmes chiffres pour l'aperçu, l'impression
-  // et le PDF). Si une tranche précise est choisie, le document ne porte que sur
-  // elle ; le libellé de périodicité le précise.
-  function balanceData() {
-    const granularityLabel = selectedTrancheLabel
-      ? `${GRANULARITY_LABELS[granularity]} — ${selectedTrancheLabel}`
-      : GRANULARITY_LABELS[granularity];
+  // Construit le bilan DÉTAILLÉ (toutes les entrées et toutes les sorties nommées,
+  // puis les totaux et le solde) pour la période actuellement sélectionnée — une
+  // tranche précise, toute l'année, ou une plage de dates libre.
+  async function buildStatementData(): Promise<TreasuryStatementData | null> {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    let from: string, to: string, periodLabel: string;
+    if (mode === "plage") {
+      if (!rangeFrom || !rangeTo) { setDocError("Indiquez une date de début et une date de fin."); return null; }
+      if (rangeTo < rangeFrom) { setDocError("La date de fin doit être postérieure ou égale à la date de début."); return null; }
+      from = rangeFrom; to = rangeTo;
+      periodLabel = `Du ${fdateFr(from)} au ${fdateFr(to)}`;
+    } else if (selectedTranche === "all") {
+      from = `${year}-01-01`; to = `${year}-12-31`;
+      periodLabel = `Année ${year}`;
+    } else {
+      const g = periodGroups(granularity, year).find((x) => x.key === selectedTranche);
+      if (!g) { setDocError("Tranche introuvable."); return null; }
+      const m0 = g.months[0];
+      const m1 = g.months[g.months.length - 1];
+      const lastDay = new Date(Date.UTC(year, m1 + 1, 0)).getUTCDate();
+      from = `${year}-${pad(m0 + 1)}-01`;
+      to = `${year}-${pad(m1 + 1)}-${pad(lastDay)}`;
+      periodLabel = `${g.label} ${year}`;
+    }
+    const r = await getBalanceRange(from, to);
+    const line = (l: { date: string; reference: string; label: string; amount: number }, extra: string): TreasuryStatementLine => ({ date: l.date, reference: l.reference, label: l.label, extra, amount: l.amount });
     return {
-      year,
-      granularityLabel,
-      periods: periods.map((p) => ({ label: p.label, entrees: p.entrees, depenses: p.depenses, solde: p.solde })),
-      totals: visibleTotals!,
+      periodLabel, from, to,
+      entrees: r.lignes.entrees.map((e) => line(e, e.origin)),
+      sorties: r.lignes.sorties.map((s) => line(s, s.category)),
+      totalEntrees: r.entrees,
+      totalSorties: r.depenses,
+      solde: r.solde,
     };
   }
 
-  // Données du bilan « plage de dates » pour l'aperçu/impression/PDF : une seule
-  // ligne couvrant toute la fenêtre choisie.
-  function rangeBalanceData() {
-    const r = rangeResult!;
-    const label = `Du ${fdateFr(r.from)} au ${fdateFr(r.to)}`;
-    return {
-      year: Number(r.from.slice(0, 4)),
-      granularityLabel: `Plage de dates (${label})`,
-      periods: [{ label, entrees: r.entrees, depenses: r.depenses, solde: r.solde }],
-      totals: { entrees: r.entrees, depenses: r.depenses, solde: r.solde },
-    };
-  }
-
-  // Export PDF : PDF VECTORIEL téléchargé (jsPDF), fiable partout — téléphone et
-  // vues intégrées (webview) comprises, où « Imprimer → PDF » du navigateur
-  // échoue ou n'est pas proposé. Même mécanisme que les autres documents Finance.
-  function exportPdf() {
-    if (mode === "plage") { if (rangeResult) downloadTreasuryBalancePdf(rangeBalanceData()); return; }
-    if (!visibleTotals) return;
-    downloadTreasuryBalancePdf(balanceData());
-  }
-
-  // Impression : aperçu à l'écran DANS l'application (superposition), avec le
-  // bouton « Imprimer / Enregistrer en PDF ». L'aperçu s'affiche en HTML inline
-  // (pas de pop-up, pas de blob) donc visible aussi en webview ; si l'impression
-  // n'y est pas disponible, le bouton PDF reste la solution d'export fiable.
-  function print() {
-    if (mode === "plage") { if (rangeResult) printTreasuryBalance(rangeBalanceData(), { letterhead: true, preview: true }); return; }
-    if (!visibleTotals) return;
-    printTreasuryBalance(balanceData(), { letterhead: true, preview: true });
+  // Aperçu (superposition à l'écran, avec bouton « Imprimer / Enregistrer en PDF »)
+  // ou export PDF vectoriel. Les deux passent par le même document détaillé — on
+  // peut donc TOUJOURS voir le bilan avant de l'imprimer.
+  async function runDoc(action: "preview" | "pdf") {
+    setDocBusy(true); setDocError(null);
+    try {
+      const d = await buildStatementData();
+      if (!d) return;
+      if (action === "preview") printTreasuryStatement(d, { letterhead: true, preview: true });
+      else downloadTreasuryStatementPdf(d);
+    } catch (e) {
+      setDocError(e instanceof Error ? e.message : "Génération du bilan impossible.");
+    } finally {
+      setDocBusy(false);
+    }
   }
 
   // Calcul du bilan sur la plage de dates saisie (du … au …, inclus).
@@ -1800,7 +1809,7 @@ function MonthlyBalanceSection() {
       setRangeBusy(false);
     }
   }
-  const canExport = mode === "plage" ? !!rangeResult : !!rows;
+  const canExport = mode === "plage" ? (!!rangeFrom && !!rangeTo) : !!rows;
 
   return (
     <Card
@@ -1829,11 +1838,15 @@ function MonthlyBalanceSection() {
               {allPeriods.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
             </select>
           </>}
-          <Button variant="view" size="sm" onClick={print} disabled={!canExport}>{t("fin.print", "Imprimer")}</Button>
-          <Button variant="view" size="sm" onClick={exportPdf} disabled={!canExport}>{t("fin.pdf", "PDF")}</Button>
+          <Button variant="view" size="sm" onClick={() => runDoc("preview")} disabled={!canExport || docBusy}>{docBusy ? t("fin.generating", "Génération…") : t("fin.preview", "Aperçu")}</Button>
+          <Button variant="view" size="sm" onClick={() => runDoc("pdf")} disabled={!canExport || docBusy}>{t("fin.pdf", "PDF")}</Button>
         </div>
       }
     >
+      {docError && <p style={{ color: "var(--alert)", fontSize: 13, margin: "0 0 8px" }}>{docError}</p>}
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "0 0 10px" }}>
+        {t("fin.statement_hint", "« Aperçu » affiche le bilan détaillé (chaque entrée et chaque sortie nommée, puis le solde) avant impression ; « PDF » le télécharge.")}
+      </p>
       {mode === "tranches" && error && <p style={{ color: "var(--alert)", fontSize: 13, margin: 0 }}>{error}</p>}
       {mode === "tranches" && !error && !rows && <Empty>{t("fin.loading", "Chargement…")}</Empty>}
       {mode === "tranches" && rows && totals && (

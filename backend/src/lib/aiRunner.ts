@@ -71,6 +71,77 @@ function extractDocxXml(buffer: Buffer): string | null {
   return null;
 }
 
+// Parcourt les entrées d'un ZIP (en-têtes locaux) et renvoie leur contenu inflaté.
+// Sert aux formats bureautiques fondés sur ZIP : ODT/ODS/ODP (content.xml) et
+// EPUB (fichiers (x)html). Tolérant : une entrée illisible est simplement ignorée.
+function readZipEntries(buffer: Buffer): { name: string; data: Buffer }[] {
+  const out: { name: string; data: Buffer }[] = [];
+  let offset = 0;
+  while (offset + 30 <= buffer.length && buffer.readUInt32LE(offset) === 0x04034b50) {
+    const method = buffer.readUInt16LE(offset + 8);
+    const compSize = buffer.readUInt32LE(offset + 18);
+    const nameLen = buffer.readUInt16LE(offset + 26);
+    const extraLen = buffer.readUInt16LE(offset + 28);
+    const name = buffer.toString("utf8", offset + 30, offset + 30 + nameLen);
+    const dataStart = offset + 30 + nameLen + extraLen;
+    if (compSize === 0 || dataStart + compSize > buffer.length) break; // taille en descripteur différé : on s'arrête (le repli « au mieux » prendra le relais)
+    const raw = buffer.subarray(dataStart, dataStart + compSize);
+    let data = Buffer.alloc(0);
+    try { data = method === 0 ? Buffer.from(raw) : zlib.inflateRawSync(raw); } catch { /* entrée illisible : ignorée */ }
+    out.push({ name, data });
+    offset = dataStart + compSize;
+  }
+  return out;
+}
+
+// Texte d'un XML bureautique (ODF, (x)html) : les paragraphes/titres/sauts
+// deviennent des retours à la ligne, le reste du balisage est retiré, les entités
+// usuelles décodées.
+function officeXmlToText(xml: string): string {
+  return xml
+    .replace(/<(text:p|text:h|p|br|h[1-6]|li|div|tr)\b[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&apos;/g, "’").replace(/&quot;/g, '"').replace(/&#8217;/g, "’").replace(/&#8230;/g, "…").replace(/&nbsp;/g, " ")
+    .replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// OpenDocument (.odt/.ods/.odp) : ZIP dont « content.xml » porte le texte.
+function odfToText(buffer: Buffer): string {
+  const content = readZipEntries(buffer).find((e) => e.name === "content.xml");
+  return content ? officeXmlToText(content.data.toString("utf8")) : "";
+}
+
+// EPUB : ZIP de fichiers (x)html ; on concatène le texte de chacun.
+function epubToText(buffer: Buffer): string {
+  return readZipEntries(buffer)
+    .filter((e) => /\.x?html?$/i.test(e.name))
+    .map((e) => officeXmlToText(e.data.toString("utf8")))
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+// RTF : on retire le balisage de contrôle et on décode les caractères échappés
+// (\'xx hexadécimal, \uN unicode), en conservant le texte.
+function rtfToText(buffer: Buffer): string {
+  let s = buffer.toString("latin1");
+  s = s.replace(/\\'([0-9a-fA-F]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)));
+  s = s.replace(/\\u(-?\d+)\??/g, (_m, n) => { let c = parseInt(n, 10); if (c < 0) c += 65536; return String.fromCharCode(c); });
+  s = s.replace(/\\par[d]?\b/g, "\n").replace(/\\line\b/g, "\n").replace(/\\tab\b/g, "\t");
+  s = s.replace(/\\[a-zA-Z]+-?\d* ?/g, ""); // autres mots de contrôle
+  s = s.replace(/[{}]/g, "");
+  return s.replace(/\r/g, "").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// DERNIER RECOURS (« lire n'importe quel fichier ») : extraction au mieux du texte
+// lisible contenu dans un fichier de format inconnu ou binaire (ancien .doc, etc.).
+// On retire les octets de contrôle et on compacte, sans rien inventer.
+function bestEffortText(buffer: Buffer): string {
+  const s = buffer.toString("latin1").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, " ");
+  return s.replace(/[^\S\n]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 type PageImage = { base64: string; mediaType: "image/jpeg" | "image/webp" };
 type ManuscriptInput = { kind: "text"; text: string } | { kind: "pdf"; base64: string } | { kind: "images"; images: PageImage[] };
 
@@ -244,10 +315,25 @@ export async function prepareVisualOrText(mime: string, buffer: Buffer): Promise
     }
   }
 
+  // Documents bureautiques divers → texte (pour que le relecteur lise TOUT type
+  // de fichier, pas seulement .docx) : OpenDocument, EPUB, RTF.
+  if (realMime.includes("opendocument")) { const t = odfToText(buffer); if (t.trim()) return { kind: "text", text: t }; }
+  if (realMime === "application/epub+zip") { const t = epubToText(buffer); if (t.trim()) return { kind: "text", text: t }; }
+  if (realMime === "application/rtf" || realMime === "text/rtf" || buffer.subarray(0, 5).toString("latin1") === "{\\rtf") {
+    const t = rtfToText(buffer);
+    if (t.trim()) return { kind: "text", text: t };
+  }
+
   // Texte lisible (txt, csv, md, html, ou fichier sans signature binaire).
   if (looksTextual(buffer)) return { kind: "text", text: buffer.toString("utf8") };
 
-  throw unreadableFileError("le format du fichier n'est pas reconnu");
+  // DERNIER RECOURS (demande opérateur : « qu'il puisse lire n'importe quel
+  // fichier ») : on extrait au mieux le texte lisible contenu dans le fichier
+  // (anciens .doc, formats binaires inconnus…). Si rien d'exploitable, message clair.
+  const be = bestEffortText(buffer);
+  if (be.replace(/\s/g, "").length >= 60) return { kind: "text", text: be };
+
+  throw unreadableFileError("le format du fichier n'est pas reconnu et aucun texte lisible n'a pu en être extrait");
 }
 
 // Un PDF est-il protégé par mot de passe (ouverture impossible sans clé) ?

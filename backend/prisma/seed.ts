@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-relecteur-ia-lit-tout-fichier",
+      version: "2026.11",
+      title: "Nouveauté — Le relecteur IA lit désormais tout type de fichier",
+      body: "Le relecteur IA (rapports d'évaluation, corrections BAT1 / BAT2) ne lisait de façon fiable que les Word (.docx), PDF, images et textes simples ; d'autres formats étaient refusés. Il lit maintenant aussi les OpenDocument (.odt), les RTF, les EPUB, et — en dernier recours — il extrait au mieux le texte lisible de n'importe quel fichier (y compris d'anciens formats ou des fichiers mal identifiés). Vous pouvez donc lancer une évaluation ou une correction BAT sur un fichier quel que soit son format, du moment qu'il contient du texte. (Un fichier purement binaire, sans aucun texte, reste signalé clairement.)",
+      permissionModules: ["bat", "manuscripts", "production"],
+      departmentCodes: ["DIRED", "INFOG", "DG"],
+    },
+    {
       slug: "2026-11-sage-reponses-vides-corrigees",
       version: "2026.11",
       title: "Correction — SAGE ne renvoie plus de réponses vides ou incomplètes",

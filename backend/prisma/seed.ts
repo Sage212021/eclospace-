@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bon-commande-pdf-fidele-impression",
+      version: "2026.11",
+      title: "Correction — Le bon de commande transféré est identique à la version imprimée",
+      body: "Quand vous transférez un bon de commande à un collègue (messagerie interne), le PDF reproduit maintenant fidèlement la version imprimée : en-tête à bandeau « Éclosion Édition Sarl », coordonnées et mentions du fournisseur placées sous son nom, auteur/ISBN au-dessus du tableau, et surtout la fiche technique présentée en vrai tableau (et non plus en liste de lignes). Le document transféré correspond ainsi exactement à ce qui s'imprime — même rendu pour l'impression, le téléchargement et le transfert.",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-relecteur-ia-lit-tout-fichier",
       version: "2026.11",
       title: "Nouveauté — Le relecteur IA lit désormais tout type de fichier",

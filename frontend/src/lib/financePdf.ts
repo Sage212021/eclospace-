@@ -149,7 +149,11 @@ interface HouseDocSpec {
   // Bloc de totaux secondaire (ex. récapitulatif fiscal de l'état annuel).
   secondaryTitle?: string;
   secondaryTotals?: TotalRow[];
-  // Lignes d'information sous le tableau (ex. lieu de livraison, tolérance).
+  // Tableau secondaire à deux colonnes (libellé | valeur), ex. « Fiche technique »
+  // du bon de commande — rendu entre le tableau principal et les lignes d'info,
+  // pour un PDF fidèle à la version imprimée (HTML).
+  specTable?: { title: string; rows: [string, string][] };
+  // Lignes d'information sous le tableau (ex. consignes, lieu de livraison).
   infoLines?: string[];
   notes?: string[];
   signatureFor?: string; // signature unique maison (facture, devis)
@@ -335,6 +339,41 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
     even = !even;
   }
   y += 6;
+
+  // Tableau secondaire « Fiche technique » (libellé | valeur, lignes zébrées),
+  // reproduisant la version imprimée du bon de commande.
+  if (spec.specTable?.rows.length) {
+    if (y > PAGE_H - 40) { footer(doc); doc.addPage(); y = houseHeader(doc); }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(...INK);
+    doc.text(spec.specTable.title, L, y);
+    y += 3;
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.5);
+    doc.line(L, y, R, y);
+    y += 3;
+    let zebra = false;
+    for (const [k, v] of spec.specTable.rows) {
+      const valLines = doc.splitTextToSize(v, CONTENT_W / 2 - 4) as string[];
+      const rh = Math.max(6.4, valLines.length * 4.2 + 2.4);
+      if (y + rh > PAGE_H - 24) { footer(doc); doc.addPage(); y = houseHeader(doc); }
+      if (zebra) { doc.setFillColor(...ZEBRA); doc.rect(L, y, CONTENT_W, rh, "F"); }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...MUTED);
+      doc.text(k, L + 2, y + 4.4);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...INK);
+      doc.text(valLines, R - 2, y + 4.4, { align: "right" });
+      doc.setDrawColor(...LINE);
+      doc.setLineWidth(0.2);
+      doc.line(L, y + rh, R, y + rh);
+      y += rh;
+      zebra = !zebra;
+    }
+    y += 6;
+  }
 
   // Lignes d'information sous le tableau (lieu de livraison, tolérance…).
   if (spec.infoLines?.length) {
@@ -725,32 +764,35 @@ export function purchaseOrderPdf(po: PurchaseOrder, sign?: ContractStampData | n
     : [[desc, String(po.orderedQuantity), money(po.amount, cur)]];
 
   // Références de l'ouvrage + fiche technique (Maquette) + consignes — MÊME source
-  // que l'aperçu/impression (purchaseOrderExtras), pour un document identique.
+  // que l'aperçu/impression (purchaseOrderExtras), pour un document fidèle.
   const { author, isbn, specRows, instructions, establishedBy } = purchaseOrderExtras(po);
-  const infoLines: string[] = [];
-  // Mentions du fournisseur (reprises du carnet) : coordonnées + mentions légales
-  // obligatoires sur le bon de commande (NIU, RCCM, compte bancaire).
+
+  // FOURNISSEUR : coordonnées + mentions légales, placées SOUS le nom (comme la
+  // version imprimée), puis références de l'ouvrage (auteur, ISBN). Rendu avant le
+  // tableau, pas en bloc fourre-tout sous le tableau.
+  const partyExtra: string[] = [];
   const sup = po.printer?.partner;
   if (sup) {
     const contact = [sup.phone, sup.email].filter(Boolean).join(" · ");
-    if (sup.city) infoLines.push(`Adresse : ${sup.city}`);
-    if (contact) infoLines.push(`Contact : ${contact}`);
-    if (sup.niu) infoLines.push(`NIU (n° contribuable) : ${sup.niu}`);
-    if (sup.rccm) infoLines.push(`Registre de commerce (RCCM) : ${sup.rccm}`);
-    if (sup.bankAccount) infoLines.push(`Compte bancaire : ${sup.bankAccount}`);
+    if (sup.city) partyExtra.push(`Adresse : ${sup.city}`);
+    if (contact) partyExtra.push(`Contact : ${contact}`);
+    if (sup.niu) partyExtra.push(`NIU (n° contribuable) : ${sup.niu}`);
+    if (sup.rccm) partyExtra.push(`Registre de commerce (RCCM) : ${sup.rccm}`);
+    if (sup.bankAccount) partyExtra.push(`Compte bancaire : ${sup.bankAccount}`);
   }
-  if (author) infoLines.push(`Auteur : ${author}`);
-  if (isbn) infoLines.push(`ISBN : ${isbn}`);
+  const refParts = [author ? `Auteur : ${author}` : "", isbn ? `ISBN : ${isbn}` : ""].filter(Boolean);
+  if (refParts.length) partyExtra.push(refParts.join("     "));
+
+  // SOUS le tableau : consignes à l'imprimeur, puis livraison (lieu, tolérance,
+  // établi par) — comme la version imprimée.
+  const infoLines: string[] = [];
+  if (instructions) {
+    infoLines.push("Consignes à l'imprimeur :");
+    for (const line of instructions.split("\n")) infoLines.push(line);
+    infoLines.push("");
+  }
   infoLines.push(`Lieu de livraison : ${location}`, `Tolérance de quantité : ${tolerance}`);
   if (establishedBy) infoLines.push(`Établi par : ${establishedBy}`);
-  if (specRows.length > 0) {
-    infoLines.push("— Fiche technique (à respecter) —");
-    for (const [k, v] of specRows) infoLines.push(`${k} : ${v}`);
-  }
-  if (instructions) {
-    infoLines.push("— Consignes à l'imprimeur —");
-    for (const line of instructions.split("\n")) infoLines.push(line);
-  }
 
   return renderHouseDoc({
     docName: "Bon de commande",
@@ -760,12 +802,15 @@ export function purchaseOrderPdf(po: PurchaseOrder, sign?: ContractStampData | n
     badge: PO_STATUS[po.status] ?? po.status,
     partyLabel: "Fournisseur (imprimeur)",
     partyName: printer,
+    partyExtra,
     columns: [
       { label: "Désignation", width: 118, align: "left" },
       { label: "Quantité", width: 24, align: "right" },
       { label: "Montant", width: CONTENT_W - 118 - 24, align: "right" },
     ],
     rows: orderRows,
+    // Fiche technique rendue en TABLEAU (fidèle à la version imprimée).
+    specTable: specRows.length > 0 ? { title: "Fiche technique (à respecter)", rows: specRows } : undefined,
     infoLines,
     totals: [{ label: "Total commande", value: money(po.amount, cur), strong: true }],
     signatureFor: HOUSE.legalName,

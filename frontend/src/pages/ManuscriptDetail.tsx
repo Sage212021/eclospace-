@@ -2244,9 +2244,12 @@ function GenericStepValidation({
   const doubleLabel =
     batState == null
       ? `Valider ${doubleNoun}`
-      : !batState.pre_validated
-        ? `Valider ${doubleNoun} (1re signature)`
-        : `Contre-valider ${doubleNoun} (Direction générale)`;
+      : batState.single_signature
+        // Direction générale : une seule signature suffit — pas de « 1re signature ».
+        ? `Valider ${doubleNoun}`
+        : !batState.pre_validated
+          ? `Valider ${doubleNoun} (1re signature)`
+          : `Contre-valider ${doubleNoun} (Direction générale)`;
   const label = isDouble ? doubleLabel : (STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape");
 
   // Qui pourra prendre le dossier à l'étape SUIVANTE (maquettiste, infographe,
@@ -2378,8 +2381,13 @@ function GenericStepValidation({
           border: `1px solid ${batState.pre_validated ? "var(--eclosion, #D9B21A)" : "#E7C98A"}`,
           color: "#5a4a10", borderRadius: 8, padding: "10px 13px", fontSize: 12.5, marginBottom: 12, lineHeight: 1.55,
         }}>
-          <div style={{ fontWeight: 700, marginBottom: 3 }}>{isImpression ? "Lancement de l'impression" : "BAT Final"} — double validation</div>
-          {!batState.pre_validated ? (
+          <div style={{ fontWeight: 700, marginBottom: 3 }}>{isImpression ? "Lancement de l'impression" : "BAT Final"} — {batState.single_signature ? "validation Direction générale" : "double validation"}</div>
+          {batState.single_signature ? (
+            <span>
+              Vous validez au titre de la <strong>Direction générale</strong> : <strong>une seule signature suffit</strong>.
+              Votre validation autorise {isImpression ? "directement l'impression" : "directement le passage à l'impression"}, sans contre-validation.
+            </span>
+          ) : !batState.pre_validated ? (
             <span>
               {isImpression ? "Le lancement de l'impression" : "Le BAT Final autorise l'impression : il"} demande <strong>deux signatures</strong>. Votre validation est la
               <strong> 1re signature</strong> ; elle sera ensuite soumise à la <strong>contre-validation de la Direction générale</strong>.

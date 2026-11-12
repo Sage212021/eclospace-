@@ -184,9 +184,9 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     await app.inject({ method: "PATCH", url: `/api/v1/bat/${bat.id}/status`, headers: { cookie: adminCookie }, payload: { status: "awaiting_signature" } });
     await prisma.batRecord.update({ where: { id: bat.id }, data: { signedScanVersionId: (await prisma.batRecord.findUniqueOrThrow({ where: { id: bat.id }, select: { interiorVersionId: true } })).interiorVersionId } });
     await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: {} });
-    // BAT à DOUBLE validation : 1re signature (admin) puis contre-validation (DG).
+    // BAT à double validation, assouplie pour la DG (12/11) : l'admin a l'autorité
+    // finale → une seule signature valide le BAT.
     await validate(manuscript.id, "VALIDATION_BAT");
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: dgCookie }, payload: {} });
     // D-010 : la contractualisation suit désormais la validation du BAT.
     await validate(manuscript.id, "CONTRACTUALISATION");
 
@@ -207,9 +207,9 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     const poResponse = await app.inject({ method: "POST", url: `/api/v1/print-quotes/${quote.id}/purchase-order`, headers: { cookie: adminCookie }, payload: {} });
     const po = poResponse.json();
     await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "sent" } });
-    // IMPRESSION à double validation : 1re signature (admin) puis contre-validation (DG).
+    // IMPRESSION à double validation, assouplie pour la DG (12/11) : l'admin a
+    // l'autorité finale → une seule signature fait avancer l'ouvrage.
     await validate(manuscript.id, "IMPRESSION");
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/IMPRESSION/validate`, headers: { cookie: dgCookie }, payload: {} });
 
     const receipt = await app.inject({
       method: "POST",

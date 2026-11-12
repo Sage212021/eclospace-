@@ -180,24 +180,19 @@ describe("BAT Final — double validation (infographe puis Direction générale)
     expect(step.validationBy).toBe(dgId);
   });
 
-  it("le pré-validateur ne peut pas être aussi le contre-validateur, même avec l'autorité (double signature de deux personnes)", async () => {
-    const { manuscript, batStatusId } = await manuscriptAtSignedBat("BAT DV Meme Signataire");
+  it("la Direction générale valide le BAT en UNE seule signature : l'ouvrage avance directement (pas de contre-signature exigée)", async () => {
+    // Demande opérateur 12/11/2026 : la DG (autorité finale) signe une seule fois.
+    const { manuscript, batStatusId } = await manuscriptAtSignedBat("BAT DV DG Signature Unique");
 
-    // Admin (autorité de validation) pose la 1re signature…
-    const pre = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: adminCookie }, payload: {} });
-    expect(pre.json().pending_counter_validation).toBe(true);
+    const v = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: dgCookie }, payload: {} });
+    expect(v.statusCode).toBe(200);
+    expect(v.json().advanced).toBe(true);
 
-    // …et ne peut PAS contre-valider sa propre pré-validation.
-    const self = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: adminCookie }, payload: {} });
-    expect(self.statusCode).toBe(409);
-    expect(self.json().code).toBe("bat_same_signer");
-
-    // L'ouvrage n'a pas bougé ; une autre personne (DG) peut contre-valider.
-    const stillThere = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscript.id }, select: { statusId: true } });
-    expect(stillThere.statusId).toBe(batStatusId);
-    const counter = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: dgCookie }, payload: {} });
-    expect(counter.statusCode).toBe(200);
-    expect(counter.json().advanced).toBe(true);
+    const after = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscript.id }, select: { statusId: true } });
+    expect(after.statusId).not.toBe(batStatusId);
+    const step = await prisma.manuscriptStep.findUniqueOrThrow({ where: { manuscriptId_statusId: { manuscriptId: manuscript.id, statusId: batStatusId } } });
+    expect(step.validatedAt).not.toBeNull();
+    expect(step.validationBy).toBe(dgId);
   });
 
   it("refuse la pré-validation tant que le BAT n'est pas signé (prérequis du bon à tirer)", async () => {
@@ -221,6 +216,14 @@ describe("BAT Final — double validation (infographe puis Direction générale)
     expect(before.statusCode).toBe(200);
     expect(before.json().at_bat).toBe(true);
     expect(before.json().pre_validated).toBe(false);
+    // La DG valide en une seule signature (12/11) : single_signature vrai pour elle,
+    // et elle peut valider directement (can_pre_validate).
+    expect(before.json().single_signature).toBe(true);
+    expect(before.json().can_pre_validate).toBe(true);
+    // Un non-DG (infographe) ne signe PAS seul : single_signature faux.
+    const beforeInfo = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}/bat-validation-state`, headers: { cookie: infographeCookie } });
+    expect(beforeInfo.json().single_signature).toBe(false);
+    expect(beforeInfo.json().can_pre_validate).toBe(true);
     // Bon à tirer prêt : fichiers déposés + signé → bat_ready true.
     expect(before.json().bat_has_interior).toBe(true);
     expect(before.json().bat_has_cover).toBe(true);

@@ -121,18 +121,19 @@ describe("Impression — double validation (opérateur puis Direction générale
     expect(step.validationBy).toBe(dgId);
   });
 
-  it("le pré-validateur ne peut pas être aussi le contre-validateur (double signature de deux personnes)", async () => {
-    const manuscript = await manuscriptAtImpression("Imp DV Meme Signataire");
-    const pre = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/IMPRESSION/validate`, headers: { cookie: adminCookie }, payload: {} });
-    expect(pre.json().pending_counter_validation).toBe(true);
+  it("la Direction générale valide en UNE seule signature : l'ouvrage avance directement (pas de contre-signature exigée)", async () => {
+    // Demande opérateur 12/11/2026 : la DG EST l'autorité de contre-validation ;
+    // quand c'est elle qui valide, une seule signature suffit.
+    const manuscript = await manuscriptAtImpression("Imp DV Signature Unique DG");
+    const v = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/IMPRESSION/validate`, headers: { cookie: dgCookie }, payload: {} });
+    expect(v.statusCode).toBe(200);
+    expect(v.json().advanced).toBe(true);
 
-    const self = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/IMPRESSION/validate`, headers: { cookie: adminCookie }, payload: {} });
-    expect(self.statusCode).toBe(409);
-    expect(self.json().code).toBe("impression_same_signer");
-
-    const counter = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/IMPRESSION/validate`, headers: { cookie: dgCookie }, payload: {} });
-    expect(counter.statusCode).toBe(200);
-    expect(counter.json().advanced).toBe(true);
+    const after = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscript.id }, select: { statusId: true } });
+    expect(after.statusId).not.toBe(impressionStatusId);
+    const step = await prisma.manuscriptStep.findUniqueOrThrow({ where: { manuscriptId_statusId: { manuscriptId: manuscript.id, statusId: impressionStatusId } } });
+    expect(step.validatedAt).not.toBeNull();
+    expect(step.validationBy).toBe(dgId);
   });
 
   it("expose l'état de double validation de l'impression (endpoint bat-validation-state)", async () => {

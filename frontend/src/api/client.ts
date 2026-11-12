@@ -649,6 +649,8 @@ export interface BatValidationState {
   pre_validated_at: string | null;
   pre_validator: { id: string; username: string } | null;
   can_pre_validate: boolean;
+  // La Direction générale valide en UNE seule signature (pas de contre-validation).
+  single_signature?: boolean;
   can_counter_validate: boolean;
   is_pre_validator: boolean;
   // État du bon à tirer (print-ready) — présent uniquement à l'étape BAT Final.

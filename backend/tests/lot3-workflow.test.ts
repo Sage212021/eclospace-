@@ -247,17 +247,9 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     await prisma.batRecord.update({ where: { id: bat.id }, data: { signedScanVersionId: (await prisma.batRecord.findUniqueOrThrow({ where: { id: bat.id }, select: { interiorVersionId: true } })).interiorVersionId } });
     await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: {} });
 
-    // BAT à DOUBLE validation : 1re signature (admin pré-valide, pas d'avancement),
-    // puis contre-validation par une personne distincte habilitée (DG).
-    const preBat = await validate(manuscript.id, "VALIDATION_BAT");
-    expect(preBat.statusCode).toBe(200);
-    expect(preBat.json().pending_counter_validation).toBe(true);
-    const validatedBat = await app.inject({
-      method: "POST",
-      url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`,
-      headers: { cookie: dgCookie },
-      payload: {},
-    });
+    // BAT à double validation, assouplie pour la DG (12/11/2026) : l'admin a
+    // l'autorité finale (manuscripts:validation) → une seule signature suffit.
+    const validatedBat = await validate(manuscript.id, "VALIDATION_BAT");
     expect(validatedBat.statusCode).toBe(200);
     // D-010 : la validation du BAT mène désormais à la CONTRACTUALISATION, qui
     // précède l'impression.
@@ -295,17 +287,9 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     const po = poResponse.json();
     await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "sent" } });
 
-    // IMPRESSION à double validation (demande opérateur 15/10) : 1re signature
-    // de l'opérateur (admin ici), puis contre-validation de la Direction générale.
-    const preImpression = await validate(manuscript.id, "IMPRESSION");
-    expect(preImpression.statusCode).toBe(200);
-    expect(preImpression.json().pending_counter_validation).toBe(true);
-    const validatedImpression = await app.inject({
-      method: "POST",
-      url: `/api/v1/manuscripts/${manuscript.id}/steps/IMPRESSION/validate`,
-      headers: { cookie: dgCookie },
-      payload: {},
-    });
+    // IMPRESSION à double validation, assouplie pour la DG (12/11/2026) : l'admin
+    // a l'autorité finale → une seule signature fait avancer l'ouvrage.
+    const validatedImpression = await validate(manuscript.id, "IMPRESSION");
     expect(validatedImpression.statusCode).toBe(200);
     expect(validatedImpression.json().status).toBe("CONTROLE_QUALITE_IMPRESSION");
 

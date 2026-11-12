@@ -491,57 +491,55 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
         const hasFinalAuthority = request.user!.permissions.has("manuscripts:validation");
 
-        if (!batStep?.preValidatedAt) {
-          // 1re signature — PRÉ-VALIDATION. On trace le pré-validateur, on NOTIFIE
-          // la Direction générale, on NE FAIT PAS avancer l'ouvrage.
-          await prisma.manuscriptStep.upsert({
-            where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
-            update: { preValidatedAt: now, preValidatedBy: request.user!.id, observations, actualStart: now },
-            create: { manuscriptId: id, statusId: targetStatus.id, preValidatedAt: now, preValidatedBy: request.user!.id, actualStart: now, observations },
-          });
-          await notifyRole({
-            roleCode: "DIR_GENERAL",
-            type: "autre",
-            priority: "high",
-            title: `BAT à contre-valider — ${manuscript.manuscriptNumber}`,
-            body: `${request.user!.username} a validé le BAT Final de « ${manuscript.title} ». Votre contre-validation est requise pour autoriser l'impression.`,
-            entityType: "manuscript",
-            entityId: id,
-          });
-          await writeAuditLog({
-            userId: request.user!.id,
-            action: "validate",
-            entityType: "manuscript",
-            entityId: id,
-            oldValues: { statusCode: targetStatus.code },
-            newValues: { preValidated: true, advanced: false, observations },
-            ipAddress: request.ip,
-          });
-          return reply.send({
-            advanced: false,
-            pending_counter_validation: true,
-            message: "BAT validé — en attente de la contre-validation de la Direction générale pour autoriser l'impression.",
-          });
-        }
-
-        // 2e signature — CONTRE-VALIDATION. Réservée à la Direction générale et
-        // interdite au pré-validateur (double signature de deux personnes).
+        // DOUBLE VALIDATION ASSOUPLIE POUR LA DIRECTION GÉNÉRALE (demande
+        // opérateur 12/11/2026) : la DG EST l'autorité de contre-validation.
+        //   • Quand c'est la DG (« manuscripts:validation ») qui valide → UNE
+        //     seule signature suffit, l'ouvrage passe à l'impression directement.
+        //   • Quand c'est un opérateur de production / magasinier / DAF → 1re
+        //     signature (pré-validation), puis contre-validation par la DG.
         if (!hasFinalAuthority) {
+          if (!batStep?.preValidatedAt) {
+            // 1re signature — PRÉ-VALIDATION. On trace le pré-validateur, on NOTIFIE
+            // la Direction générale, on NE FAIT PAS avancer l'ouvrage.
+            await prisma.manuscriptStep.upsert({
+              where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
+              update: { preValidatedAt: now, preValidatedBy: request.user!.id, observations, actualStart: now },
+              create: { manuscriptId: id, statusId: targetStatus.id, preValidatedAt: now, preValidatedBy: request.user!.id, actualStart: now, observations },
+            });
+            await notifyRole({
+              roleCode: "DIR_GENERAL",
+              type: "autre",
+              priority: "high",
+              title: `BAT à contre-valider — ${manuscript.manuscriptNumber}`,
+              body: `${request.user!.username} a validé le BAT Final de « ${manuscript.title} ». Votre contre-validation est requise pour autoriser l'impression.`,
+              entityType: "manuscript",
+              entityId: id,
+            });
+            await writeAuditLog({
+              userId: request.user!.id,
+              action: "validate",
+              entityType: "manuscript",
+              entityId: id,
+              oldValues: { statusCode: targetStatus.code },
+              newValues: { preValidated: true, advanced: false, observations },
+              ipAddress: request.ip,
+            });
+            return reply.send({
+              advanced: false,
+              pending_counter_validation: true,
+              message: "BAT validé — en attente de la contre-validation de la Direction générale pour autoriser l'impression.",
+            });
+          }
+          // Déjà pré-validé par un non-DG : seule la Direction générale contre-valide.
           void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { reason: "bat_counter_validation", method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
           return reply.code(403).send({
             code: "forbidden",
             message: "Le BAT est déjà pré-validé : seule la Direction générale peut le contre-valider pour autoriser l'impression.",
           });
         }
-        if (batStep.preValidatedBy === request.user!.id) {
-          return reply.code(409).send({
-            code: "bat_same_signer",
-            message: "Vous avez déjà pré-validé ce BAT : la contre-validation doit être faite par une autre personne de la Direction.",
-          });
-        }
-        // Autorité confirmée, signataire différent : on laisse l'avancement
-        // normal se poursuivre (le bloc transactionnel plus bas fait passer
-        // l'ouvrage à l'impression et renseigne validatedAt).
+        // Direction générale : signature unique — l'avancement normal se poursuit
+        // (le bloc transactionnel plus bas fait passer l'ouvrage à l'impression et
+        // renseigne validatedAt), qu'une pré-validation d'un non-DG ait eu lieu ou non.
       }
 
       // Ch. 15 §15.4 : l'impression proprement dite suppose un bon de
@@ -567,57 +565,55 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
         const hasFinalAuthority = request.user!.permissions.has("manuscripts:validation");
 
-        if (!impStep?.preValidatedAt) {
-          // 1re signature — PRÉ-VALIDATION. On trace le pré-validateur, on NOTIFIE
-          // la Direction générale, on NE FAIT PAS avancer l'ouvrage.
-          await prisma.manuscriptStep.upsert({
-            where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
-            update: { preValidatedAt: now, preValidatedBy: request.user!.id, observations, actualStart: now },
-            create: { manuscriptId: id, statusId: targetStatus.id, preValidatedAt: now, preValidatedBy: request.user!.id, actualStart: now, observations },
-          });
-          await notifyRole({
-            roleCode: "DIR_GENERAL",
-            type: "autre",
-            priority: "high",
-            title: `Impression à contre-valider — ${manuscript.manuscriptNumber}`,
-            body: `${request.user!.username} a validé le lancement de l'impression de « ${manuscript.title} ». Votre contre-validation est requise pour autoriser l'impression.`,
-            entityType: "manuscript",
-            entityId: id,
-          });
-          await writeAuditLog({
-            userId: request.user!.id,
-            action: "validate",
-            entityType: "manuscript",
-            entityId: id,
-            oldValues: { statusCode: targetStatus.code },
-            newValues: { preValidated: true, advanced: false, observations },
-            ipAddress: request.ip,
-          });
-          return reply.send({
-            advanced: false,
-            pending_counter_validation: true,
-            message: "Impression validée — en attente de la contre-validation de la Direction générale pour autoriser l'impression.",
-          });
-        }
-
-        // 2e signature — CONTRE-VALIDATION. Réservée à la Direction générale et
-        // interdite au pré-validateur (double signature de deux personnes).
+        // DOUBLE VALIDATION ASSOUPLIE POUR LA DIRECTION GÉNÉRALE (demande
+        // opérateur 12/11/2026) : la DG EST l'autorité de contre-validation.
+        //   • DG (« manuscripts:validation ») → UNE seule signature, l'impression
+        //     est autorisée directement ;
+        //   • opérateur impression / magasinier / DAF → 1re signature
+        //     (pré-validation), puis contre-validation par la DG.
         if (!hasFinalAuthority) {
+          if (!impStep?.preValidatedAt) {
+            // 1re signature — PRÉ-VALIDATION. On trace le pré-validateur, on NOTIFIE
+            // la Direction générale, on NE FAIT PAS avancer l'ouvrage.
+            await prisma.manuscriptStep.upsert({
+              where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
+              update: { preValidatedAt: now, preValidatedBy: request.user!.id, observations, actualStart: now },
+              create: { manuscriptId: id, statusId: targetStatus.id, preValidatedAt: now, preValidatedBy: request.user!.id, actualStart: now, observations },
+            });
+            await notifyRole({
+              roleCode: "DIR_GENERAL",
+              type: "autre",
+              priority: "high",
+              title: `Impression à contre-valider — ${manuscript.manuscriptNumber}`,
+              body: `${request.user!.username} a validé le lancement de l'impression de « ${manuscript.title} ». Votre contre-validation est requise pour autoriser l'impression.`,
+              entityType: "manuscript",
+              entityId: id,
+            });
+            await writeAuditLog({
+              userId: request.user!.id,
+              action: "validate",
+              entityType: "manuscript",
+              entityId: id,
+              oldValues: { statusCode: targetStatus.code },
+              newValues: { preValidated: true, advanced: false, observations },
+              ipAddress: request.ip,
+            });
+            return reply.send({
+              advanced: false,
+              pending_counter_validation: true,
+              message: "Impression validée — en attente de la contre-validation de la Direction générale pour autoriser l'impression.",
+            });
+          }
+          // Déjà pré-validé par un non-DG : seule la Direction générale contre-valide.
           void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { reason: "impression_counter_validation", method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
           return reply.code(403).send({
             code: "forbidden",
             message: "L'impression est déjà pré-validée : seule la Direction générale peut la contre-valider pour autoriser l'impression.",
           });
         }
-        if (impStep.preValidatedBy === request.user!.id) {
-          return reply.code(409).send({
-            code: "impression_same_signer",
-            message: "Vous avez déjà pré-validé cette impression : la contre-validation doit être faite par une autre personne de la Direction.",
-          });
-        }
-        // Autorité confirmée, signataire différent : l'avancement normal se
-        // poursuit (le bloc transactionnel plus bas fait passer l'ouvrage à
-        // l'étape suivante et renseigne validatedAt).
+        // Direction générale : signature unique — l'avancement normal se poursuit
+        // (le bloc transactionnel plus bas fait passer l'ouvrage à l'étape suivante
+        // et renseigne validatedAt), qu'une pré-validation d'un non-DG ait eu lieu ou non.
       }
 
       // Contractualisation (circuit D-010 : BAT Final → Contractualisation →
@@ -1384,7 +1380,14 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         pre_validated_at: step?.preValidatedAt ?? null,
         pre_validator: preValidator ? { id: preValidator.id, username: preValidator.username } : null,
         // Ce que l'utilisateur courant peut faire maintenant :
-        can_pre_validate: atDouble && !preValidated && canSubmit,
+        //   • can_pre_validate : poser la validation sur une étape non encore
+        //     signée — l'opérateur habilité (1re signature) OU la DG (signature
+        //     unique, voir single_signature) ;
+        //   • single_signature : la DG valide en UNE seule signature (demande
+        //     opérateur 12/11) — pas d'attente de contre-validation ;
+        //   • can_counter_validate : la DG contre-signe la pré-validation d'un non-DG.
+        can_pre_validate: atDouble && !preValidated && (canSubmit || hasFinalAuthority),
+        single_signature: atDouble && !preValidated && hasFinalAuthority,
         can_counter_validate: atDouble && preValidated && hasFinalAuthority && step?.preValidatedBy !== request.user!.id,
         is_pre_validator: Boolean(step?.preValidatedBy && step.preValidatedBy === request.user!.id),
         ...(bat ?? {}),

@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-dg-signature-unique-impression-bat",
+      version: "2026.11",
+      title: "Nouveauté — La Direction générale valide l'impression (et le BAT) en une seule signature",
+      body: "Le lancement de l'impression et la validation du BAT Final demandaient deux signatures de deux personnes. Désormais : quand c'est la Direction générale qui valide, UNE seule signature suffit (elle est l'autorité de contre-validation, inutile de se contre-signer soi-même) ; quand c'est le responsable magasinier, le DAF ou l'opérateur d'impression qui valide, cela reste une pré-validation soumise à la contre-signature de la Direction générale. Rappel : le lancement reste bloqué tant qu'aucun bon de commande n'a été TRANSMIS à l'imprimeur (le bon doit passer de « Brouillon » à « Transmis » via « Faire avancer » sur le bon de commande).",
+      permissionModules: ["manuscripts", "bat", "printing"],
+      departmentCodes: ["DG", "INFOG", "STOCK", "FIN"],
+    },
+    {
       slug: "2026-11-bon-commande-pdf-fidele-impression",
       version: "2026.11",
       title: "Correction — Le bon de commande transféré est identique à la version imprimée",

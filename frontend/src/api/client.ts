@@ -3286,6 +3286,7 @@ export function updatePurchaseOrder(id: string, input: {
   delivery_location_id?: string | null;
   quantity_tolerance_pct?: number | null;
   printer_instructions?: string | null;
+  printer_id?: string;
 }) {
   return request<PurchaseOrder>(`/api/v1/purchase-orders/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
@@ -3331,7 +3332,7 @@ export interface PurchaseOrder {
   deliveryDue?: string | null;
   deliveryLocationId?: string | null;
   quantityTolerancePct?: string | null;
-  printer?: { partner: {
+  printer?: { id?: string; partner: {
     firstName: string; lastName: string;
     city?: string | null; phone?: string | null; email?: string | null;
     niu?: string | null; rccm?: string | null; bankAccount?: string | null;

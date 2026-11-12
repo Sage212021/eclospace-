@@ -528,6 +528,8 @@ export default async function printingRoutes(fastify: FastifyInstance) {
         delivery_location_id: z.string().uuid().nullish(),
         quantity_tolerance_pct: z.number().nonnegative().nullish(),
         printer_instructions: z.string().max(2000).nullish(),
+        // Correction de l'imprimeur (erreur de saisie) : autorisée au brouillon.
+        printer_id: z.string().uuid().optional(),
       });
       const parsed = schema.safeParse(request.body ?? {});
       if (!parsed.success) {
@@ -539,6 +541,11 @@ export default async function printingRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ code: "po_not_draft", message: "Un bon de commande ne se modifie qu'au brouillon, avant son approbation." });
       }
       const d = parsed.data;
+      // Changement d'imprimeur : on vérifie que la fiche existe (carnet).
+      if (d.printer_id) {
+        const printer = await prisma.printer.findUnique({ where: { id: d.printer_id }, select: { id: true } });
+        if (!printer) return reply.code(404).send({ code: "printer_not_found", message: "Imprimeur introuvable dans le carnet." });
+      }
       const updated = await prisma.purchaseOrder.update({
         where: { id },
         data: {
@@ -546,6 +553,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           deliveryLocationId: d.delivery_location_id !== undefined ? d.delivery_location_id : undefined,
           quantityTolerancePct: d.quantity_tolerance_pct !== undefined ? d.quantity_tolerance_pct : undefined,
           printerInstructions: d.printer_instructions !== undefined ? (d.printer_instructions?.trim() || null) : undefined,
+          printerId: d.printer_id ?? undefined,
         },
       });
       await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "purchase_order", entityId: id, newValues: { edited: true }, ipAddress: request.ip });
@@ -563,9 +571,24 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       }
-      const po = await prisma.purchaseOrder.findUnique({ where: { id } });
+      const po = await prisma.purchaseOrder.findUnique({ where: { id }, include: { _count: { select: { goodsReceipts: true } } } });
       if (!po) {
         return reply.code(404).send({ code: "not_found", message: "Bon de commande introuvable." });
+      }
+
+      // Bouton « Faire avancer / Reculer » à double sens (demande opérateur 12/11) :
+      // on peut revenir en arrière (ex. jusqu'au brouillon) pour corriger une erreur
+      // — SAUF si une réception a déjà été enregistrée (reculer fausserait le suivi
+      // des livraisons). L'ordre du circuit sert à détecter un retour en arrière.
+      const PO_ORDER = ["draft", "approved", "sent", "in_production", "completed"];
+      const curIdx = PO_ORDER.indexOf(po.status);
+      const tgtIdx = PO_ORDER.indexOf(parsed.data.status);
+      const isBackward = curIdx >= 0 && tgtIdx >= 0 && tgtIdx < curIdx;
+      if (isBackward && po._count.goodsReceipts > 0) {
+        return reply.code(409).send({
+          code: "po_has_receipts",
+          message: "Ce bon a déjà une réception enregistrée : impossible de revenir en arrière. Annulez la réception d'abord.",
+        });
       }
 
       if (parsed.data.status === PurchaseOrderStatus.approved) {

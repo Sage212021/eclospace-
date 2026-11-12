@@ -1556,6 +1556,21 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-conversation-sage-dg-debloquee",
+      version: "2026.11",
+      title: "Correction — La conversation SAGE ↔ Direction générale répond à nouveau",
+      body: "Dans le fil où SAGE écrit de lui-même au DG (« SAGE — Suivi éditorial »), quand le DG répondait, SAGE ne répondait pas (le fil semblait bloqué). En cause : ce fil commence par un message de SAGE, ce que l'assistant n'acceptait pas comme point de départ. C'est corrigé : le DG peut échanger dans ce fil exactement comme dans une conversation SAGE ordinaire, y compris les réponses longues (rédaction complète, sans coupure).",
+      departmentCodes: ["DG"],
+    },
+    {
+      slug: "2026-11-pdf-entete-bandeau-officiel",
+      version: "2026.11",
+      title: "Nouveauté — En-tête officiel (bandeau Éclosion) sur les PDF téléchargés et transférés",
+      body: "Les PDF générés (bon de commande, factures, relevés…) — y compris celui que vous transférez à un collègue via « ↗ Transférer » — portent désormais le même en-tête à bandeau que la version imprimée : « Éclosion Édition Sarl » et les trois métiers (Édition du livre · Conception et réalisation des supports de communication · Imprimerie offset et numérique). Le document transféré correspond ainsi exactement à la version officielle imprimée.",
+      permissionModules: ["printing", "finance"],
+      departmentCodes: ["INFOG", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-bilan-tresorerie-detaille-apercu",
       version: "2026.11",
       title: "Nouveauté — Bilan de trésorerie détaillé (chaque entrée et sortie) + aperçu",

@@ -78,7 +78,27 @@ function houseHeader(doc: jsPDF): number {
     }
   }
 
-  const y = Math.max(top + logoH, cy) + 3;
+  // Mention centrale officielle (identité + métiers), reprise du papier à en-tête
+  // physique et des documents imprimés (HTML) — pour que le PDF téléchargé/transféré
+  // ait EXACTEMENT le même en-tête à bandeau que la version imprimée.
+  const cx = (L + R) / 2;
+  let by = Math.max(top + logoH, cy) + 4;
+  doc.setFont("times", "bold");
+  doc.setFontSize(12.5);
+  doc.setTextColor(...INK);
+  doc.text("Éclosion Édition Sarl", cx, by, { align: "center" });
+  by += 4.4;
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...MUTED);
+  let svcSize = 7.4;
+  doc.setFontSize(svcSize);
+  const svc = "Édition du livre   |   Conception et réalisation des supports de communication   |   Imprimerie offset et numérique";
+  const svcW = doc.getTextWidth(svc);
+  if (svcW > CONTENT_W) { svcSize = svcSize * (CONTENT_W / svcW) * 0.98; doc.setFontSize(svcSize); }
+  doc.text(svc, cx, by, { align: "center" });
+  by += 3;
+
+  const y = by + 1;
   // Filet noir (62 %) + or (38 %).
   doc.setFillColor(...INK);
   doc.rect(L, y, CONTENT_W * 0.62, 0.9, "F");

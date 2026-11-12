@@ -490,13 +490,27 @@ export async function runConversationReply(assistantMessageId: string): Promise<
       return;
     }
 
+    // L'API exige que la conversation ENVOYÉE commence par un tour « user ». Or un
+    // fil « SAGE → DG » s'ouvre par des messages PROACTIFS de SAGE (rôle assistant) :
+    // tant que le DG n'avait pas encore écrit, ces messages d'ouverture plaçaient un
+    // rôle « assistant » en tête → l'API refusait et la réponse échouait (fil
+    // « bloqué », pas de réponse). On déplace donc ces messages d'ouverture dans le
+    // contexte système pour que la conversation commence bien par le 1er message du
+    // DG, exactement comme une conversation SAGE ordinaire.
+    const firstUserIdx = messages.findIndex((m) => m.role === "user");
+    const leadingAssistant = firstUserIdx > 0 ? messages.slice(0, firstUserIdx) : [];
+    const convoMessages = firstUserIdx > 0 ? messages.slice(firstUserIdx) : messages;
+    const leadingContext = leadingAssistant.length
+      ? "Messages déjà adressés par SAGE au DG dans ce fil (pour contexte — n'y répondez pas, répondez au dernier message du DG) :\n\n" + leadingAssistant.map((m) => m.content).join("\n\n---\n\n")
+      : "";
+
     // Contexte : la consigne de comportement + la mémoire validée de la maison
     // + l'instantané RÉEL du catalogue d'Eclospace (sans rien inventer).
     const [catalogue, knowledge] = await Promise.all([
       buildCatalogueContext().catch(() => ""),
       buildKnowledgeContext().catch(() => ""),
     ]);
-    const system = [ASSISTANT_SYSTEM, DOCUMENT_COMPLETENESS, knowledge, catalogue].filter(Boolean).join("\n\n");
+    const system = [ASSISTANT_SYSTEM, DOCUMENT_COMPLETENESS, knowledge, catalogue, leadingContext].filter(Boolean).join("\n\n");
 
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
@@ -505,13 +519,16 @@ export async function runConversationReply(assistantMessageId: string): Promise<
     // ET le Web (recherche côté serveur Anthropic), puis répondre. Lecture seule ;
     // les documents rencontrés sont proposés au DG, les sources web sont citées.
     const docs = new Map<string, DocAttachment>();
-    const convo: { role: "user" | "assistant"; content: unknown }[] = messages.map((m) => ({ role: m.role, content: m.content }));
+    const convo: { role: "user" | "assistant"; content: unknown }[] = convoMessages.map((m) => ({ role: m.role, content: m.content }));
     // VISION : on joint les images du DERNIER message utilisateur (le tour en
     // cours) comme blocs d'image, pour que SAGE les « voie ». On se borne au tour
-    // courant (coût maîtrisé : les images ne sont pas renvoyées à chaque tour).
+    // courant (coût maîtrisé : les images ne sont pas renvoyées à chaque tour). Le
+    // dernier message du DG est toujours le dernier de l'historique, quel que soit
+    // le nombre de messages d'ouverture déplacés en contexte.
     const lastIdx = convo.length - 1;
+    const lastHist = history[history.length - 1];
     if (lastIdx >= 0 && convo[lastIdx].role === "user") {
-      const lastAtts = Array.isArray(history[lastIdx]?.attachments) ? (history[lastIdx].attachments as unknown[]) : [];
+      const lastAtts = Array.isArray(lastHist?.attachments) ? (lastHist.attachments as unknown[]) : [];
       const imgs: { base64: string; mediaType: SageImageMedia }[] = [];
       for (const a of lastAtts) {
         const u = a as Partial<UploadAttachment> | null;

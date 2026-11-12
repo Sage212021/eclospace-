@@ -1556,6 +1556,13 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-sage-reponses-vides-corrigees",
+      version: "2026.11",
+      title: "Correction — SAGE ne renvoie plus de réponses vides ou incomplètes",
+      body: "Il arrivait que SAGE (y compris dans « Échanger avec SAGE ») réponde de façon vide ou très partielle, surtout sur des questions qui l'amènent à enchaîner plusieurs recherches (catalogue, dossier, Web). Deux améliorations : SAGE dispose désormais de plus d'étapes pour mener ses recherches à terme, et un filet de sécurité garantit qu'une vraie réponse est toujours rédigée (même quand les recherches ont été nombreuses) — fini le « (réponse vide) ». Les réponses longues vont jusqu'au bout.",
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-conversation-sage-dg-debloquee",
       version: "2026.11",
       title: "Correction — La conversation SAGE ↔ Direction générale répond à nouveau",

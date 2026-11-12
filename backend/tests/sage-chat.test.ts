@@ -24,6 +24,11 @@ let docRef = "";
 // lieu de s'arrêter au 1ᵉʳ article.
 let longDoc = false;
 let longDocStep = 0;
+// Quand vrai, le faux modèle appelle TOUJOURS un outil tant que des outils sont
+// disponibles (jamais de réponse finale dans la boucle) → épuise le budget
+// d'étapes. Sert à vérifier le filet de sécurité anti-réponse-vide : un dernier
+// appel SANS outils doit produire une vraie réponse.
+let loopTools = false;
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
@@ -38,6 +43,17 @@ vi.mock("@anthropic-ai/sdk", () => {
         const msgs = args.messages ?? [];
         const last = msgs[msgs.length - 1];
         const lastIsToolResult = !!last && Array.isArray(last.content) && (last.content as Array<{ type?: string }>).some((c) => c?.type === "tool_result");
+        if (loopTools) {
+          const hasTools = Array.isArray(args.tools) && args.tools.length > 0;
+          // Tant qu'il a des outils, le modèle rappelle un outil (jamais de texte) ;
+          // sans outils (l'appel de secours), il rédige enfin sa réponse.
+          if (hasTools) {
+            return { model: "claude-sonnet-5", stop_reason: "tool_use", usage: { input_tokens: 80, output_tokens: 20 },
+              content: [{ type: "tool_use", id: "loop_" + Math.random().toString(36).slice(2), name: "dossier_manuscrit", input: { reference: "LOOP-INEXISTANT" } }] };
+          }
+          return { model: "claude-sonnet-5", stop_reason: "end_turn", usage: { input_tokens: 80, output_tokens: 120 },
+            content: [{ type: "text", text: "Voici enfin la synthèse complète après mes recherches." }] };
+        }
         if (longDoc) {
           const isContinuation = !!last && last.role === "assistant";
           if (!isContinuation) {
@@ -199,6 +215,24 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     const sentMessages = (lastCall?.messages ?? []) as Array<{ role: string }>;
     expect(sentMessages[0]?.role).toBe("user");
     expect(lastCall?.system ?? "").toContain(brief);
+  });
+
+  it("ne renvoie JAMAIS une réponse vide, même si la boucle d'outils s'épuise (filet de sécurité)", async () => {
+    loopTools = true;
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+      const convId = created.json().id as string;
+      const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${convId}/messages`, headers: { cookie: dgCookie }, payload: { content: "Fais le point complet sur plusieurs dossiers." } });
+      expect(msg.statusCode).toBe(202);
+      const assistant = await waitMessage(msg.json().assistant_message_id);
+      // Malgré l'épuisement des allers-retours d'outils, un dernier appel SANS
+      // outils produit une vraie réponse — jamais « (réponse vide) ».
+      expect(assistant.status).toBe("done");
+      expect(assistant.content).toContain("synthèse complète");
+      expect(assistant.content).not.toBe("(réponse vide)");
+    } finally {
+      loopTools = false;
+    }
   });
 
   it("rédige un document long SANS s'arrêter au 1ᵉʳ article (continuation après coupure de jetons)", async () => {

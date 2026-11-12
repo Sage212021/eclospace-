@@ -436,6 +436,11 @@ async function executeTool(name: string, input: Record<string, unknown>, docs: M
 // rapport de plusieurs pages.
 const SAGE_MAX_TOKENS = 8192;
 const CONTINUATION_LIMIT = 8;
+// Nombre maximal d'allers-retours d'outils (recherche ERP, lecture de manuscrit,
+// recherche web…) avant la réponse finale. Relevé de 8 à 16 : une question qui
+// enchaîne plusieurs recherches ne doit pas épuiser le budget et renvoyer une
+// réponse vide.
+const MAX_TOOL_STEPS = 16;
 
 // Consigne de COMPLÉTUDE (Lot « SAGE — documents longs ») : un document demandé
 // est rédigé EN ENTIER, jamais écourté ni résumé. Ajoutée au système pour que
@@ -564,7 +569,12 @@ export async function runConversationReply(assistantMessageId: string): Promise<
         .join("\n");
 
     let finalText = "";
-    for (let step = 0; step < 8; step++) {
+    let answered = false;
+    // Dernier texte de « narration » produit AVANT un appel d'outil : on le garde
+    // comme filet de sécurité si, à l'épuisement des étapes, aucune réponse finale
+    // n'a été obtenue (évite une réponse totalement vide).
+    let lastNarrative = "";
+    for (let step = 0; step < MAX_TOOL_STEPS; step++) {
       const resp = await callModel();
       const blocks = resp.content as Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown>; content?: unknown }>;
       // Recherche web serveur longue : la réponse peut être « en pause » → on la
@@ -599,8 +609,12 @@ export async function runConversationReply(assistantMessageId: string): Promise<
           if (!more) break;
           finalText += more;
         }
+        answered = true;
         break;
       }
+      // Étape d'outil : on garde le texte de narration éventuel (filet de sécurité).
+      const narration = textOfBlocks(resp.content).trim();
+      if (narration) lastNarrative = narration;
       convo.push({ role: "assistant", content: resp.content });
       const results = [];
       for (const tu of toolUses) {
@@ -609,6 +623,35 @@ export async function runConversationReply(assistantMessageId: string): Promise<
       }
       convo.push({ role: "user", content: results });
     }
+
+    // FILET DE SÉCURITÉ anti-réponse-vide : si la boucle d'outils s'est épuisée
+    // sans réponse finale (ou si la réponse est vide), on relance UN dernier appel
+    // SANS outils — SAGE dispose déjà de tous les résultats d'outils dans `convo`,
+    // il lui reste à rédiger la réponse. On applique la même continuation (jetons).
+    if (!answered || !finalText.trim()) {
+      try {
+        const last = await client.messages.create({ model: modelId, max_tokens: SAGE_MAX_TOKENS, system, messages: convo as never });
+        let t = textOfBlocks(last.content).trim();
+        let stop: string | null = last.stop_reason ?? null;
+        for (let c = 0; c < CONTINUATION_LIMIT && stop === "max_tokens"; c++) {
+          let cont: { content: unknown[]; stop_reason?: string | null };
+          try {
+            cont = await client.messages.create({ model: modelId, max_tokens: SAGE_MAX_TOKENS, system, messages: [...convo, { role: "assistant", content: t }] as never });
+          } catch {
+            break;
+          }
+          stop = cont.stop_reason ?? null;
+          const more = textOfBlocks(cont.content);
+          if (!more) break;
+          t += more;
+        }
+        if (t.trim()) finalText = t.trim();
+      } catch {
+        /* le dernier appel a échoué : on retombe sur la narration déjà produite */
+      }
+    }
+    // Dernier recours : la narration produite avant un outil, plutôt qu'un vide.
+    if (!finalText.trim() && lastNarrative) finalText = lastNarrative;
 
     // On NE colle PLUS de liste d'URLs en pied de réponse : SAGE cite ses
     // sources NATURELLEMENT dans le fil du texte (comme un éditeur cultivé),

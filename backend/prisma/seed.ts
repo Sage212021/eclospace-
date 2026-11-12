@@ -1556,6 +1556,21 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-relecteur-ia-lit-tout-fichier",
+      version: "2026.11",
+      title: "Nouveauté — Le relecteur IA lit désormais tout type de fichier",
+      body: "Le relecteur IA (rapports d'évaluation, corrections BAT1 / BAT2) ne lisait de façon fiable que les Word (.docx), PDF, images et textes simples ; d'autres formats étaient refusés. Il lit maintenant aussi les OpenDocument (.odt), les RTF, les EPUB, et — en dernier recours — il extrait au mieux le texte lisible de n'importe quel fichier (y compris d'anciens formats ou des fichiers mal identifiés). Vous pouvez donc lancer une évaluation ou une correction BAT sur un fichier quel que soit son format, du moment qu'il contient du texte. (Un fichier purement binaire, sans aucun texte, reste signalé clairement.)",
+      permissionModules: ["bat", "manuscripts", "production"],
+      departmentCodes: ["DIRED", "INFOG", "DG"],
+    },
+    {
+      slug: "2026-11-sage-reponses-vides-corrigees",
+      version: "2026.11",
+      title: "Correction — SAGE ne renvoie plus de réponses vides ou incomplètes",
+      body: "Il arrivait que SAGE (y compris dans « Échanger avec SAGE ») réponde de façon vide ou très partielle, surtout sur des questions qui l'amènent à enchaîner plusieurs recherches (catalogue, dossier, Web). Deux améliorations : SAGE dispose désormais de plus d'étapes pour mener ses recherches à terme, et un filet de sécurité garantit qu'une vraie réponse est toujours rédigée (même quand les recherches ont été nombreuses) — fini le « (réponse vide) ». Les réponses longues vont jusqu'au bout.",
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-conversation-sage-dg-debloquee",
       version: "2026.11",
       title: "Correction — La conversation SAGE ↔ Direction générale répond à nouveau",

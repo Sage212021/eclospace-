@@ -175,6 +175,32 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(system).toContain("UNIQUE SAGE");
   });
 
+  it("répond dans un fil ouvert par SAGE (message proactif au DG) : le fil n'est PAS bloqué", async () => {
+    // Reproduit le fil « SAGE → DG » : il COMMENCE par un message proactif de SAGE
+    // (rôle assistant). Avant correctif, la réponse envoyée au modèle débutait par
+    // un rôle « assistant » → l'API refusait et la réponse du DG échouait (fil bloqué).
+    const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const convId = created.json().id as string;
+    const owner = (await prisma.aiConversation.findUniqueOrThrow({ where: { id: convId } })).ownerId;
+    const brief = `Point du jour ${rnd()} : deux tâches en retard à surveiller.`;
+    // Message d'ouverture PROACTIF de SAGE (assistant), comme runDirectionBrief.
+    await prisma.aiConversationMessage.create({ data: { conversationId: convId, role: "assistant", status: "done", content: brief, createdBy: owner } });
+
+    // Le DG répond : SAGE doit répondre normalement (pas d'erreur).
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${convId}/messages`, headers: { cookie: dgCookie }, payload: { content: "Merci. Peux-tu détailler ces points ?" } });
+    expect(msg.statusCode).toBe(202);
+    const assistant = await waitMessage(msg.json().assistant_message_id);
+    expect(assistant.status).toBe("done");
+    expect(assistant.content.length).toBeGreaterThan(0);
+
+    // La conversation ENVOYÉE au modèle commence bien par un tour « user » (le
+    // message d'ouverture de SAGE est déplacé en contexte système).
+    const lastCall = calls[calls.length - 1];
+    const sentMessages = (lastCall?.messages ?? []) as Array<{ role: string }>;
+    expect(sentMessages[0]?.role).toBe("user");
+    expect(lastCall?.system ?? "").toContain(brief);
+  });
+
   it("rédige un document long SANS s'arrêter au 1ᵉʳ article (continuation après coupure de jetons)", async () => {
     longDoc = true;
     longDocStep = 0;

@@ -197,6 +197,22 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
     }
   }
 
+  // Bouton « Reculer » (double sens) : revient à l'étape précédente du bon — ex.
+  // jusqu'au Brouillon pour corriger une erreur (imprimeur, livraison…). Bloqué
+  // par le serveur si une réception a déjà été enregistrée.
+  async function handleRecedePo(po: PurchaseOrder) {
+    const prev = { approved: "draft", sent: "approved", in_production: "sent", completed: "in_production" } as Record<string, string>;
+    const prevStatus = prev[po.status];
+    if (!prevStatus) return;
+    try {
+      await updatePurchaseOrderStatus(po.id, prevStatus);
+      await refresh();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec du retour en arrière.");
+    }
+  }
+
   async function handleReceipt(po: PurchaseOrder) {
     const quantity = Number(window.prompt("Quantité reçue", po.orderedQuantity.toString()) ?? "0");
     if (!quantity) return;
@@ -321,18 +337,25 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o, sign)} onDownloadPdf={() => downloadPurchaseOrderPdf(po, sign)} />
             <button onClick={() => setTransferPo(po)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>↗ Transférer</button>
           </div>
-          {canValidate && ["draft", "approved", "sent", "in_production"].includes(po.status) && (
-            <button onClick={() => handleAdvancePo(po)} style={secondaryButtonStyle}>
-              Faire avancer →
-            </button>
-          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {canValidate && ["approved", "sent", "in_production", "completed"].includes(po.status) && (po.goodsReceipts?.length ?? 0) === 0 && (
+              <button onClick={() => handleRecedePo(po)} style={secondaryButtonStyle} title="Revenir à l'étape précédente (ex. jusqu'au brouillon) pour corriger une erreur">
+                ← Reculer
+              </button>
+            )}
+            {canValidate && ["draft", "approved", "sent", "in_production"].includes(po.status) && (
+              <button onClick={() => handleAdvancePo(po)} style={secondaryButtonStyle}>
+                Faire avancer →
+              </button>
+            )}
+          </div>
           {canManage && po.status !== "draft" && (
             <button onClick={() => handleReceipt(po)} style={secondaryButtonStyle}>
               Enregistrer une réception
             </button>
           )}
 
-          <PoEditPanel po={po} canManage={canManageBon} locations={locations} sign={sign} onSaved={refresh} onError={setError} />
+          <PoEditPanel po={po} canManage={canManageBon} locations={locations} printers={printers} sign={sign} onSaved={refresh} onError={setError} />
 
           {(po.goodsReceipts ?? []).length > 0 && (
             <div style={{ marginTop: 8 }}>
@@ -729,25 +752,22 @@ function PurchaseOrderPreview({ po, sign }: { po: PurchaseOrder; sign?: Contract
 // champs (livraison, tolérance, consignes) n'est possible qu'au BROUILLON ; une
 // fois le bon approuvé/transmis, il est figé (lecture seule) mais reste
 // prévisualisable. Les consignes seules restent modifiables après coup.
-function PoEditPanel({ po, canManage, locations, sign, onSaved, onError }: { po: PurchaseOrder; canManage: boolean; locations: StockLocation[]; sign: ContractStampData | null; onSaved: () => Promise<void>; onError: (m: string) => void }) {
+function PoEditPanel({ po, canManage, locations, printers, sign, onSaved, onError }: { po: PurchaseOrder; canManage: boolean; locations: StockLocation[]; printers: Printer[]; sign: ContractStampData | null; onSaved: () => Promise<void>; onError: (m: string) => void }) {
   const [showPreview, setShowPreview] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const isDraft = po.status === "draft";
-  const [form, setForm] = useState({
+  const initial = () => ({
     delivery_due: po.deliveryDue ? po.deliveryDue.slice(0, 10) : "",
     delivery_location_id: po.deliveryLocationId ?? "",
     quantity_tolerance_pct: po.quantityTolerancePct != null ? String(po.quantityTolerancePct) : "",
     printer_instructions: po.printerInstructions ?? "",
+    printer_id: po.printer?.id ?? "",
   });
+  const [form, setForm] = useState(initial);
 
   function startEdit() {
-    setForm({
-      delivery_due: po.deliveryDue ? po.deliveryDue.slice(0, 10) : "",
-      delivery_location_id: po.deliveryLocationId ?? "",
-      quantity_tolerance_pct: po.quantityTolerancePct != null ? String(po.quantityTolerancePct) : "",
-      printer_instructions: po.printerInstructions ?? "",
-    });
+    setForm(initial());
     setEditing(true);
   }
 
@@ -759,6 +779,8 @@ function PoEditPanel({ po, canManage, locations, sign, onSaved, onError }: { po:
         delivery_location_id: form.delivery_location_id || null,
         quantity_tolerance_pct: form.quantity_tolerance_pct.trim() === "" ? null : Number(form.quantity_tolerance_pct),
         printer_instructions: form.printer_instructions,
+        // Correction de l'imprimeur : envoyée seulement si elle change réellement.
+        ...(form.printer_id && form.printer_id !== po.printer?.id ? { printer_id: form.printer_id } : {}),
       });
       await onSaved();
       setEditing(false);
@@ -781,6 +803,12 @@ function PoEditPanel({ po, canManage, locations, sign, onSaved, onError }: { po:
 
       {editing ? (
         <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+          <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Imprimeur (corriger en cas d'erreur)
+            <select style={fieldInput} value={form.printer_id} onChange={(e) => setForm({ ...form, printer_id: e.target.value })}>
+              {!po.printer?.id && <option value="">— {po.printer ? `${po.printer.partner.firstName}${po.printer.partner.lastName ? " " + po.printer.partner.lastName : ""}`.trim() : "Inchangé"} —</option>}
+              {printers.map((p) => <option key={p.id} value={p.id}>{`${p.partner.firstName}${p.partner.lastName ? " " + p.partner.lastName : ""}`.trim()}</option>)}
+            </select>
+          </label>
           <label style={fieldLabel}>Date de livraison souhaitée
             <input type="date" style={fieldInput} value={form.delivery_due} onChange={(e) => setForm({ ...form, delivery_due: e.target.value })} />
           </label>

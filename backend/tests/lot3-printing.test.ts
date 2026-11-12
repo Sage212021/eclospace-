@@ -334,6 +334,38 @@ describe("Impression et fabrication (Lot 3)", () => {
     expect(late.json().code).toBe("po_not_draft");
   });
 
+  it("recule le bon (double sens) pour corriger l'imprimeur, et refuse de reculer après réception", async () => {
+    const manuscript = await createManuscriptWithSignedBat("Manuscrit Bon Reculer");
+    const quote = (await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/print-quotes`, headers: { cookie: adminCookie }, payload: { printer_id: printerId, quantities: [1000] } })).json();
+    await app.inject({ method: "PATCH", url: `/api/v1/print-quotes/${quote.id}`, headers: { cookie: adminCookie }, payload: { amounts: { "1000": 900000 } } });
+    await app.inject({ method: "POST", url: `/api/v1/print-quotes/${quote.id}/select`, headers: { cookie: adminCookie }, payload: { selection_motive: "ok", chosen_quantity: 1000 } });
+    const po = (await app.inject({ method: "POST", url: `/api/v1/print-quotes/${quote.id}/purchase-order`, headers: { cookie: adminCookie }, payload: {} })).json();
+
+    // Un 2e imprimeur dans le carnet (pour la correction).
+    const partner2 = await prisma.partner.create({ data: { category: "imprimeur", firstName: "Imprimerie", lastName: "Centrale" } });
+    const printer2 = (await app.inject({ method: "POST", url: "/api/v1/printers", headers: { cookie: adminCookie }, payload: { partner_id: partner2.id, specialties: ["offset"] } })).json();
+
+    // On avance le bon (figé), puis on RECULE jusqu'au brouillon pour corriger.
+    await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "approved" } });
+    await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "sent" } });
+    const back = await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "draft" } });
+    expect(back.statusCode).toBe(200);
+    expect(back.json().status).toBe("draft");
+
+    // Correction de l'imprimeur au brouillon.
+    const edit = await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}`, headers: { cookie: adminCookie }, payload: { printer_id: printer2.id } });
+    expect(edit.statusCode).toBe(200);
+    expect(edit.json().printerId).toBe(printer2.id);
+
+    // On transmet, on enregistre une réception, puis reculer est REFUSÉ.
+    await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "sent" } });
+    const rec = await app.inject({ method: "POST", url: `/api/v1/purchase-orders/${po.id}/goods-receipts`, headers: { cookie: adminCookie }, payload: { quantity_received: 1000 } });
+    expect(rec.statusCode).toBe(201);
+    const blocked = await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "draft" } });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().code).toBe("po_has_receipts");
+  });
+
   it("exige la validation Direction générale au-delà du seuil de délégation (Ch. 15 §15.3 point 5)", async () => {
     const manuscript = await createManuscriptWithSignedBat("Manuscrit Impression Seuil");
     const quoteResponse = await app.inject({

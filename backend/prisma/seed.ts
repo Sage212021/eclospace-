@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bon-commande-reculer-corriger-imprimeur",
+      version: "2026.11",
+      title: "Nouveauté — Revenir en arrière sur un bon de commande pour corriger une erreur",
+      body: "Le bon de commande peut maintenant RECULER, pas seulement avancer : un bouton « ← Reculer » ramène le bon à l'étape précédente (jusqu'au Brouillon) pour corriger une erreur, même si l'étape « Modifier » avait été dépassée. Et au brouillon, on peut désormais changer l'imprimeur (en cas de mauvais choix) directement dans « Modifier le bon », en plus de la livraison, la tolérance et les consignes. Sécurité : on ne peut plus reculer un bon dont une réception a déjà été enregistrée (il faudrait d'abord annuler la réception).",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "STOCK", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-dg-signature-unique-impression-bat",
       version: "2026.11",
       title: "Nouveauté — La Direction générale valide l'impression (et le BAT) en une seule signature",

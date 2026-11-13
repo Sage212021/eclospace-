@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bon-commande-fiche-technique-tableau",
+      version: "2026.11",
+      title: "Nouveauté — Bon de commande : fiche technique en tableau, toujours sur une page",
+      body: "La fiche technique du bon de commande est de nouveau présentée comme avant : un élément par ligne (Format, Pages, Papier, Reliure, Dos…), valeur à droite, plus lisible. Pour garder le tout sur UNE seule page, les coordonnées de l'imprimeur (adresse, contact, NIU, RCCM, compte) sont désormais regroupées de façon compacte, au lieu d'occuper plusieurs lignes. À l'impression comme dans le PDF transféré, le rendu est identique.",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "STOCK", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-bon-commande-une-page-devis-clair",
       version: "2026.11",
       title: "Nouveauté — Bon de commande sur une seule page + écran devis plus clair",

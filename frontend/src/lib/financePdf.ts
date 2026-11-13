@@ -275,8 +275,11 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
     doc.setFontSize(9);
     doc.setTextColor(...MUTED);
     for (const ex of spec.partyExtra) {
-      doc.text(ex, L, y);
-      y += 4.2;
+      // Repli propre si la ligne dépasse la largeur utile (ex. mentions légales
+      // de l'imprimeur regroupées sur une ligne) — évite tout débordement.
+      const lines = doc.splitTextToSize(pdfSafeSpaces(ex), CONTENT_W) as string[];
+      doc.text(lines, L, y);
+      y += 4.2 * lines.length;
     }
   }
   y += 4;
@@ -340,11 +343,12 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
   }
   y += 6;
 
-  // Tableau secondaire « Fiche technique » en GRILLE à 2 colonnes (libellé :
-  // valeur, deux par ligne) — compact, pour tenir le bon de commande sur une
-  // seule page (demande opérateur : économiser le papier).
+  // Tableau secondaire « Fiche technique » : un élément par ligne (libellé à
+  // gauche, valeur à droite), lignes alternées — rendu FIDÈLE à la version
+  // imprimée demandé par l'opérateur. Lignes resserrées (hauteur réduite) pour
+  // que le bon tienne sur une seule page.
   if (spec.specTable?.rows.length) {
-    if (y > PAGE_H - 34) { footer(doc); doc.addPage(); y = houseHeader(doc); }
+    if (y > PAGE_H - 40) { footer(doc); doc.addPage(); y = houseHeader(doc); }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(...INK);
@@ -353,34 +357,30 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
     doc.setDrawColor(...GOLD);
     doc.setLineWidth(0.5);
     doc.line(L, y, R, y);
-    y += 3.5;
-    const colW = CONTENT_W / 2;
+    y += 1.5;
     const rows = spec.specTable.rows;
-    const drawCell = (k: string, v: string, x: number, yy: number): number => {
+    const rowH = 5.4;
+    rows.forEach(([k, v], i) => {
+      if (y + rowH > PAGE_H - 24) { footer(doc); doc.addPage(); y = houseHeader(doc); }
+      // Fond alterné (ivoire) une ligne sur deux, comme la version imprimée.
+      if (i % 2 === 1) {
+        doc.setFillColor(250, 248, 242);
+        doc.rect(L, y, CONTENT_W, rowH, "F");
+      }
+      const ty = y + 3.7;
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.6);
+      doc.setFontSize(8.8);
       doc.setTextColor(...MUTED);
-      const klabel = `${k} : `;
-      doc.text(klabel, x, yy);
-      const lw = doc.getTextWidth(klabel);
+      doc.text(pdfSafeSpaces(k), L + 2, ty);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(...INK);
-      const vLines = doc.splitTextToSize(v, colW - lw - 4) as string[];
-      doc.text(vLines, x + lw, yy);
-      return vLines.length;
-    };
-    for (let i = 0; i < rows.length; i += 2) {
-      const left = rows[i];
-      const right = rows[i + 1];
-      // Hauteur de la paire = max des deux cellules (valeurs parfois sur 2 lignes).
-      const leftLines = (doc.splitTextToSize(left[1], colW - doc.getTextWidth(`${left[0]} : `) - 4) as string[]).length;
-      const rightLines = right ? (doc.splitTextToSize(right[1], colW - doc.getTextWidth(`${right[0]} : `) - 4) as string[]).length : 1;
-      const rh = Math.max(leftLines, rightLines) * 4 + 2;
-      if (y + rh > PAGE_H - 24) { footer(doc); doc.addPage(); y = houseHeader(doc); }
-      drawCell(left[0], left[1], L, y + 3.2);
-      if (right) drawCell(right[0], right[1], L + colW, y + 3.2);
-      y += rh;
-    }
+      doc.text(pdfSafeSpaces(v), R - 2, ty, { align: "right" });
+      // Filet de séparation fin en bas de ligne.
+      doc.setDrawColor(231, 226, 212);
+      doc.setLineWidth(0.2);
+      doc.line(L, y + rowH, R, y + rowH);
+      y += rowH;
+    });
     y += 4;
   }
 
@@ -779,15 +779,21 @@ export function purchaseOrderPdf(po: PurchaseOrder, sign?: ContractStampData | n
   // FOURNISSEUR : coordonnées + mentions légales, placées SOUS le nom (comme la
   // version imprimée), puis références de l'ouvrage (auteur, ISBN). Rendu avant le
   // tableau, pas en bloc fourre-tout sous le tableau.
+  // Mentions de l'imprimeur CONDENSÉES : une ligne de coordonnées + une ligne
+  // légale (NIU · RCCM · compte), au lieu de 5 lignes séparées — gain de place
+  // pour tenir sur une page (le repli automatique protège d'un débordement).
   const partyExtra: string[] = [];
   const sup = po.printer?.partner;
   if (sup) {
-    const contact = [sup.phone, sup.email].filter(Boolean).join(" · ");
-    if (sup.city) partyExtra.push(`Adresse : ${sup.city}`);
-    if (contact) partyExtra.push(`Contact : ${contact}`);
-    if (sup.niu) partyExtra.push(`NIU (n° contribuable) : ${sup.niu}`);
-    if (sup.rccm) partyExtra.push(`Registre de commerce (RCCM) : ${sup.rccm}`);
-    if (sup.bankAccount) partyExtra.push(`Compte bancaire : ${sup.bankAccount}`);
+    const contact = [sup.phone, sup.email].filter(Boolean).join(" / ");
+    const coord = [sup.city ? `Adresse : ${sup.city}` : "", contact ? `Contact : ${contact}` : ""].filter(Boolean);
+    if (coord.length) partyExtra.push(coord.join("    ·    "));
+    const legal = [
+      sup.niu ? `NIU : ${sup.niu}` : "",
+      sup.rccm ? `RCCM : ${sup.rccm}` : "",
+      sup.bankAccount ? `Compte : ${sup.bankAccount}` : "",
+    ].filter(Boolean);
+    if (legal.length) partyExtra.push(legal.join("    ·    "));
   }
   const refParts = [author ? `Auteur : ${author}` : "", isbn ? `ISBN : ${isbn}` : ""].filter(Boolean);
   if (refParts.length) partyExtra.push(refParts.join("     "));

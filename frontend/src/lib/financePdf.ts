@@ -340,39 +340,48 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
   }
   y += 6;
 
-  // Tableau secondaire « Fiche technique » (libellé | valeur, lignes zébrées),
-  // reproduisant la version imprimée du bon de commande.
+  // Tableau secondaire « Fiche technique » en GRILLE à 2 colonnes (libellé :
+  // valeur, deux par ligne) — compact, pour tenir le bon de commande sur une
+  // seule page (demande opérateur : économiser le papier).
   if (spec.specTable?.rows.length) {
-    if (y > PAGE_H - 40) { footer(doc); doc.addPage(); y = houseHeader(doc); }
+    if (y > PAGE_H - 34) { footer(doc); doc.addPage(); y = houseHeader(doc); }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(...INK);
     doc.text(spec.specTable.title, L, y);
-    y += 3;
+    y += 2.5;
     doc.setDrawColor(...GOLD);
     doc.setLineWidth(0.5);
     doc.line(L, y, R, y);
-    y += 3;
-    let zebra = false;
-    for (const [k, v] of spec.specTable.rows) {
-      const valLines = doc.splitTextToSize(v, CONTENT_W / 2 - 4) as string[];
-      const rh = Math.max(6.4, valLines.length * 4.2 + 2.4);
-      if (y + rh > PAGE_H - 24) { footer(doc); doc.addPage(); y = houseHeader(doc); }
-      if (zebra) { doc.setFillColor(...ZEBRA); doc.rect(L, y, CONTENT_W, rh, "F"); }
+    y += 3.5;
+    const colW = CONTENT_W / 2;
+    const rows = spec.specTable.rows;
+    const drawCell = (k: string, v: string, x: number, yy: number): number => {
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
+      doc.setFontSize(8.6);
       doc.setTextColor(...MUTED);
-      doc.text(k, L + 2, y + 4.4);
+      const klabel = `${k} : `;
+      doc.text(klabel, x, yy);
+      const lw = doc.getTextWidth(klabel);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(...INK);
-      doc.text(valLines, R - 2, y + 4.4, { align: "right" });
-      doc.setDrawColor(...LINE);
-      doc.setLineWidth(0.2);
-      doc.line(L, y + rh, R, y + rh);
+      const vLines = doc.splitTextToSize(v, colW - lw - 4) as string[];
+      doc.text(vLines, x + lw, yy);
+      return vLines.length;
+    };
+    for (let i = 0; i < rows.length; i += 2) {
+      const left = rows[i];
+      const right = rows[i + 1];
+      // Hauteur de la paire = max des deux cellules (valeurs parfois sur 2 lignes).
+      const leftLines = (doc.splitTextToSize(left[1], colW - doc.getTextWidth(`${left[0]} : `) - 4) as string[]).length;
+      const rightLines = right ? (doc.splitTextToSize(right[1], colW - doc.getTextWidth(`${right[0]} : `) - 4) as string[]).length : 1;
+      const rh = Math.max(leftLines, rightLines) * 4 + 2;
+      if (y + rh > PAGE_H - 24) { footer(doc); doc.addPage(); y = houseHeader(doc); }
+      drawCell(left[0], left[1], L, y + 3.2);
+      if (right) drawCell(right[0], right[1], L + colW, y + 3.2);
       y += rh;
-      zebra = !zebra;
     }
-    y += 6;
+    y += 4;
   }
 
   // Lignes d'information sous le tableau (lieu de livraison, tolérance…).

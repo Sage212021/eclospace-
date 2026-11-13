@@ -881,12 +881,14 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts, sign?: C
   const refsHtml = (author || isbn)
     ? `<div class="meta" style="margin-top:6px">${author ? `<span>${tr("Auteur", "Author")} : <b>${escapeHtml(author)}</b></span>` : ""}${isbn ? `<span>ISBN : <b>${escapeHtml(isbn)}</b></span>` : ""}</div>`
     : "";
+  // Fiche technique en GRILLE à 2 colonnes (compact : bon de commande sur une
+  // seule page, demande opérateur — économiser le papier).
   const specsHtml = specRows.length > 0
-    ? `<div class="meta" style="margin-top:14px"><b>${tr("Fiche technique (à respecter)", "Technical sheet (to comply with)")}</b></div>
-       <table class="lines" style="margin-top:4px"><tbody>${specRows.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="r"><b>${escapeHtml(v)}</b></td></tr>`).join("")}</tbody></table>`
-    : `<div class="meta" style="margin-top:14px"><span style="color:#6b7280">${tr("Fiche technique non renseignée (à compléter à la Maquette).", "Technical sheet not filled in (complete it at layout stage).")}</span></div>`;
+    ? `<div class="meta" style="margin-top:12px"><b>${tr("Fiche technique (à respecter)", "Technical sheet (to comply with)")}</b></div>
+       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;margin-top:4px;font-size:11.5px">${specRows.map(([k, v]) => `<div><span style="color:#6b7280">${escapeHtml(k)} : </span><b>${escapeHtml(v)}</b></div>`).join("")}</div>`
+    : `<div class="meta" style="margin-top:12px"><span style="color:#6b7280">${tr("Fiche technique non renseignée (à compléter à la Maquette).", "Technical sheet not filled in (complete it at layout stage).")}</span></div>`;
   const instrHtml = instructions
-    ? `<div class="meta" style="margin-top:14px"><b>${tr("Consignes à l'imprimeur", "Instructions to the printer")}</b></div><p style="margin:4px 0;font-size:12px;white-space:pre-wrap">${escapeHtml(instructions)}</p>`
+    ? `<div class="meta" style="margin-top:12px"><b>${tr("Consignes à l'imprimeur", "Instructions to the printer")}</b></div><p style="margin:3px 0;font-size:11.5px;white-space:pre-wrap">${escapeHtml(instructions)}</p>`
     : "";
 
   const body = `
@@ -928,7 +930,7 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts, sign?: C
     <div class="totals">
       <div class="ttc"><span>${tr("Total commande", "Order total")}</span><span class="num">${money(po.amount, cur)}</span></div>
     </div>
-    <div style="margin-top:30px; display:flex; justify-content:flex-end; break-inside:avoid">
+    <div style="margin-top:16px; display:flex; justify-content:flex-end; break-inside:avoid">
       <div style="min-width:240px; max-width:320px">
         <div class="party__label">${tr("Pour", "For")} ${escapeHtml(HOUSE.legalName)}</div>
         ${editorSignatureBlock(po.establishedByFunction === "direction" ? sign ?? null : null)}

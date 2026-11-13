@@ -1556,6 +1556,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-bon-commande-une-page-devis-clair",
+      version: "2026.11",
+      title: "Nouveauté — Bon de commande sur une seule page + écran devis plus clair",
+      body: "Deux améliorations à l'impression. (1) Le bon de commande (avec tous ses éléments et la signature/cachet) tient maintenant sur UNE seule page : la fiche technique est présentée sur deux colonnes, à l'impression comme dans le PDF téléchargé/transféré — ça économise le papier. (2) L'écran des devis est plus clair : le menu « Imprimeur à consulter » sert à DEMANDER un nouveau devis (chaque devis appartient à l'imprimeur qui l'a remis — il n'est pas transféré à un autre). Pour changer d'imprimeur : choisissez-le puis « Demander un devis » ; un nouveau devis est créé à son nom. La liste s'intitule désormais « Devis reçus (un par imprimeur) ».",
+      permissionModules: ["printing"],
+      departmentCodes: ["INFOG", "STOCK", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-bon-commande-reculer-corriger-imprimeur",
       version: "2026.11",
       title: "Nouveauté — Revenir en arrière sur un bon de commande pour corriger une erreur",

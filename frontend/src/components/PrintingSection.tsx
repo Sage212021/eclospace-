@@ -283,21 +283,28 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
         </div>
       )}
 
-      {/* Demander un devis : choix de l'imprimeur + hypothèses de tirage. */}
+      {/* Demander un devis : choix de l'imprimeur à CONSULTER + hypothèses de tirage.
+          Ce choix sert à créer un NOUVEAU devis ; il ne modifie pas un devis existant
+          (chaque devis appartient à l'imprimeur qui l'a remis). */}
       {canManage && (
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 10 }}>
-          <label style={fieldLabel}>Imprimeur
-            <select style={fieldInput} value={selPrinter || (printers[0]?.id ?? "")} onChange={(e) => setSelPrinter(e.target.value)} disabled={printers.length === 0}>
-              {printers.length === 0 && <option value="">— aucun —</option>}
-              {printers.map((p) => <option key={p.id} value={p.id}>{`${p.partner.firstName} ${p.partner.lastName}`.trim()}</option>)}
-            </select>
-          </label>
-          <label style={fieldLabel}>Hypothèses de tirage<input style={fieldInput} value={qtys} onChange={(e) => setQtys(e.target.value)} placeholder="500, 1000" /></label>
-          <button onClick={handleRequestQuote} style={{ ...secondaryButtonStyle, marginTop: 0 }}>+ Demander un devis</button>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <label style={fieldLabel}>Imprimeur à consulter
+              <select style={fieldInput} value={selPrinter || (printers[0]?.id ?? "")} onChange={(e) => setSelPrinter(e.target.value)} disabled={printers.length === 0}>
+                {printers.length === 0 && <option value="">— aucun —</option>}
+                {printers.map((p) => <option key={p.id} value={p.id}>{`${p.partner.firstName} ${p.partner.lastName}`.trim()}</option>)}
+              </select>
+            </label>
+            <label style={fieldLabel}>Hypothèses de tirage<input style={fieldInput} value={qtys} onChange={(e) => setQtys(e.target.value)} placeholder="500, 1000" /></label>
+            <button onClick={handleRequestQuote} style={{ ...secondaryButtonStyle, marginTop: 0 }}>+ Demander un devis</button>
+          </div>
+          <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0" }}>
+            Pour changer d'imprimeur : choisissez-le ci-dessus puis « Demander un devis » — un nouveau devis est créé à SON nom. Un devis déjà reçu n'est pas transféré à un autre imprimeur.
+          </p>
         </div>
       )}
 
-      <div style={{ fontSize: 12, fontWeight: 600 }}>Devis</div>
+      <div style={{ fontSize: 12, fontWeight: 600 }}>Devis reçus (un par imprimeur)</div>
       {quotes.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun devis demandé.</p>}
       {quotes.map((quote) => (
         <QuoteRow

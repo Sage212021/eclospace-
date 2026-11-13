@@ -891,7 +891,20 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts, sign?: C
     ? `<div class="meta" style="margin-top:12px"><b>${tr("Consignes à l'imprimeur", "Instructions to the printer")}</b></div><p style="margin:3px 0;font-size:11.5px;white-space:pre-wrap">${escapeHtml(instructions)}</p>`
     : "";
 
+  // Compactage propre au bon de commande : marge @page réduite + espacements
+  // d'en-tête resserrés, pour que le bon tienne sur UNE seule page (demande
+  // opérateur — économiser le papier). Style scopé au document (injecté dans le
+  // corps, comme le DIPE) : les autres documents officiels ne sont pas touchés.
   const body = `
+    <style>
+      @page { margin: 12mm 15mm; }
+      .doc__title { margin-top: 8px; }
+      .meta { margin: 5px 0 10px; }
+      .party { margin: 0 0 10px; }
+      .lh__brand { margin: 4px 0 2px; }
+      .lh__rule { margin: 6px 0 4px; }
+      .foot { margin-top: 18px; }
+    </style>
     <div class="doc__title">${tr("Bon de commande", "Purchase order")}</div>
     <div class="meta">
       <span>${tr("N°", "No.")} <b class="num">${escapeHtml(po.poNumber)}</b></span>

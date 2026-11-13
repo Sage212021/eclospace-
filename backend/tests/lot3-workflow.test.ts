@@ -116,6 +116,37 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     return manuscript;
   }
 
+  // Complète la liste de contrôle ISBN/dépôt légal/métadonnées (Ch. 13 §13.9) :
+  // ISBN d'impression attribué, dépôt légal préparé, métadonnées renseignées.
+  // Nécessaire pour franchir l'étape ATTRIBUTION_REFERENCES (désormais AVANT
+  // l'infographie, D-055).
+  async function completeIsbnCompleteness(manuscriptId: string) {
+    const pool = await app.inject({
+      method: "POST",
+      url: "/api/v1/isbn-pools",
+      headers: { cookie: adminCookie },
+      payload: { prefix: uniqueIsbnPrefix(1), digit_width: 1, range_start: 0, range_end: 9 },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscriptId}/isbn`,
+      headers: { cookie: adminCookie },
+      payload: { format: "print", pool_id: pool.json().id },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscriptId}/legal-deposits`,
+      headers: { cookie: adminCookie },
+      payload: { country: "France", depository: "BnF", copies_required: 2 },
+    });
+    await app.inject({
+      method: "PATCH",
+      url: `/api/v1/manuscripts/${manuscriptId}/metadata`,
+      headers: { cookie: adminCookie },
+      payload: { summary: "Résumé complet", weight_grams: 350, thema_codes: ["FBA"] },
+    });
+  }
+
   it("bloque MISE_EN_PAGE tant qu'aucune fiche technique n'existe (Ch. 11)", async () => {
     const manuscript = await createManuscriptAtMiseEnPage("Manuscrit Workflow Sans Fiche");
     const blocked = await validate(manuscript.id, "MISE_EN_PAGE");
@@ -131,9 +162,17 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
       headers: { cookie: adminCookie },
       payload: { trim_format: "14x21", final_pages: 200, paper_interior: "Offset 80g", paper_interior_gsm: 80, paper_cover: "Couché 250g", binding: "broche" },
     });
+    // Nouvel ordre (D-055) : Mise en page → Attribution des références (ISBN) →
+    // Infographie. On valide la mise en page puis on complète l'ISBN pour
+    // atteindre l'étape Infographie, où se joue la convergence.
     const advanced = await validate(manuscript.id, "MISE_EN_PAGE");
     expect(advanced.statusCode).toBe(200);
-    expect(advanced.json().status).toBe("INFOGRAPHIE");
+    expect(advanced.json().status).toBe("ATTRIBUTION_REFERENCES");
+
+    await completeIsbnCompleteness(manuscript.id);
+    const atInfographie = await validate(manuscript.id, "ATTRIBUTION_REFERENCES");
+    expect(atInfographie.statusCode).toBe(200);
+    expect(atInfographie.json().status).toBe("INFOGRAPHIE");
 
     const blocked = await validate(manuscript.id, "INFOGRAPHIE");
     expect(blocked.statusCode).toBe(409);
@@ -158,7 +197,7 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     });
     const unblocked = await validate(manuscript.id, "INFOGRAPHIE");
     expect(unblocked.statusCode).toBe(200);
-    expect(unblocked.json().status).toBe("ATTRIBUTION_REFERENCES");
+    expect(unblocked.json().status).toBe("VALIDATION_BAT");
   });
 
   it("mène un manuscrit complet de MISE_EN_PAGE à CONTROLE_QUALITE_IMPRESSION (circuit Ch. 11 à 15)", async () => {
@@ -183,43 +222,28 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
       payload: { type: "couverture_1", resolution_dpi: 300, color_mode: "cmjn", rights_origin: "creation_interne" },
     });
 
-    await validate(manuscript.id, "MISE_EN_PAGE");
+    // Nouvel ordre (D-055) : Mise en page → Attribution des références (ISBN) →
+    // Infographie → Validation du BAT.
+    const afterMep = await validate(manuscript.id, "MISE_EN_PAGE");
+    expect(afterMep.statusCode).toBe(200);
+    expect(afterMep.json().status).toBe("ATTRIBUTION_REFERENCES");
 
     // Ch. 13 §13.9 : ATTRIBUTION_REFERENCES bloquée tant que la complétude n'est pas atteinte.
-    const blockedIsbn = await validate(manuscript.id, "INFOGRAPHIE");
-    expect(blockedIsbn.statusCode).toBe(200); // convergence déjà atteinte ci-dessus
     const blockedAttribution = await validate(manuscript.id, "ATTRIBUTION_REFERENCES");
     expect(blockedAttribution.statusCode).toBe(409);
     expect(blockedAttribution.json().code).toBe("isbn_completeness_incomplete");
 
-    const pool = await app.inject({
-      method: "POST",
-      url: "/api/v1/isbn-pools",
-      headers: { cookie: adminCookie },
-      payload: { prefix: uniqueIsbnPrefix(1), digit_width: 1, range_start: 0, range_end: 9 },
-    });
-    await app.inject({
-      method: "POST",
-      url: `/api/v1/manuscripts/${manuscript.id}/isbn`,
-      headers: { cookie: adminCookie },
-      payload: { format: "print", pool_id: pool.json().id },
-    });
-    await app.inject({
-      method: "POST",
-      url: `/api/v1/manuscripts/${manuscript.id}/legal-deposits`,
-      headers: { cookie: adminCookie },
-      payload: { country: "France", depository: "BnF", copies_required: 2 },
-    });
-    await app.inject({
-      method: "PATCH",
-      url: `/api/v1/manuscripts/${manuscript.id}/metadata`,
-      headers: { cookie: adminCookie },
-      payload: { summary: "Résumé complet", weight_grams: 350, thema_codes: ["FBA"] },
-    });
+    await completeIsbnCompleteness(manuscript.id);
 
     const attributed = await validate(manuscript.id, "ATTRIBUTION_REFERENCES");
     expect(attributed.statusCode).toBe(200);
-    expect(attributed.json().status).toBe("VALIDATION_BAT");
+    expect(attributed.json().status).toBe("INFOGRAPHIE");
+
+    // Convergence Maquette/Infographie déjà satisfaite (fiche technique +
+    // pelliculage + couverture déposés ci-dessus) → passage au BAT.
+    const infographie = await validate(manuscript.id, "INFOGRAPHIE");
+    expect(infographie.statusCode).toBe(200);
+    expect(infographie.json().status).toBe("VALIDATION_BAT");
 
     // Ch. 14 §14.6 : VALIDATION_BAT bloquée tant qu'aucun BAT n'est signé.
     const blockedBat = await validate(manuscript.id, "VALIDATION_BAT");

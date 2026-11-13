@@ -25,7 +25,7 @@ describe("propriétaire de production auto-affecté", () => {
   });
   afterAll(async () => { await app.close(); await prisma.$disconnect(); });
 
-  it("valider la mise en page auto-affecte l'infographe propriétaire à l'infographie", async () => {
+  it("valider la mise en page auto-affecte l'infographe propriétaire à l'étape suivante (attribution des références, D-055)", async () => {
     const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Pwd123!");
     const mep = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "MISE_EN_PAGE" } });
     const m = await prisma.manuscript.create({
@@ -38,9 +38,11 @@ describe("propriétaire de production auto-affecté", () => {
     const val = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/MISE_EN_PAGE/validate`, headers: { cookie: adminCookie }, payload: {} });
     expect(val.statusCode).toBe(200);
 
-    // L'étape INFOGRAPHIE (suivante) doit être confiée automatiquement à l'infographe.
-    const infographie = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "INFOGRAPHIE" } });
-    const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: m.id, statusId: infographie.id } });
+    // Depuis D-055, l'étape suivant la mise en page est l'ATTRIBUTION DES
+    // RÉFÉRENCES (toujours dans PROD_OWNER_STEPS) : elle doit être confiée
+    // automatiquement à l'infographe propriétaire.
+    const nextStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "ATTRIBUTION_REFERENCES" } });
+    const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: m.id, statusId: nextStatus.id } });
     expect(step?.responsibleId).toBe(info.id);
   });
 
@@ -54,8 +56,8 @@ describe("propriétaire de production auto-affecté", () => {
 
     const val = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/MISE_EN_PAGE/validate`, headers: { cookie: adminCookie }, payload: {} });
     expect(val.statusCode).toBe(200);
-    const infographie = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "INFOGRAPHIE" } });
-    const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: m.id, statusId: infographie.id } });
+    const nextStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "ATTRIBUTION_REFERENCES" } });
+    const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: m.id, statusId: nextStatus.id } });
     expect(step?.responsibleId ?? null).toBeNull();
   });
 });

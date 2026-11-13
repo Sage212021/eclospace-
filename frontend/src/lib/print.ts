@@ -853,16 +853,19 @@ function supplierLegalHtml(po: PurchaseOrder): string {
   if (!p) return "";
   const rows: string[] = [];
   const add = (label: [string, string], value?: string | null) => {
-    if (value && value.trim()) rows.push(`<span>${tr(label[0], label[1])} : <b>${escapeHtml(value)}</b></span>`);
+    if (value && value.trim()) rows.push(`${tr(label[0], label[1])} : <b>${escapeHtml(value)}</b>`);
   };
-  const contact = [p.phone, p.email].filter(Boolean).join(" · ");
+  const contact = [p.phone, p.email].filter(Boolean).join(" / ");
   add(["Adresse", "Address"], p.city);
   add(["Contact", "Contact"], contact || null);
-  add(["NIU (n° contribuable)", "Taxpayer no. (NIU)"], p.niu);
-  add(["Registre de commerce (RCCM)", "Trade register (RCCM)"], p.rccm);
-  add(["Compte bancaire", "Bank account"], p.bankAccount);
+  add(["NIU", "NIU"], p.niu);
+  add(["RCCM", "RCCM"], p.rccm);
+  add(["Compte", "Account"], p.bankAccount);
   if (rows.length === 0) return "";
-  return `<div class="meta" style="margin-top:4px;font-size:11.5px">${rows.join("")}</div>`;
+  // Mentions légales de l'imprimeur regroupées sur une ou deux lignes serrées
+  // (séparées par « · ») au lieu d'un bloc à retours multiples : gain de place
+  // pour que le bon tienne sur une page (demande opérateur).
+  return `<div style="margin-top:2px;font-size:10.5px;color:#4b5563;line-height:1.55">${rows.join("&nbsp; · &nbsp;")}</div>`;
 }
 
 // Bon de commande imprimeur prêt à imprimer (Ch. 15 §15.4). Récapitule le
@@ -881,12 +884,14 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts, sign?: C
   const refsHtml = (author || isbn)
     ? `<div class="meta" style="margin-top:6px">${author ? `<span>${tr("Auteur", "Author")} : <b>${escapeHtml(author)}</b></span>` : ""}${isbn ? `<span>ISBN : <b>${escapeHtml(isbn)}</b></span>` : ""}</div>`
     : "";
-  // Fiche technique en GRILLE à 2 colonnes (compact : bon de commande sur une
-  // seule page, demande opérateur — économiser le papier).
+  // Fiche technique en TABLEAU (un élément par ligne, libellé à gauche / valeur à
+  // droite, lignes alternées) — rendu fidèle demandé par l'opérateur. Lignes
+  // resserrées (padding réduit) pour que le bon tienne sur une seule page : la
+  // place gagnée vient surtout du bloc fournisseur condensé ci-dessus.
   const specsHtml = specRows.length > 0
-    ? `<div class="meta" style="margin-top:12px"><b>${tr("Fiche technique (à respecter)", "Technical sheet (to comply with)")}</b></div>
-       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;margin-top:4px;font-size:11.5px">${specRows.map(([k, v]) => `<div><span style="color:#6b7280">${escapeHtml(k)} : </span><b>${escapeHtml(v)}</b></div>`).join("")}</div>`
-    : `<div class="meta" style="margin-top:12px"><span style="color:#6b7280">${tr("Fiche technique non renseignée (à compléter à la Maquette).", "Technical sheet not filled in (complete it at layout stage).")}</span></div>`;
+    ? `<div class="meta" style="margin-top:10px"><b>${tr("Fiche technique (à respecter)", "Technical sheet (to comply with)")}</b></div>
+       <table class="spec"><tbody>${specRows.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="r"><b>${escapeHtml(v)}</b></td></tr>`).join("")}</tbody></table>`
+    : `<div class="meta" style="margin-top:10px"><span style="color:#6b7280">${tr("Fiche technique non renseignée (à compléter à la Maquette).", "Technical sheet not filled in (complete it at layout stage).")}</span></div>`;
   const instrHtml = instructions
     ? `<div class="meta" style="margin-top:12px"><b>${tr("Consignes à l'imprimeur", "Instructions to the printer")}</b></div><p style="margin:3px 0;font-size:11.5px;white-space:pre-wrap">${escapeHtml(instructions)}</p>`
     : "";
@@ -900,10 +905,17 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts, sign?: C
       @page { margin: 12mm 15mm; }
       .doc__title { margin-top: 8px; }
       .meta { margin: 5px 0 10px; }
-      .party { margin: 0 0 10px; }
+      .party { margin: 0 0 8px; }
       .lh__brand { margin: 4px 0 2px; }
       .lh__rule { margin: 6px 0 4px; }
-      .foot { margin-top: 18px; }
+      .foot { margin-top: 16px; }
+      /* Fiche technique : tableau compact (libellé / valeur), lignes alternées. */
+      table.spec { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 11.5px; }
+      table.spec td { padding: 3px 10px; border-bottom: 1px solid #e7e2d4; }
+      table.spec td.r { text-align: right; }
+      table.spec tr:nth-child(even) td { background: #faf8f2; }
+      /* Bloc fournisseur condensé : libellé + nom sur une ligne. */
+      .supplier__label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: #6b7280; }
     </style>
     <div class="doc__title">${tr("Bon de commande", "Purchase order")}</div>
     <div class="meta">
@@ -912,8 +924,7 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts, sign?: C
       <span><span class="badge">${escapeHtml(label(PO_STATUS_LABELS, po.status))}</span></span>
     </div>
     <div class="party">
-      <div class="party__label">${tr("Fournisseur (imprimeur)", "Supplier (printer)")}</div>
-      <div class="party__name">${escapeHtml(printer)}</div>
+      <div style="font-size:13px"><span class="supplier__label">${tr("Fournisseur (imprimeur)", "Supplier (printer)")} :</span> <b>${escapeHtml(printer)}</b></div>
       ${supplierLegalHtml(po)}
     </div>
     ${refsHtml}

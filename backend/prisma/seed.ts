@@ -107,12 +107,14 @@ const workflowStatuses: {
   { code: "REECRITURE", label: "Réécriture éditoriale", stepOrder: 7, departmentCode: "CORR", isConditional: true },
   { code: "CORRECTION", label: "Correction éditoriale", stepOrder: 8, departmentCode: "CORR" },
   { code: "MISE_EN_PAGE", label: "Mise en page", stepOrder: 9, departmentCode: "MAQ" },
-  { code: "INFOGRAPHIE", label: "Infographie", stepOrder: 10, departmentCode: "INFOG" },
-  // Ordre corrigé (Lot 3) par rapport au Lot 1 : Ch. 13 §13.9 et Ch. 14 §14.2
-  // exigent tous deux que la complétude ISBN/dépôt légal/métadonnées soit
-  // vérifiée AVANT la constitution du dossier de BAT — l'ordre initial du
-  // Lot 1 (BAT avant attribution des références) contredisait ce texte.
-  { code: "ATTRIBUTION_REFERENCES", label: "Attribution des références", stepOrder: 11, departmentCode: "SECR" },
+  // Ordre (D-055, 13/11/2026) : l'« Attribution des références » (ISBN) est
+  // remontée JUSTE APRÈS la mise en page, AVANT l'infographie — pour que l'ISBN
+  // (et donc le code-barres EAN-13, généré dès qu'un ISBN existe) soit
+  // disponible quand l'infographe conçoit la couverture (4e de couverture).
+  // La contrainte du Lot 3 reste respectée : la complétude ISBN/dépôt légal/
+  // métadonnées (Ch. 13 §13.9 / Ch. 14 §14.2) est toujours vérifiée AVANT le BAT.
+  { code: "ATTRIBUTION_REFERENCES", label: "Attribution des références", stepOrder: 10, departmentCode: "SECR" },
+  { code: "INFOGRAPHIE", label: "Infographie", stepOrder: 11, departmentCode: "INFOG" },
   { code: "VALIDATION_BAT", label: "Validation du BAT Final", stepOrder: 12, departmentCode: "CQ" },
   { code: "CONTRACTUALISATION", label: "Contractualisation", stepOrder: 13, departmentCode: "JURID" },
   { code: "IMPRESSION", label: "Impression", stepOrder: 14, departmentCode: "IMPR" },
@@ -1555,6 +1557,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-isbn-avant-couverture",
+      version: "2026.11",
+      title: "Nouveauté — L'ISBN est attribué plus tôt, avant la couverture",
+      body: "Le circuit de production change d'ordre : l'attribution de l'ISBN passe JUSTE APRÈS la mise en page, AVANT l'infographie. Le nouvel enchaînement est : Mise en page → Attribution de l'ISBN → Infographie (intégration de l'ISBN et du code-barres dans la couverture) → Validation du BAT. Ainsi l'ISBN (et son code-barres) est disponible dès la conception de la couverture, pour l'imprimer sur la 4ᵉ de couverture. Rien ne change dans la façon d'attribuer un ISBN : on peut toujours en attribuer un nouveau, rattacher un ISBN déjà existant, et les doublons restent bloqués. Aucun ouvrage déjà enregistré n'est modifié.",
+      permissionModules: ["manuscripts", "production", "isbn", "bat"],
+      departmentCodes: ["MAQ", "INFOG", "SECR", "DIRED", "DG"],
+    },
     {
       slug: "2026-11-bon-commande-fiche-technique-tableau",
       version: "2026.11",

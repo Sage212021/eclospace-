@@ -5,8 +5,9 @@ import { prisma } from "../src/lib/prisma.js";
 import { createUserWithRole, extractSessionCookie, seedStepDeliverable } from "./helpers.js";
 
 // CLÔTURE DE L'INFOGRAPHIE (demande opérateur 27/09/2026) : même principe que la
-// mise en page — l'infographe affecté valide et choisit qui reçoit la suite
-// (Attribution des références / secrétariat). Directeur éditorial + Responsable
+// mise en page — l'infographe affecté valide et choisit qui reçoit la suite.
+// Depuis D-055 (ISBN remonté avant l'infographie), l'étape qui suit est la
+// VALIDATION DU BAT (contrôle qualité). Directeur éditorial + Responsable
 // production/impression notifiés. Un infographe non affecté ne peut pas clôturer.
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -40,38 +41,28 @@ describe("clôture de l'infographie par l'infographe", () => {
     return m;
   }
 
-  it("l'infographe affecté valide et transmet au secrétariat ; DIRED + RESP production notifiés", async () => {
+  it("l'infographe affecté valide et transmet au contrôle qualité (BAT) ; DIRED + RESP production notifiés", async () => {
     const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");
-    const secr = await createUserWithRole(`secr_${rnd()}`, "ASSISTANT_EDITORIAL", "Secr123!");
+    const cq = await createUserWithRole(`cq_${rnd()}`, "RESP_QUALITE", "Cq123!");
     const dir = await createUserWithRole(`dir_${rnd()}`, "DIR_EDITORIAL", "Dir123!");
     const prod = await createUserWithRole(`prod_${rnd()}`, "RESP_IMPRESSION", "Prod123!");
     const infoCookie = await login(info.username, "Info123!");
     const m = await manuscriptAtInfographie(info.id, { converged: true });
 
-    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/INFOGRAPHIE/validate`, headers: { cookie: infoCookie }, payload: { assignee_id: secr.id } });
+    // D-055 : après l'infographie, l'étape suivante est la Validation du BAT
+    // (contrôle qualité) — l'infographe la confie au responsable qualité.
+    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/INFOGRAPHIE/validate`, headers: { cookie: infoCookie }, payload: { assignee_id: cq.id } });
     expect(ok.statusCode).toBe(200);
-    expect(ok.json().status).toBe("ATTRIBUTION_REFERENCES");
+    expect(ok.json().status).toBe("VALIDATION_BAT");
 
-    const refStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "ATTRIBUTION_REFERENCES" } });
-    const nextStep = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId: m.id, statusId: refStatus.id } } });
-    expect(nextStep?.responsibleId).toBe(secr.id);
+    const batStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "VALIDATION_BAT" } });
+    const nextStep = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId: m.id, statusId: batStatus.id } } });
+    expect(nextStep?.responsibleId).toBe(cq.id);
 
     const dirNotif = await prisma.notification.count({ where: { userId: dir.id, entityId: m.id, title: { contains: "Infographie clôturée" } } });
     const prodNotif = await prisma.notification.count({ where: { userId: prod.id, entityId: m.id, title: { contains: "Infographie clôturée" } } });
     expect(dirNotif).toBeGreaterThan(0);
     expect(prodNotif).toBeGreaterThan(0);
-  });
-
-  it("on peut transmettre l'attribution des références à un MAQUETTISTE (demande opérateur 01/10)", async () => {
-    const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");
-    const maq = await createUserWithRole(`maq_${rnd()}`, "MAQUETTISTE", "Maq123!");
-    const infoCookie = await login(info.username, "Info123!");
-    const m = await manuscriptAtInfographie(info.id, { converged: true });
-    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/INFOGRAPHIE/validate`, headers: { cookie: infoCookie }, payload: { assignee_id: maq.id } });
-    expect(ok.statusCode).toBe(200);
-    const refStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "ATTRIBUTION_REFERENCES" } });
-    const nextStep = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId: m.id, statusId: refStatus.id } } });
-    expect(nextStep?.responsibleId).toBe(maq.id);
   });
 
   it("l'infographe affecté passe le contrôle de permission (409 convergence, pas 403) quand la convergence manque", async () => {
@@ -87,7 +78,7 @@ describe("clôture de l'infographie par l'infographe", () => {
     const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "INFOGRAPHIE" } });
     const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
     const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");
-    const secr = await createUserWithRole(`secr_${rnd()}`, "ASSISTANT_EDITORIAL", "Secr123!");
+    const cq = await createUserWithRole(`cq_${rnd()}`, "RESP_QUALITE", "Cq123!");
     const m = await prisma.manuscript.create({
       data: { manuscriptNumber: `MS-INF-${rnd()}`, title: `Infographie ${rnd()}`, statusId: status.id, ownerId: admin.id, origin: "soumission", language: "fr", receivedAt: new Date() },
     });
@@ -102,9 +93,10 @@ describe("clôture de l'infographie par l'infographe", () => {
     const fiche = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}`, headers: { cookie: infoCookie } });
     expect(fiche.json().canSelfClose).toBe(true);
 
-    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/INFOGRAPHIE/validate`, headers: { cookie: infoCookie }, payload: { assignee_id: secr.id } });
+    // D-055 : l'étape suivante est désormais la Validation du BAT (contrôle qualité).
+    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/INFOGRAPHIE/validate`, headers: { cookie: infoCookie }, payload: { assignee_id: cq.id } });
     expect(ok.statusCode).toBe(200);
-    expect(ok.json().status).toBe("ATTRIBUTION_REFERENCES");
+    expect(ok.json().status).toBe("VALIDATION_BAT");
   });
 
   it("un infographe NON affecté ne peut pas clôturer (403)", async () => {

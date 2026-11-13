@@ -11,8 +11,10 @@ import type { TimelineStep } from "../api/client";
 // préfère toutefois le libellé renvoyé par le workflow quand il est disponible.
 const SEGMENT: { code: string; short: string }[] = [
   { code: "MISE_EN_PAGE", short: "Maquette & mise en page" },
-  { code: "INFOGRAPHIE", short: "Infographie & couverture" },
+  // D-055 : ISBN remonté AVANT l'infographie (code-barres disponible pour la
+  // conception de la couverture).
   { code: "ATTRIBUTION_REFERENCES", short: "ISBN / références" },
+  { code: "INFOGRAPHIE", short: "Infographie & couverture" },
   { code: "VALIDATION_BAT", short: "BAT (vérification finale)" },
   // Décision D-010 : la Contractualisation s'enchaîne juste après la validation
   // du BAT Final et avant l'impression. Elle apparaît donc ici dans le parcours

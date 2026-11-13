@@ -47,6 +47,22 @@ describe("ordre de référence du workflow (D-010)", () => {
     ]);
   });
 
+  it("l'« Attribution des références » (ISBN) précède l'« Infographie » (D-055), juste après la mise en page", async () => {
+    const all = await prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" } });
+    const codesByOrder = all.map((s) => s.code);
+    const mepIdx = codesByOrder.indexOf("MISE_EN_PAGE");
+    // Mise en page → Attribution des références (ISBN) → Infographie → Validation du BAT.
+    expect(codesByOrder.slice(mepIdx, mepIdx + 4)).toEqual([
+      "MISE_EN_PAGE", "ATTRIBUTION_REFERENCES", "INFOGRAPHIE", "VALIDATION_BAT",
+    ]);
+  });
+
+  it("la complétude ISBN reste vérifiée AVANT le BAT (contrainte Ch. 13 §13.9 / Ch. 14 §14.2 préservée)", async () => {
+    const isbn = await prisma.workflowStatus.findUniqueOrThrow({ where: { code: "ATTRIBUTION_REFERENCES" } });
+    const bat = await prisma.workflowStatus.findUniqueOrThrow({ where: { code: "VALIDATION_BAT" } });
+    expect(isbn.stepOrder).toBeLessThan(bat.stepOrder);
+  });
+
   it("l'ordre reste contigu de 1 à 20, sans doublon de stepOrder", async () => {
     const all = await prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" } });
     const orders = all.map((s) => s.stepOrder);

@@ -41,30 +41,45 @@ describe("clôture de la mise en page par le maquettiste", () => {
     return m;
   }
 
-  it("le maquettiste affecté valide et transmet à l'infographe ; DIRED + RESP production notifiés", async () => {
+  it("le maquettiste affecté valide et transmet pour l'attribution des références (D-055) ; DIRED + RESP production notifiés", async () => {
     const maq = await createUserWithRole(`maq_${rnd()}`, "MAQUETTISTE", "Maq123!");
-    const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");
+    const secr = await createUserWithRole(`secr_${rnd()}`, "ASSISTANT_EDITORIAL", "Secr123!");
     const dir = await createUserWithRole(`dir_${rnd()}`, "DIR_EDITORIAL", "Dir123!");
     const prod = await createUserWithRole(`prod_${rnd()}`, "RESP_IMPRESSION", "Prod123!");
     const maqCookie = await login(maq.username, "Maq123!");
     const m = await manuscriptAtMiseEnPage(maq.id);
 
-    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/MISE_EN_PAGE/validate`, headers: { cookie: maqCookie }, payload: { assignee_id: info.id } });
+    // Depuis D-055, l'étape qui suit la mise en page est l'ATTRIBUTION DES
+    // RÉFÉRENCES (ISBN), avant l'infographie. Le maquettiste la confie au
+    // secrétariat.
+    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/MISE_EN_PAGE/validate`, headers: { cookie: maqCookie }, payload: { assignee_id: secr.id } });
     expect(ok.statusCode).toBe(200);
-    expect(ok.json().status).toBe("INFOGRAPHIE");
+    expect(ok.json().status).toBe("ATTRIBUTION_REFERENCES");
 
-    // L'ouvrage est passé en infographie, confié à l'infographe choisi.
-    const infoStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "INFOGRAPHIE" } });
+    const refStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "ATTRIBUTION_REFERENCES" } });
     const fresh = await prisma.manuscript.findUniqueOrThrow({ where: { id: m.id } });
-    expect(fresh.statusId).toBe(infoStatus.id);
-    const nextStep = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId: m.id, statusId: infoStatus.id } } });
-    expect(nextStep?.responsibleId).toBe(info.id);
+    expect(fresh.statusId).toBe(refStatus.id);
+    const nextStep = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId: m.id, statusId: refStatus.id } } });
+    expect(nextStep?.responsibleId).toBe(secr.id);
 
     // Directeur éditorial ET Responsable production/impression notifiés.
     const dirNotif = await prisma.notification.count({ where: { userId: dir.id, entityId: m.id, title: { contains: "Mise en page clôturée" } } });
     const prodNotif = await prisma.notification.count({ where: { userId: prod.id, entityId: m.id, title: { contains: "Mise en page clôturée" } } });
     expect(dirNotif).toBeGreaterThan(0);
     expect(prodNotif).toBeGreaterThan(0);
+  });
+
+  it("l'attribution des références peut être confiée à un maquettiste (demande opérateur 01/10)", async () => {
+    const maq = await createUserWithRole(`maq_${rnd()}`, "MAQUETTISTE", "Maq123!");
+    const maq2 = await createUserWithRole(`maq_${rnd()}`, "MAQUETTISTE", "Maq123!");
+    const maqCookie = await login(maq.username, "Maq123!");
+    const m = await manuscriptAtMiseEnPage(maq.id);
+    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/MISE_EN_PAGE/validate`, headers: { cookie: maqCookie }, payload: { assignee_id: maq2.id } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().status).toBe("ATTRIBUTION_REFERENCES");
+    const refStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "ATTRIBUTION_REFERENCES" } });
+    const nextStep = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId: m.id, statusId: refStatus.id } } });
+    expect(nextStep?.responsibleId).toBe(maq2.id);
   });
 
   it("un maquettiste NON affecté ne peut pas clôturer (403)", async () => {

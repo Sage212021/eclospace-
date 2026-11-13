@@ -135,8 +135,11 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
       headers: { cookie: adminCookie },
       payload: { type: "couverture_1", resolution_dpi: 300, color_mode: "cmjn", rights_origin: "creation_interne" },
     });
+    // Nouvel ordre (D-055) : Mise en page → Attribution des références (ISBN) →
+    // Infographie → Validation du BAT. L'ISBN et ses compléments sont saisis
+    // AVANT l'infographie (la convergence Maquette/Infographie a été préparée
+    // ci-dessus : fiche technique + pelliculage + couverture).
     await validate(manuscript.id, "MISE_EN_PAGE");
-    await validate(manuscript.id, "INFOGRAPHIE");
 
     const pool = await app.inject({
       method: "POST",
@@ -163,6 +166,7 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
       payload: { summary: "Résumé complet", weight_grams: 350, thema_codes: ["FBA"] },
     });
     await validate(manuscript.id, "ATTRIBUTION_REFERENCES");
+    await validate(manuscript.id, "INFOGRAPHIE");
 
     const document = await prisma.document.create({ data: { entityType: "manuscript", entityId: manuscript.id, category: "bat", title: "Fichiers BAT" } });
     const interiorVersion = await prisma.documentVersion.create({

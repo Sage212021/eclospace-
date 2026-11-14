@@ -21,7 +21,9 @@ const SEGMENT: { code: string; short: string }[] = [
   // (→ « En cours » pendant l'établissement du contrat, ✓ une fois validée).
   { code: "CONTRACTUALISATION", short: "Contractualisation" },
   { code: "IMPRESSION", short: "Impression" },
-  { code: "CONTROLE_QUALITE_IMPRESSION", short: "Contrôle qualité" },
+  // D-056 : étape unique « Réception et mise en stock » (réception + contrôle
+  // qualité + entrée en stock), pilotée par le pôle Stock & magasin.
+  { code: "CONTROLE_QUALITE_IMPRESSION", short: "Réception & mise en stock" },
 ];
 
 type State = "done" | "current" | "locked";

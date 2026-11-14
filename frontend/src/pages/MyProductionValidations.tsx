@@ -12,7 +12,7 @@ const STAGES: { key: string; label: string; codes: string[] }[] = [
   { key: "bat", label: "BAT Final (contre-validation)", codes: ["VALIDATION_BAT"] },
   { key: "contrat", label: "Contractualisation", codes: ["CONTRACTUALISATION"] },
   { key: "impression", label: "Impression", codes: ["IMPRESSION"] },
-  { key: "cq", label: "Contrôle qualité (exemplaires)", codes: ["CONTROLE_QUALITE_IMPRESSION"] },
+  { key: "cq", label: "Réception et mise en stock", codes: ["CONTROLE_QUALITE_IMPRESSION"] },
 ];
 
 type EtatCol = "attente" | "cours" | "livre";

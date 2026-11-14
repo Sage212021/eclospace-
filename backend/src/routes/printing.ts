@@ -4,6 +4,17 @@ import { PrintQuoteStatus, PurchaseOrderStatus, ProductionMilestoneType, QcVerdi
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 
+// Opérations de l'étape « Réception et mise en stock » (D-056) : réception,
+// contrôle qualité et entrée en stock. Pilotées par le pôle Stock & magasin
+// (principal) ; DAF et pôle Impression y ont aussi accès, la Direction générale
+// via printing:administration. Droits paramétrables par la matrice de rôles.
+const RMS_SAISIE = [
+  { module: "stock", action: "saisie" as const },
+  { module: "printing", action: "saisie" as const },
+  { module: "finance", action: "saisie" as const },
+  { module: "printing", action: "administration" as const },
+];
+
 // L'ÉTABLISSEMENT du bon de commande (et ses consignes / sa consultation) est
 // ouvert à trois fonctions : responsable Impression, responsable Stock & magasin,
 // DAF. Les devis/imprimeurs restent pilotés par le responsable Impression.
@@ -92,7 +103,13 @@ const milestoneSchema = z.object({
   actual_at: z.string().datetime().optional(),
 });
 
-const goodsReceiptSchema = z.object({ quantity_received: z.number().int().nonnegative() });
+// Réception : quantité livrée. `allow_regularization` autorise explicitement un
+// cumul qui dépasse la quantité commandée (régularisation tracée) — sinon la
+// sur-réception est refusée (D-056, livraisons partielles cumulées).
+const goodsReceiptSchema = z.object({
+  quantity_received: z.number().int().positive(),
+  allow_regularization: z.boolean().optional(),
+});
 const qcChecklistSchema = z
   .array(
     z.object({
@@ -106,6 +123,10 @@ const qcVerdictSchema = z.object({
   verdict: z.nativeEnum(QcVerdict),
   checklist: qcChecklistSchema,
   comment: z.string().max(2000).optional(),
+  // Contrôle qualité quantitatif (D-056) : nombre d'exemplaires CONFORMES sur
+  // les reçus (le reste est non conforme, isolé, jamais mis en stock). Si omis,
+  // on déduit du verdict (conforme → tout ; non conforme → rien).
+  quantity_conform: z.number().int().nonnegative().optional(),
 });
 const claimSchema = z.object({ description: z.string().min(1) });
 const claimResolveSchema = z.object({ resolution: z.string().min(1) });
@@ -661,7 +682,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
   // Réception (Ch. 15 §15.7) : rapprochement automatique commande/livraison.
   fastify.post(
     "/api/v1/purchase-orders/:id/goods-receipts",
-    { preHandler: requirePermission("printing", "saisie") },
+    { preHandler: requireAnyPermission(RMS_SAISIE) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = goodsReceiptSchema.safeParse(request.body);
@@ -672,28 +693,58 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       if (!po) {
         return reply.code(404).send({ code: "not_found", message: "Bon de commande introuvable." });
       }
+      if (po.status === "cancelled") {
+        return reply.code(409).send({ code: "po_not_receivable", message: "Ce bon de commande est annulé : aucune réception possible." });
+      }
 
-      const variance = parsed.data.quantity_received - po.orderedQuantity;
+      // Livraisons partielles cumulées (D-056) : un bon peut recevoir plusieurs
+      // réceptions successives. On suit le cumul reçu et on refuse de dépasser la
+      // quantité commandée, sauf régularisation explicitement autorisée.
+      const prior = await prisma.goodsReceipt.aggregate({ where: { poId: id }, _sum: { quantityReceived: true } });
+      const priorTotal = prior._sum.quantityReceived ?? 0;
+      const remaining = po.orderedQuantity - priorTotal;
+      if (parsed.data.quantity_received > remaining && !parsed.data.allow_regularization) {
+        return reply.code(409).send({
+          code: "over_reception",
+          message: `Réception impossible : il reste ${Math.max(0, remaining)} exemplaire(s) à recevoir sur les ${po.orderedQuantity} commandés (déjà reçus : ${priorTotal}). Cochez « régularisation » pour autoriser un dépassement.`,
+        });
+      }
+
+      const cumulative = priorTotal + parsed.data.quantity_received;
+      // L'écart mémorisé est celui du CUMUL vs la commande (négatif tant que la
+      // livraison n'est pas complète ; positif en cas de sur-livraison).
+      const variance = cumulative - po.orderedQuantity;
       const tolerance = po.quantityTolerancePct ? (Number(po.quantityTolerancePct) / 100) * po.orderedQuantity : 0;
       const withinTolerance = Math.abs(variance) <= tolerance;
 
       const receipt = await prisma.goodsReceipt.create({
         data: { poId: id, quantityReceived: parsed.data.quantity_received, variance },
       });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "goods_receipt",
+        entityId: receipt.id,
+        newValues: { poId: id, quantityReceived: parsed.data.quantity_received, cumulative, variance, regularization: parsed.data.allow_regularization ?? false },
+        ipAddress: request.ip,
+      });
 
-      if (!withinTolerance) {
+      // Alerte seulement en cas de DÉPASSEMENT au-delà de la tolérance (une
+      // livraison partielle en-dessous du commandé est normale : d'autres
+      // réceptions peuvent suivre).
+      if (variance > tolerance) {
         await notifyRole({
           roleCode: "RESP_IMPRESSION",
           type: "echeance",
           priority: "high",
-          title: "Écart de quantité à la réception",
-          body: `Réception du bon de commande ${po.poNumber} : écart de ${variance} exemplaire(s) hors tolérance contractuelle.`,
+          title: "Dépassement de quantité à la réception",
+          body: `Réception du bon de commande ${po.poNumber} : cumul reçu ${cumulative} pour ${po.orderedQuantity} commandés (dépassement de ${variance} hors tolérance).`,
           entityType: "goods_receipt",
           entityId: receipt.id,
         });
       }
 
-      return reply.code(201).send({ ...receipt, within_tolerance: withinTolerance });
+      return reply.code(201).send({ ...receipt, within_tolerance: withinTolerance, cumulative_received: cumulative, remaining_after: Math.max(0, po.orderedQuantity - cumulative) });
     },
   );
 
@@ -708,10 +759,12 @@ export default async function printingRoutes(fastify: FastifyInstance) {
   );
 
   // Rectification d'une réception mal saisie (règle d'or : toujours pouvoir
-  // corriger). On recalcule l'écart avec la quantité commandée.
+  // corriger). On recalcule l'écart sur le CUMUL (cette réception corrigée +
+  // les autres réceptions du bon) vs la quantité commandée. Interdite une fois
+  // les exemplaires conformes entrés en stock (le mouvement de stock est figé).
   fastify.patch(
     "/api/v1/goods-receipts/:id",
-    { preHandler: requirePermission("printing", "saisie") },
+    { preHandler: requireAnyPermission(RMS_SAISIE) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = goodsReceiptSchema.safeParse(request.body);
@@ -722,7 +775,18 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       if (!receipt) {
         return reply.code(404).send({ code: "not_found", message: "Réception introuvable." });
       }
-      const variance = parsed.data.quantity_received - receipt.po.orderedQuantity;
+      if (receipt.stockEnteredAt) {
+        return reply.code(409).send({ code: "stock_locked", message: "Cette réception est déjà entrée en stock : sa quantité ne peut plus être rectifiée." });
+      }
+      const others = await prisma.goodsReceipt.aggregate({ where: { poId: receipt.poId, id: { not: id } }, _sum: { quantityReceived: true } });
+      const cumulative = (others._sum.quantityReceived ?? 0) + parsed.data.quantity_received;
+      if (cumulative > receipt.po.orderedQuantity && !parsed.data.allow_regularization) {
+        return reply.code(409).send({
+          code: "over_reception",
+          message: `Rectification impossible : le cumul reçu (${cumulative}) dépasserait les ${receipt.po.orderedQuantity} commandés. Cochez « régularisation » pour l'autoriser.`,
+        });
+      }
+      const variance = cumulative - receipt.po.orderedQuantity;
       const updated = await prisma.goodsReceipt.update({
         where: { id },
         data: { quantityReceived: parsed.data.quantity_received, variance },
@@ -733,7 +797,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
         action: "update",
         entityType: "goods_receipt",
         entityId: id,
-        newValues: { quantityReceived: parsed.data.quantity_received, variance },
+        newValues: { quantityReceived: parsed.data.quantity_received, cumulative, variance },
         ipAddress: request.ip,
       });
       return reply.send(updated);
@@ -742,17 +806,38 @@ export default async function printingRoutes(fastify: FastifyInstance) {
 
   fastify.patch(
     "/api/v1/goods-receipts/:id/qc",
-    { preHandler: requirePermission("printing", "validation") },
+    { preHandler: requireAnyPermission(RMS_SAISIE) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = qcVerdictSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       }
+      const receipt = await prisma.goodsReceipt.findUnique({ where: { id } });
+      if (!receipt) {
+        return reply.code(404).send({ code: "not_found", message: "Réception introuvable." });
+      }
+      // Une réception DÉJÀ entrée en stock ne peut plus voir sa quantité conforme
+      // modifiée (le mouvement de stock est figé) ; on n'ajuste alors que la
+      // checklist / le commentaire.
+      const stockLocked = receipt.stockEnteredAt != null;
+
+      // Quantité conforme : valeur saisie (bornée à la quantité reçue) ou déduite
+      // du verdict (conforme / avec réserves → tout ; non conforme → rien).
+      let quantityConform: number | undefined;
+      if (!stockLocked) {
+        if (parsed.data.quantity_conform !== undefined) {
+          quantityConform = Math.min(parsed.data.quantity_conform, receipt.quantityReceived);
+        } else {
+          quantityConform = parsed.data.verdict === "non_conform" ? 0 : receipt.quantityReceived;
+        }
+      }
+
       const updated = await prisma.goodsReceipt.update({
         where: { id },
         data: {
           qcVerdict: parsed.data.verdict,
+          ...(quantityConform !== undefined ? { quantityConform } : {}),
           // On ne remplace la checklist / le commentaire que s'ils sont fournis,
           // pour ne pas effacer une saisie précédente lors d'une simple
           // rectification du verdict.
@@ -766,12 +851,13 @@ export default async function printingRoutes(fastify: FastifyInstance) {
         action: "update",
         entityType: "goods_receipt",
         entityId: id,
-        newValues: { qcVerdict: parsed.data.verdict, qcChecklist: parsed.data.checklist, qcComment: parsed.data.comment },
+        newValues: { qcVerdict: parsed.data.verdict, quantityConform, qcChecklist: parsed.data.checklist, qcComment: parsed.data.comment },
         ipAddress: request.ip,
       });
       return reply.send(updated);
     },
   );
+
 
   // Réclamation fournisseur (Ch. 14 §14.7, Ch. 15 §15.2) : ouverte sur non-conformité.
   fastify.post(

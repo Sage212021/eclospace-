@@ -3314,6 +3314,8 @@ export interface GoodsReceipt {
   qcVerdict?: QcVerdict | null;
   qcChecklist?: QcChecklistEntry[] | null;
   qcComment?: string | null;
+  quantityConform?: number | null;
+  stockEnteredAt?: string | null;
   claims?: GoodsReceiptClaim[];
 }
 
@@ -3403,10 +3405,10 @@ export function updatePurchaseOrderStatus(poId: string, status: string) {
   return request<PurchaseOrder>(`/api/v1/purchase-orders/${poId}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
 }
 
-export function recordGoodsReceipt(poId: string, quantityReceived: number) {
-  return request<{ id: string; variance: number; within_tolerance: boolean }>(`/api/v1/purchase-orders/${poId}/goods-receipts`, {
+export function recordGoodsReceipt(poId: string, quantityReceived: number, allowRegularization?: boolean) {
+  return request<{ id: string; variance: number; within_tolerance: boolean; cumulative_received: number; remaining_after: number }>(`/api/v1/purchase-orders/${poId}/goods-receipts`, {
     method: "POST",
-    body: JSON.stringify({ quantity_received: quantityReceived }),
+    body: JSON.stringify({ quantity_received: quantityReceived, allow_regularization: allowRegularization }),
   });
 }
 
@@ -3415,8 +3417,17 @@ export function listQcChecklistItems() {
   return request<{ items: QcChecklistItem[] }>(`/api/v1/qc-checklist-items`);
 }
 
-export function setGoodsReceiptQc(receiptId: string, input: { verdict: QcVerdict; checklist?: QcChecklistEntry[]; comment?: string }) {
+export function setGoodsReceiptQc(receiptId: string, input: { verdict: QcVerdict; checklist?: QcChecklistEntry[]; comment?: string; quantity_conform?: number }) {
   return request<GoodsReceipt>(`/api/v1/goods-receipts/${receiptId}/qc`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// Entrée en stock des exemplaires CONFORMES d'une réception (D-056). Seul le
+// conforme alimente le stock commercial ; le non-conforme reste isolé.
+export function enterGoodsReceiptStock(receiptId: string, locationId?: string) {
+  return request<{ id: string; quantity_entered: number }>(`/api/v1/goods-receipts/${receiptId}/stock-entry`, {
+    method: "POST",
+    body: JSON.stringify(locationId ? { location_id: locationId } : {}),
+  });
 }
 
 export function correctGoodsReceipt(receiptId: string, quantityReceived: number) {

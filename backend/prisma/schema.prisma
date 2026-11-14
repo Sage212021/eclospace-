@@ -3574,6 +3574,16 @@ model GoodsReceipt {
   qcChecklist      Json?         @map("qc_checklist")
   qcComment        String?       @map("qc_comment")
 
+  // Contrôle qualité quantitatif (D-056) : sur les exemplaires reçus, combien
+  // sont CONFORMES (entreront en stock commercial). Le non-conforme =
+  // quantityReceived − quantityConform reste isolé (jamais vendable). Renseigné
+  // au verdict ; null tant que le contrôle qualité n'a pas été fait.
+  quantityConform  Int?          @map("quantity_conform")
+  // Horodatage de l'entrée en stock des exemplaires conformes de cette réception
+  // (mouvement production_in créé). Null tant que les conformes ne sont pas
+  // entrés en stock. Garantit qu'une même réception n'entre pas deux fois.
+  stockEnteredAt   DateTime?     @map("stock_entered_at")
+
   claims SupplierClaim[]
 
   @@map("goods_receipts")

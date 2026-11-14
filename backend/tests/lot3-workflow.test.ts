@@ -317,7 +317,8 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     expect(validatedImpression.statusCode).toBe(200);
     expect(validatedImpression.json().status).toBe("CONTROLE_QUALITE_IMPRESSION");
 
-    // Ch. 14 §14.7 : contrôle qualité bloqué tant qu'aucune réception n'a de verdict acceptable.
+    // D-056 : étape unique « Réception et mise en stock ». Bloquée tant qu'aucune
+    // réception n'a de verdict acceptable.
     const blockedCq = await validate(manuscript.id, "CONTROLE_QUALITE_IMPRESSION");
     expect(blockedCq.statusCode).toBe(409);
     expect(blockedCq.json().code).toBe("no_accepted_receipt");
@@ -332,11 +333,28 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
       method: "PATCH",
       url: `/api/v1/goods-receipts/${receipt.json().id}/qc`,
       headers: { cookie: adminCookie },
-      payload: { verdict: "conform" },
+      payload: { verdict: "conform", quantity_conform: 500 },
     });
 
+    // Contrôle qualité fait mais conformes pas encore entrés en stock → bloqué.
+    const blockedStock = await validate(manuscript.id, "CONTROLE_QUALITE_IMPRESSION");
+    expect(blockedStock.statusCode).toBe(409);
+    expect(blockedStock.json().code).toBe("no_stock_entry");
+
+    // Entrée en stock des exemplaires conformes.
+    const entered = await app.inject({
+      method: "POST",
+      url: `/api/v1/goods-receipts/${receipt.json().id}/stock-entry`,
+      headers: { cookie: adminCookie },
+      payload: {},
+    });
+    expect(entered.statusCode).toBe(201);
+    expect(entered.json().quantity_entered).toBe(500);
+
+    // L'étape unique se valide → Commercialisation (l'ancienne « Entrée en
+    // stock » est absorbée et sautée).
     const validatedCq = await validate(manuscript.id, "CONTROLE_QUALITE_IMPRESSION");
     expect(validatedCq.statusCode).toBe(200);
-    expect(validatedCq.json().status).toBe("ENTREE_STOCK");
+    expect(validatedCq.json().status).toBe("COMMERCIALISATION");
   });
 });

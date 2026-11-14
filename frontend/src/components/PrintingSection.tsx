@@ -10,6 +10,7 @@ import {
   listPrinters,
   listPurchaseOrders,
   listQcChecklistItems,
+  enterGoodsReceiptStock,
   recordGoodsReceipt,
   recordPrintQuoteAmounts,
   requestPrintQuote,
@@ -45,12 +46,16 @@ interface PrintingSectionProps {
   // Établissement du BON DE COMMANDE, ouvert à 3 fonctions (Impression / Stock /
   // DAF). `bonFunctions` = les fonctions sous lesquelles l'utilisateur peut agir.
   canManageBon?: boolean;
+  // Étape « Réception et mise en stock » (D-056) : réception, contrôle qualité et
+  // entrée en stock. Pilotée par le pôle Stock & magasin (+ DAF / Impression / DG).
+  // Par défaut (rétro-compat) = canManage.
+  canReceiveStock?: boolean;
   bonFunctions?: { value: string; label: string }[];
 }
 
 // Impression et fabrication (Ch. 15) : devis comparés, bon de commande,
 // suivi de fabrication jusqu'à la réception.
-export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, bonFunctions = [] }: PrintingSectionProps) {
+export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [] }: PrintingSectionProps) {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -214,16 +219,31 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   }
 
   async function handleReceipt(po: PurchaseOrder) {
-    const quantity = Number(window.prompt("Quantité reçue", po.orderedQuantity.toString()) ?? "0");
-    if (!quantity) return;
+    const alreadyReceived = (po.goodsReceipts ?? []).reduce((s, r) => s + r.quantityReceived, 0);
+    const remaining = Math.max(0, po.orderedQuantity - alreadyReceived);
+    const quantity = Number(window.prompt(`Quantité livrée (réception).\nCommandé : ${po.orderedQuantity} · déjà reçu : ${alreadyReceived} · reste : ${remaining}`, String(remaining || po.orderedQuantity)) ?? "0");
+    if (!quantity || quantity <= 0) return;
     try {
       const result = await recordGoodsReceipt(po.id, quantity);
       if (!result.within_tolerance) {
-        setError(`Écart de ${result.variance} exemplaire(s) hors tolérance contractuelle.`);
+        setError(`Cumul reçu ${result.cumulative_received} pour ${po.orderedQuantity} commandés — hors tolérance.`);
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'enregistrement de la réception.");
+      const msg = err instanceof Error ? err.message : "Échec de l'enregistrement de la réception.";
+      // Sur-réception : proposer une régularisation (dépassement autorisé et tracé).
+      if (/over_reception|dépasser|reste/i.test(msg) && window.confirm(`${msg}\n\nEnregistrer quand même en RÉGULARISATION (dépassement tracé) ?`)) {
+        try {
+          await recordGoodsReceipt(po.id, quantity, true);
+          await refresh();
+          setError(null);
+          return;
+        } catch (err2) {
+          setError(err2 instanceof Error ? err2.message : msg);
+          return;
+        }
+      }
+      setError(msg);
     }
   }
 
@@ -356,7 +376,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
               </button>
             )}
           </div>
-          {canManage && po.status !== "draft" && (
+          {canReceiveStock && po.status !== "draft" && (
             <button onClick={() => handleReceipt(po)} style={secondaryButtonStyle}>
               Enregistrer une réception
             </button>
@@ -367,15 +387,27 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
           {(po.goodsReceipts ?? []).length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                Réceptions &amp; contrôle qualité
+                Réception · contrôle qualité · mise en stock
               </div>
+              {(() => {
+                const recs = po.goodsReceipts ?? [];
+                const received = recs.reduce((s, r) => s + r.quantityReceived, 0);
+                const inStock = recs.filter((r) => r.stockEnteredAt).reduce((s, r) => s + (r.quantityConform ?? 0), 0);
+                return (
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", margin: "2px 0 2px" }}>
+                    Cumul reçu <b style={{ fontFamily: "var(--font-mono)" }}>{received}</b> / {po.orderedQuantity} commandés
+                    {received < po.orderedQuantity && <> · reste {po.orderedQuantity - received}</>}
+                    {" "}· en stock <b style={{ fontFamily: "var(--font-mono)", color: "#2F7D4A" }}>{inStock}</b> conforme(s)
+                  </div>
+                );
+              })()}
               {(po.goodsReceipts ?? []).map((r) => (
                 <ReceiptCard
                   key={r.id}
                   receipt={r}
                   qcItems={qcItems}
-                  canManage={canManage}
-                  canValidate={canValidate}
+                  canManage={canReceiveStock}
+                  canValidate={canReceiveStock}
                   onDone={refresh}
                   onError={setError}
                 />
@@ -888,23 +920,43 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
     return base;
   });
   const [comment, setComment] = useState(receipt.qcComment ?? "");
+  const [conform, setConform] = useState<number>(receipt.quantityConform ?? receipt.quantityReceived);
   const [saving, setSaving] = useState(false);
+  const [entering, setEntering] = useState(false);
+
+  const stockLocked = receipt.stockEnteredAt != null;
 
   async function saveQc() {
     if (!verdict) {
       onError("Choisissez un verdict de contrôle qualité (conforme, avec réserves ou non conforme).");
       return;
     }
+    const conformQty = Math.max(0, Math.min(conform, receipt.quantityReceived));
     setSaving(true);
     try {
       const checklist: QcChecklistEntry[] = qcItems.map((it) => ({ code: it.code, ok: !!checks[it.code] }));
-      await setGoodsReceiptQc(receipt.id, { verdict, checklist, comment: comment.trim() || undefined });
+      await setGoodsReceiptQc(receipt.id, { verdict, checklist, comment: comment.trim() || undefined, quantity_conform: conformQty });
       setOpen(false);
       await onDone();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Échec de l'enregistrement du contrôle qualité.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Entrée en stock des exemplaires CONFORMES (D-056) : crée le mouvement de
+  // stock pour la seule quantité conforme ; le non-conforme reste isolé.
+  async function enterStock() {
+    setEntering(true);
+    try {
+      const r = await enterGoodsReceiptStock(receipt.id);
+      await onDone();
+      onError(`${r.quantity_entered} exemplaire(s) conforme(s) entré(s) en stock.`);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de l'entrée en stock.");
+    } finally {
+      setEntering(false);
     }
   }
 
@@ -969,13 +1021,41 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
         </div>
       )}
 
+      {/* Statut qualité & stock de la réception (D-056). */}
+      {receipt.qcVerdict != null && (
+        <div style={{ fontSize: 11.5, marginTop: 6, color: "var(--muted)" }}>
+          {receipt.quantityConform != null && (
+            <>
+              <b style={{ color: "#2F7D4A" }}>{receipt.quantityConform} conforme(s)</b>
+              {receipt.quantityReceived - receipt.quantityConform > 0 && (
+                <> · <b style={{ color: "#C24B3A" }}>{receipt.quantityReceived - receipt.quantityConform} non conforme(s)</b></>
+              )}
+            </>
+          )}
+          {stockLocked ? (
+            <span style={{ marginLeft: 8, color: "#2F7D4A", fontWeight: 600 }}>✓ entré en stock</span>
+          ) : (
+            <span style={{ marginLeft: 8 }}>— non encore mis en stock</span>
+          )}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-        {canValidate && (
+        {canValidate && !stockLocked && (
           <button onClick={() => setOpen((o) => !o)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>
             {open ? "Fermer" : receipt.qcVerdict ? "Modifier le contrôle qualité" : "Saisir le contrôle qualité"}
           </button>
         )}
-        {canManage && (
+        {canManage && receipt.qcVerdict != null && !stockLocked && (receipt.quantityConform ?? 0) > 0 && (
+          <button
+            onClick={enterStock}
+            disabled={entering}
+            style={{ ...secondaryButtonStyle, marginTop: 0, background: "#2F7D4A", color: "#fff", border: "none", fontWeight: 600 }}
+          >
+            {entering ? "Entrée en stock…" : `Entrer ${receipt.quantityConform} conforme(s) en stock`}
+          </button>
+        )}
+        {canManage && !stockLocked && (
           <button onClick={addClaim} style={{ ...secondaryButtonStyle, marginTop: 0 }}>
             Ouvrir une réclamation
           </button>
@@ -1004,6 +1084,28 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
                 {v.label}
               </button>
             ))}
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 600, margin: "12px 0 6px" }}>
+            Exemplaires conformes <span style={{ color: "var(--muted)", fontWeight: 400 }}>(seuls les conformes entreront en stock)</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <input
+              type="number"
+              min={0}
+              max={receipt.quantityReceived}
+              value={conform}
+              disabled={stockLocked}
+              onChange={(e) => setConform(Number(e.target.value))}
+              style={{ width: 110, fontSize: 13, fontFamily: "var(--font-mono)", borderRadius: 6, border: "1px solid var(--line)", padding: "4px 8px" }}
+            />
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>
+              conformes sur {receipt.quantityReceived} reçus ·{" "}
+              <b style={{ color: receipt.quantityReceived - conform > 0 ? "#C24B3A" : "var(--muted)" }}>
+                {Math.max(0, receipt.quantityReceived - conform)} non conforme(s)
+              </b>{" "}
+              (isolés, non vendables)
+            </span>
           </div>
 
           <div style={{ fontSize: 12, fontWeight: 600, margin: "12px 0 6px" }}>

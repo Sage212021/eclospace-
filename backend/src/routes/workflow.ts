@@ -50,7 +50,7 @@ const CORRECTION_TASK_TYPE_CODES = ["correction", "correction_ortho", "correctio
 // Étapes qu'un opérateur AFFECTÉ (sans droit de validation large) peut clôturer
 // lui-même : la correction par le correcteur, la mise en page par le maquettiste,
 // l'infographie par l'infographe, l'attribution des références par le secrétariat.
-const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES"]);
+const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES", "CONTROLE_QUALITE_IMPRESSION"]);
 
 // L'opérateur AFFECTÉ à l'étape courante : responsable de l'étape OU (pour la
 // correction) porteur d'une tâche de correction assignée. Sert à l'autoriser à
@@ -80,6 +80,9 @@ const STEP_SAISIE_PERM: Record<string, string> = {
   MISE_EN_PAGE: "production:saisie",
   INFOGRAPHIE: "production:saisie",
   ATTRIBUTION_REFERENCES: "isbn:saisie",
+  // « Réception et mise en stock » (D-056) : pilotée par le pôle Stock & magasin —
+  // le magasinier (stock:saisie) peut clôturer l'étape lui-même.
+  CONTROLE_QUALITE_IMPRESSION: "stock:saisie",
 };
 
 // Un utilisateur SANS « manuscripts:validation » peut-il clôturer cette étape ?
@@ -112,7 +115,11 @@ import { myCorrectionIntegrations } from "../lib/correctionIntegrations.js";
 // est tracé sur l'étape (realizationMode / skipReason / realizationData). Les
 // anciens drapeaux requiresExpertise / requiresRewrite ne servent plus qu'à
 // pré-remplir la suggestion « à réaliser » à l'écran.
-function isStepRequired(_statusCode: string, _manuscript: Manuscript): boolean {
+function isStepRequired(statusCode: string, _manuscript: Manuscript): boolean {
+  // D-056 : l'étape « Entrée en stock » est absorbée par « Réception et mise en
+  // stock ». Elle est RETIRÉE du circuit actif (sautée par la navigation), mais
+  // sa définition est conservée pour l'historique des ouvrages déjà passés.
+  if (statusCode === "ENTREE_STOCK") return false;
   return true;
 }
 
@@ -642,8 +649,13 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // Ch. 14 §14.7 : seuls les exemplaires contrôlés (conformes ou
-      // conformes avec réserves) peuvent être transmis à l'entrée en stock.
+      // Étape « Réception et mise en stock » (D-056, Ch. 14 §14.7 / Ch. 16 §16.4) :
+      // regroupe réception → contrôle qualité → entrée en stock. On ne la clôt
+      // (vers Commercialisation) que lorsque LES DEUX conditions sont réunies :
+      //   (a) au moins une réception a reçu un verdict qualité acceptable, ET
+      //   (b) les exemplaires CONFORMES ont été effectivement entrés en stock
+      //       (mouvement production_in). Le non-conforme reste isolé, jamais en
+      //       stock commercial.
       if (targetStatus.code === "CONTROLE_QUALITE_IMPRESSION") {
         const acceptedReceipt = await prisma.goodsReceipt.findFirst({
           where: { po: { quote: { manuscriptId: id } }, qcVerdict: { in: ["conform", "with_reserves"] } },
@@ -654,10 +666,21 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             message: "Aucune réception d'exemplaires n'a reçu de verdict de contrôle qualité acceptable.",
           });
         }
+        const printIsbn = await prisma.isbn.findFirst({ where: { manuscriptId: id, format: "print" } });
+        const entryMovement = printIsbn
+          ? await prisma.stockMovement.findFirst({ where: { isbnId: printIsbn.id, type: "production_in" } })
+          : null;
+        if (!entryMovement) {
+          return reply.code(409).send({
+            code: "no_stock_entry",
+            message: "Les exemplaires conformes n'ont pas encore été entrés en stock.",
+          });
+        }
       }
 
-      // Ch. 16 §16.4 : l'entrée en stock ne peut être validée qu'une fois
-      // des exemplaires effectivement réceptionnés (mouvement production_in).
+      // Ch. 16 §16.4 — garde-fou conservé pour un ouvrage encore à l'ancienne
+      // étape « Entrée en stock » (retirée du circuit actif depuis D-056) :
+      // l'entrée en stock ne se valide qu'après un mouvement production_in.
       if (targetStatus.code === "ENTREE_STOCK") {
         const printIsbn = await prisma.isbn.findFirst({ where: { manuscriptId: id, format: "print" } });
         const entryMovement = printIsbn

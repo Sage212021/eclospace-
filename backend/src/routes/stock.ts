@@ -1207,15 +1207,24 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     return reply.send((await enrichReplenishments([updated]))[0]);
   });
 
-  // Entrée de fabrication (Ch. 16 §16.4, Ch. 15 §15.7) : seuls les
-  // exemplaires acceptés par le contrôle qualité entrent en stock vendable.
+  // Entrée de fabrication (Ch. 16 §16.4, Ch. 15 §15.7 ; D-056) : SEULS les
+  // exemplaires CONFORMES (quantityConform) d'une réception entrent en stock
+  // vendable — le non-conforme reste isolé, jamais mis en stock. Idempotent par
+  // réception (stockEnteredAt). Pilotée par le pôle Stock & magasin (principal),
+  // + Impression / DAF / Direction générale (droits paramétrables).
+  const RMS_SAISIE = [
+    { module: "stock", action: "saisie" as const },
+    { module: "printing", action: "saisie" as const },
+    { module: "finance", action: "saisie" as const },
+    { module: "printing", action: "administration" as const },
+  ];
   fastify.post(
     "/api/v1/goods-receipts/:id/stock-entry",
-    { preHandler: requirePermission("stock", "saisie") },
+    { preHandler: requireAnyPermission(RMS_SAISIE) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const schema = z.object({ location_id: z.string().uuid() });
-      const parsed = schema.safeParse(request.body);
+      const schema = z.object({ location_id: z.string().uuid().optional() });
+      const parsed = schema.safeParse(request.body ?? {});
       if (!parsed.success) {
         return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       }
@@ -1226,16 +1235,35 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       if (!receipt) {
         return reply.code(404).send({ code: "not_found", message: "Réception introuvable." });
       }
+      if (receipt.stockEnteredAt) {
+        return reply.code(409).send({ code: "already_entered", message: "Les exemplaires conformes de cette réception sont déjà entrés en stock." });
+      }
       if (receipt.qcVerdict !== "conform" && receipt.qcVerdict !== "with_reserves") {
         return reply.code(409).send({
           code: "receipt_not_accepted",
           message: "Seuls les exemplaires acceptés par le contrôle qualité peuvent entrer en stock.",
         });
       }
+      // Quantité conforme : renseignée au contrôle qualité ; à défaut (ancien
+      // verdict sans quantité), tous les exemplaires reçus d'un verdict accepté.
+      const conform = receipt.quantityConform ?? receipt.quantityReceived;
+      if (conform <= 0) {
+        return reply.code(409).send({ code: "no_conform", message: "Aucun exemplaire conforme sur cette réception : rien à mettre en stock." });
+      }
 
       const isbn = await prisma.isbn.findFirst({ where: { manuscriptId: receipt.po.quote.manuscriptId, format: "print" } });
       if (!isbn) {
         return reply.code(409).send({ code: "isbn_missing", message: "Aucun ISBN papier attribué pour cet ouvrage." });
+      }
+
+      // Emplacement : celui fourni, sinon le premier entrepôt configuré.
+      let locationId = parsed.data.location_id;
+      if (!locationId) {
+        const entrepot = await prisma.stockLocation.findFirst({ where: { type: "entrepot" }, orderBy: { createdAt: "asc" } });
+        if (!entrepot) {
+          return reply.code(409).send({ code: "no_location", message: "Aucun emplacement de stock n'est configuré. Créez un entrepôt dans le pôle Stock." });
+        }
+        locationId = entrepot.id;
       }
 
       const movement = await prisma.$transaction(async (tx) => {
@@ -1244,17 +1272,26 @@ export default async function stockRoutes(fastify: FastifyInstance) {
             type: "production_in",
             isbnId: isbn.id,
             printRun: receipt.po.reprintNumber,
-            toLocationId: parsed.data.location_id,
-            quantity: receipt.quantityReceived,
-            reason: `Réception fabrication ${receipt.po.poNumber}`,
+            toLocationId: locationId,
+            quantity: conform,
+            reason: `Entrée en stock — exemplaires conformes (bon ${receipt.po.poNumber})`,
             referenceType: "goods_receipt",
             referenceId: receipt.id,
             status: "completed",
             movedBy: request.user!.id,
           },
         });
-        await adjustStockItem(tx, isbn.id, parsed.data.location_id, receipt.po.reprintNumber, receipt.quantityReceived);
+        await adjustStockItem(tx, isbn.id, locationId!, receipt.po.reprintNumber, conform);
+        await tx.goodsReceipt.update({ where: { id }, data: { stockEnteredAt: new Date() } });
         return created;
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "stock_movement",
+        entityId: movement.id,
+        newValues: { type: "production_in", isbnId: isbn.id, quantity: conform, locationId, fromGoodsReceipt: receipt.id },
+        ipAddress: request.ip,
       });
 
       await notifyRole({
@@ -1262,12 +1299,12 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         type: "affectation",
         priority: "medium",
         title: "Entrée de fabrication à ranger",
-        body: `${receipt.quantityReceived} exemplaire(s) reçus (${receipt.po.poNumber}) à ranger.`,
+        body: `${conform} exemplaire(s) conforme(s) reçus (${receipt.po.poNumber}) à ranger.`,
         entityType: "stock_movement",
         entityId: movement.id,
       });
 
-      return reply.code(201).send(movement);
+      return reply.code(201).send({ ...movement, quantity_entered: conform });
     },
   );
 

@@ -118,8 +118,14 @@ const workflowStatuses: {
   { code: "VALIDATION_BAT", label: "Validation du BAT Final", stepOrder: 12, departmentCode: "CQ" },
   { code: "CONTRACTUALISATION", label: "Contractualisation", stepOrder: 13, departmentCode: "JURID" },
   { code: "IMPRESSION", label: "Impression", stepOrder: 14, departmentCode: "IMPR" },
-  { code: "CONTROLE_QUALITE_IMPRESSION", label: "Contrôle qualité (exemplaires imprimés)", stepOrder: 15, departmentCode: "CQ" },
-  { code: "ENTREE_STOCK", label: "Entrée en stock", stepOrder: 16, departmentCode: "STOCK" },
+  // D-056 : fin de production regroupée en UNE étape, pilotée par le pôle Stock.
+  // L'étape garde son code (CONTROLE_QUALITE_IMPRESSION) pour préserver références
+  // et historique, mais devient « Réception et mise en stock » (réception + contrôle
+  // qualité + entrée en stock, comme sous-opérations internes).
+  { code: "CONTROLE_QUALITE_IMPRESSION", label: "Réception et mise en stock", stepOrder: 15, departmentCode: "STOCK" },
+  // Ancienne étape « Entrée en stock » RETIRÉE du circuit actif (absorbée ci-dessus) :
+  // conditionnelle → sautée par la navigation. Ligne conservée pour l'historique.
+  { code: "ENTREE_STOCK", label: "Entrée en stock", stepOrder: 16, departmentCode: "STOCK", isConditional: true },
   { code: "COMMERCIALISATION", label: "Commercialisation", stepOrder: 17, departmentCode: "COM" },
   { code: "VENTE_LIVRAISON", label: "Vente et livraison", stepOrder: 18, departmentCode: "COM" },
   { code: "SUIVI_POST_PUBLICATION", label: "Suivi post-publication", stepOrder: 19, departmentCode: "COM" },
@@ -1557,6 +1563,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-reception-mise-en-stock",
+      version: "2026.11",
+      title: "Nouveauté — Réception et mise en stock regroupées en une seule étape",
+      body: "La fin de fabrication est maintenant UNE seule étape, « Réception et mise en stock », pilotée par le pôle Stock & magasin (la DAF et la Direction y ont aussi accès). Elle réunit trois opérations : (1) Réception — on enregistre ce que l'imprimeur a livré ; plusieurs livraisons successives sont possibles, le cumul est suivi et un dépassement du commandé est bloqué sauf régularisation ; (2) Contrôle qualité — on indique combien d'exemplaires sont conformes et combien ne le sont pas ; (3) Mise en stock — seuls les exemplaires CONFORMES entrent en stock commercial, les non conformes restent isolés (jamais vendus). Chaque opération garde son auteur, sa date et son historique. L'impression n'est considérée terminée qu'une fois les exemplaires réceptionnés, contrôlés et mis en stock.",
+      permissionModules: ["stock", "printing"],
+      departmentCodes: ["STOCK", "IMPR", "FIN", "DG"],
+    },
     {
       slug: "2026-11-isbn-avant-couverture",
       version: "2026.11",

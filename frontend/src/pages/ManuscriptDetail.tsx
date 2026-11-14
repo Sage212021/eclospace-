@@ -215,6 +215,14 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
   // Bon de commande (Impression) — ouvert à 3 fonctions : Impression, Stock &
   // magasin, DAF. Ces fonctions voient le MÊME écran/bon du manuscrit en cours.
   const canSeePrinting = permissions.has("printing:consultation") || permissions.has("stock:consultation") || permissions.has("finance:consultation");
+  // Étape « Réception et mise en stock » (D-056) : réception + contrôle qualité +
+  // entrée en stock, pilotée par le pôle Stock & magasin (principal), avec DAF et
+  // Impression également habilités, la Direction générale via printing:administration.
+  const canReceiveStock =
+    permissions.has("stock:saisie") ||
+    permissions.has("printing:saisie") ||
+    permissions.has("finance:saisie") ||
+    permissions.has("printing:administration");
   const bonFunctions = ([
     permissions.has("printing:saisie") ? { value: "impression", label: "Responsable Impression" } : null,
     permissions.has("stock:saisie") ? { value: "stock", label: "Responsable Stock & magasin" } : null,
@@ -849,6 +857,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
               canManage={permissions.has("printing:saisie")}
               canValidate={permissions.has("printing:validation")}
               canManageBon={bonFunctions.length > 0}
+              canReceiveStock={canReceiveStock}
               bonFunctions={bonFunctions}
             />
           </div>
@@ -1117,6 +1126,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             canManage={permissions.has("printing:saisie")}
             canValidate={permissions.has("printing:validation")}
             canManageBon={bonFunctions.length > 0}
+            canReceiveStock={canReceiveStock}
             bonFunctions={bonFunctions}
           />
         </>
@@ -2043,7 +2053,7 @@ const STEP_ACTION_LABELS: Record<string, string> = {
   ATTRIBUTION_REFERENCES: "Valider l'attribution des références",
   VALIDATION_BAT: "Valider le BAT",
   IMPRESSION: "Valider l'impression",
-  CONTROLE_QUALITE_IMPRESSION: "Valider le contrôle qualité",
+  CONTROLE_QUALITE_IMPRESSION: "Valider la réception et mise en stock",
   ENTREE_STOCK: "Valider l'entrée en stock",
   COMMERCIALISATION: "Valider la commercialisation",
   VENTE_LIVRAISON: "Valider la vente et livraison",

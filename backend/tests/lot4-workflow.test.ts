@@ -58,9 +58,10 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     });
   }
 
-  // Mène un manuscrit jusqu'à l'étape ENTREE_STOCK (reprend le circuit complet
-  // du Lot 3, cf. tests/lot3-workflow.test.ts).
-  async function createManuscriptAtEntreeStock(title: string) {
+  // Mène un manuscrit jusqu'à la COMMERCIALISATION en passant par l'étape unique
+  // « Réception et mise en stock » (D-056) : réception → contrôle qualité
+  // (quantité conforme) → entrée en stock des conformes → validation de l'étape.
+  async function createManuscriptAtCommercialisation(title: string) {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/v1/manuscripts",
@@ -213,7 +214,7 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "sent" } });
     // IMPRESSION à double validation, assouplie pour la DG (12/11) : l'admin a
     // l'autorité finale → une seule signature fait avancer l'ouvrage.
-    await validate(manuscript.id, "IMPRESSION");
+    await validate(manuscript.id, "IMPRESSION"); // → CONTROLE_QUALITE_IMPRESSION
 
     const receipt = await app.inject({
       method: "POST",
@@ -221,47 +222,40 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
       headers: { cookie: adminCookie },
       payload: { quantity_received: 500 },
     });
+    const receiptId = receipt.json().id as string;
     await app.inject({
       method: "PATCH",
-      url: `/api/v1/goods-receipts/${receipt.json().id}/qc`,
+      url: `/api/v1/goods-receipts/${receiptId}/qc`,
       headers: { cookie: adminCookie },
-      payload: { verdict: "conform" },
+      payload: { verdict: "conform", quantity_conform: 500 },
     });
-    const validatedCq = await validate(manuscript.id, "CONTROLE_QUALITE_IMPRESSION");
-    expect(validatedCq.statusCode).toBe(200);
-    expect(validatedCq.json().status).toBe("ENTREE_STOCK");
-
-    return { manuscript, receiptId: receipt.json().id as string };
-  }
-
-  it("bloque ENTREE_STOCK tant qu'aucun exemplaire n'est réceptionné en stock (Ch. 16 §16.4)", async () => {
-    const { manuscript, receiptId } = await createManuscriptAtEntreeStock("Manuscrit Workflow Lot4 Stock");
-
-    const blocked = await validate(manuscript.id, "ENTREE_STOCK");
-    expect(blocked.statusCode).toBe(409);
-    expect(blocked.json().code).toBe("no_stock_entry");
-
     await app.inject({
       method: "POST",
       url: `/api/v1/goods-receipts/${receiptId}/stock-entry`,
       headers: { cookie: adminCookie },
       payload: { location_id: warehouseId },
     });
+    // La validation de l'étape unique mène directement à la Commercialisation
+    // (l'ancienne « Entrée en stock » est absorbée et sautée).
+    const validatedCq = await validate(manuscript.id, "CONTROLE_QUALITE_IMPRESSION");
+    expect(validatedCq.statusCode).toBe(200);
+    expect(validatedCq.json().status).toBe("COMMERCIALISATION");
 
-    const advanced = await validate(manuscript.id, "ENTREE_STOCK");
-    expect(advanced.statusCode).toBe(200);
-    expect(advanced.json().status).toBe("COMMERCIALISATION");
+    return { manuscript, receiptId };
+  }
+
+  it("fin de production : l'étape unique « Réception et mise en stock » mène à la Commercialisation (D-056, ENTREE_STOCK absorbée)", async () => {
+    const { manuscript } = await createManuscriptAtCommercialisation("Manuscrit Workflow Lot4 Stock");
+    const m = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscript.id }, include: { status: true } });
+    expect(m.status.code).toBe("COMMERCIALISATION");
+    // L'ancienne étape « Entrée en stock » n'est plus une étape courante.
+    const blocked = await validate(manuscript.id, "ENTREE_STOCK");
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().code).toBe("step_out_of_order");
   });
 
   it("bloque COMMERCIALISATION tant qu'aucun prix public n'est défini (Ch. 17 §17.2)", async () => {
-    const { manuscript, receiptId } = await createManuscriptAtEntreeStock("Manuscrit Workflow Lot4 Prix");
-    await app.inject({
-      method: "POST",
-      url: `/api/v1/goods-receipts/${receiptId}/stock-entry`,
-      headers: { cookie: adminCookie },
-      payload: { location_id: warehouseId },
-    });
-    await validate(manuscript.id, "ENTREE_STOCK");
+    const { manuscript } = await createManuscriptAtCommercialisation("Manuscrit Workflow Lot4 Prix");
 
     const isbn = await prisma.isbn.findFirstOrThrow({ where: { manuscriptId: manuscript.id, format: "print" } });
     const blocked = await validate(manuscript.id, "COMMERCIALISATION");
@@ -281,14 +275,7 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
   });
 
   it("bloque VENTE_LIVRAISON tant qu'aucune commande ou vente n'est enregistrée (Ch. 17 §17.5)", async () => {
-    const { manuscript, receiptId } = await createManuscriptAtEntreeStock("Manuscrit Workflow Lot4 Vente");
-    await app.inject({
-      method: "POST",
-      url: `/api/v1/goods-receipts/${receiptId}/stock-entry`,
-      headers: { cookie: adminCookie },
-      payload: { location_id: warehouseId },
-    });
-    await validate(manuscript.id, "ENTREE_STOCK");
+    const { manuscript } = await createManuscriptAtCommercialisation("Manuscrit Workflow Lot4 Vente");
     const isbn = await prisma.isbn.findFirstOrThrow({ where: { manuscriptId: manuscript.id, format: "print" } });
     await app.inject({
       method: "POST",

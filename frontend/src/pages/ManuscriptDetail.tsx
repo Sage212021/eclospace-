@@ -852,12 +852,16 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         {manuscript.status.code === "IMPRESSION" && canSeePrinting && (
           <div style={{ marginTop: 12 }}>
             <ImpressionHandoffBlock manuscriptId={manuscript.id} />
+            {/* À l'étape Impression : devis + bon de commande uniquement. La
+                réception/contrôle qualité/mise en stock appartient à l'étape
+                suivante « Réception et mise en stock » (D-056) — on la masque
+                donc ici (canReceiveStock=false). */}
             <PrintingSection
               manuscriptId={manuscript.id}
               canManage={permissions.has("printing:saisie")}
               canValidate={permissions.has("printing:validation")}
               canManageBon={bonFunctions.length > 0}
-              canReceiveStock={canReceiveStock}
+              canReceiveStock={false}
               bonFunctions={bonFunctions}
             />
           </div>

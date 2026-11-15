@@ -1569,6 +1569,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-relecture-lecture-fiable-sans-residus",
+      version: "2026.11",
+      title: "Nouveauté — Relecture : le texte lu est enfin propre (fini le code technique dans les rapports)",
+      body: "Amélioration de fond du « moteur de lecture » des manuscrits. On a découvert que, pour certains fichiers Word (surtout ceux contenant des tableaux ou des mises en forme : tabulations, colonnes), le relecteur recevait un texte POLLUÉ par du code technique invisible à l'écran (des étiquettes de style Word du genre « <w:tab> », « <w:tcBorders> »…). Sur un manuscrit réel, près de 60 % de ce que lisait l'IA était en réalité ce code parasite — d'où les résidus et « balises » que vous voyiez parfois signalés à tort dans les rapports, et un risque de prendre un artefact technique pour une faute de l'auteur. C'est corrigé en profondeur : la lecture des fichiers Word passe désormais par un moteur éprouvé, le texte est entièrement nettoyé (plus aucune balise, tous les caractères spéciaux et accents correctement décodés, caractères invisibles retirés, mots jamais collés par une tabulation perdue), et ce nettoyage s'applique à TOUS les formats (Word, PDF, ODT, EPUB, texte). Résultat : l'IA lit exactement votre texte, et le rapport ne mentionne plus de résidus techniques. Principe retenu : une anomalie technique d'extraction ne doit jamais être présentée comme une faute de l'auteur.",
+      permissionModules: ["manuscripts", "bat"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-relecture-decoupage-chapitres",
       version: "2026.11",
       title: "Nouveauté — Relecture : le rapport cite le bon chapitre et ne crie plus à la « phrase inachevée »",

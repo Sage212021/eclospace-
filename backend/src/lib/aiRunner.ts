@@ -6,7 +6,7 @@ import { storeFile } from "./storage.js";
 import { writeAuditLog } from "./audit.js";
 import { loadConfig, readApiKey, resolveModelId, type WorkType } from "./aiConfig.js";
 import { buildCorrectionMethodText } from "./correctionProfile.js";
-import { segmentText, runAnomalySweep, SEGMENT_CHARS } from "./correctionSweep.js";
+import { segmentForReview, runAnomalySweep, SEGMENT_CHARS } from "./correctionSweep.js";
 import { withThinking } from "./aiThinking.js";
 import { sanitizeEditorialReport } from "./reportSanitizer.js";
 import { parseAnomaliesJson, ANOMALY_EXTRACTION_SYSTEM, anomalyExtractionUser } from "./correctionAnomalies.js";
@@ -905,7 +905,9 @@ function noSourceMessage(workType: string): string {
   return "Aucun fichier manuscrit n'a été déposé pour cet ouvrage.";
 }
 export async function resolveAiSourceVersion(manuscriptId: string, workType: string, coverPass?: "BAT1" | "BAT2") {
-  for (const spec of aiSourceChain(workType, coverPass)) {
+  const chain = aiSourceChain(workType, coverPass);
+  for (let i = 0; i < chain.length; i++) {
+    const spec = chain[i];
     const where = "titlePrefix" in spec
       ? { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape" as never, deletedAt: null, title: { startsWith: spec.titlePrefix } }
       : { entityType: "manuscript", entityId: manuscriptId, category: spec.category as never, deletedAt: null };
@@ -914,7 +916,11 @@ export async function resolveAiSourceVersion(manuscriptId: string, workType: str
       orderBy: { createdAt: "desc" },
       select: { versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { filePath: true, mimeType: true, versionNumber: true } } },
     });
-    if (doc?.versions[0]) return doc.versions[0];
+    // isPreferredSource = la source PRIORITAIRE de la chaîne a été trouvée (index 0) :
+    // pour un BAT2, c'est la VERSION INTÉGRÉE du 1er passage. Si on a dû se rabattre
+    // (index > 0), le relecteur travaille sur une version non intégrée — à signaler
+    // explicitement dans le rapport, jamais en silence (règle « erreurs explicites »).
+    if (doc?.versions[0]) return { ...doc.versions[0], isPreferredSource: i === 0 };
   }
   return undefined;
 }
@@ -1156,6 +1162,14 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // intégré, non intégré, partiellement intégré, modifié, et les nouvelles
     // anomalies — au lieu de refaire la 1re relecture à l'identique.
     if (params.workType === "correction_2") {
+      // FILET DE SÉCURITÉ (demande opérateur) : si la VERSION INTÉGRÉE du 1er
+      // passage est absente, on NE prétend PAS relire un BAT2 intégré en silence.
+      // On signale explicitement au relecteur qu'il travaille sur la version NON
+      // intégrée, pour qu'il le dise dans le rapport au lieu d'affirmer à tort que
+      // des corrections « ont été intégrées ».
+      if (version && (version as { isPreferredSource?: boolean }).isPreferredSource === false) {
+        userText += "\n\n⚠ SOURCE NON INTÉGRÉE : la version intégrée du 1er passage (BAT1) est INTROUVABLE ; tu relis donc la version AVANT intégration. Tu NE dois PAS affirmer que des corrections du BAT1 ont été intégrées. Dans le tableau de suivi R2, indique pour chaque correction du BAT1 « NON CORRIGÉE » (ou « à vérifier — version intégrée non fournie »), et précise en tête de rubrique que le contrôle d'intégration n'a pas pu être fait faute de version intégrée déposée.";
+      }
       const prevR1 = await findPreviousReportText(manuscript.id, "correction_1", job.id);
       userText += prevR1
         ? "\n\n=== CONTRÔLE APRÈS INTÉGRATION (RELECTURE 2) ===\nCi-dessous le RAPPORT DE LA 1re RELECTURE. Pour CHAQUE correction qui y était demandée, indique dans le tableau de suivi R2 son résultat : CORRIGÉE / NON CORRIGÉE / PARTIELLEMENT CORRIGÉE / CORRECTION MODIFIÉE / NOUVELLE ANOMALIE, avec sa localisation. Puis effectue une nouvelle passe de contrôle (nouvelles erreurs introduites, cohérence finale).\n\n--- DÉBUT RAPPORT RELECTURE 1 ---\n" + prevR1 + "\n--- FIN RAPPORT RELECTURE 1 ---"
@@ -1167,7 +1181,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // texte — aucun échantillonnage — puis on consolide. Le relevé devient la
     // matière de la rubrique d'annotations, avec une couverture vérifiée (N/N).
     if (willSweep && prepared.kind === "text") {
-      const segments = segmentText(prepared.text, SEGMENT_CHARS);
+      const segments = segmentForReview(prepared.text, SEGMENT_CHARS);
       const passLabel = params.workType === "correction_2" ? "BAT2 (deuxième relecture, sur la version intégrée)" : "BAT1 (première relecture)";
       await prisma.aiReadingJob.update({ where: { id: jobId }, data: { progressLabel: `Lecture intégrale par segments (0/${segments.length})…`, progressDone: 0, progressTotal: segments.length, progressAt: new Date() } }).catch(() => {});
       const sweepClient = new Anthropic({ apiKey });

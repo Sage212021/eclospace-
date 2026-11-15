@@ -1569,6 +1569,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-relecture-decoupage-chapitres",
+      version: "2026.11",
+      title: "Nouveauté — Relecture : le rapport cite le bon chapitre et ne crie plus à la « phrase inachevée »",
+      body: "Correction d'un défaut sérieux de la relecture (surtout au 2ᵉ passage, BAT2). Pour lire un gros manuscrit, le relecteur le découpe en morceaux ; or il coupait parfois EN PLEIN MILIEU d'une phrase et ne savait pas dans quel chapitre il se trouvait. Résultat : il signalait de fausses « phrases inachevées » (la phrase continuait en réalité dans le morceau suivant) et se trompait de numéro de chapitre (il disait « chapitre 12 » pour une phrase du chapitre 11). C'est corrigé : le découpage se fait maintenant sur de vraies frontières (fin de paragraphe ou de phrase, jamais au milieu d'un mot), ne mélange jamais deux chapitres, et chaque morceau porte son VRAI numéro de chapitre — le rapport localise donc les anomalies au bon endroit. Quand un morceau est la suite d'un chapitre, le relecteur est prévenu que le texte continue, il n'invente donc plus de « coupure ». Dernière sécurité : au BAT2, si la version intégrée après le 1ᵉʳ passage n'a pas été déposée, le rapport le dit clairement au lieu d'affirmer à tort que des corrections « ont été intégrées ».",
+      permissionModules: ["manuscripts", "bat"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-mon-espace-stock-magasin",
       version: "2026.11",
       title: "Nouveauté — « Mon espace Stock & magasin » : vos tâches arrivent à vous",

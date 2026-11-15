@@ -3418,6 +3418,19 @@ export function recordGoodsReceipt(poId: string, quantityReceived: number, allow
   });
 }
 
+// Réceptions DIRECTES (sans bon de commande, D-061) : pour un ouvrage déjà paru
+// / importé sans passer par l'impression. Même suite réception → contrôle qualité
+// → entrée en stock.
+export function listDirectGoodsReceipts(manuscriptId: string) {
+  return request<GoodsReceipt[]>(`/api/v1/manuscripts/${manuscriptId}/goods-receipts`);
+}
+export function recordDirectGoodsReceipt(manuscriptId: string, quantityReceived: number) {
+  return request<{ id: string }>(`/api/v1/manuscripts/${manuscriptId}/goods-receipts`, {
+    method: "POST",
+    body: JSON.stringify({ quantity_received: quantityReceived }),
+  });
+}
+
 // Contrôle qualité des exemplaires reçus (Ch. 14 §14.7).
 export function listQcChecklistItems() {
   return request<{ items: QcChecklistItem[] }>(`/api/v1/qc-checklist-items`);

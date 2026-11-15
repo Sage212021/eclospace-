@@ -523,10 +523,6 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         <CorrectionCycleHistoryPanel manuscriptId={manuscript.id} />
       )}
 
-      {permissions.has("stock:consultation") && show("stock") && (
-        <ManuscriptStockSection manuscriptId={manuscript.id} canManage={permissions.has("stock:saisie")} />
-      )}
-
       <SourceFileBlock
         manuscriptId={manuscript.id}
         canDeposit={permissions.has("manuscripts:saisie")}
@@ -1122,7 +1118,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
       {/* À l'étape IMPRESSION, cette rubrique est déjà affichée plus haut (dans le
           panneau d'étape, au-dessus de « Valider l'impression »). Ici, on la montre
           aux étapes suivantes (Contrôle qualité…) pour le suivi/l'historique. */}
-      {show("printing") && stageReached(["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"]) && manuscript.status.code !== "IMPRESSION" && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && canSeePrinting && (
+      {show("printing") && (stageReached(["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"]) || manuscript.status.code === "CONTROLE_QUALITE_IMPRESSION") && manuscript.status.code !== "IMPRESSION" && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && canSeePrinting && (
         <>
           <ImpressionHandoffBlock manuscriptId={manuscript.id} />
           <PrintingSection
@@ -1134,6 +1130,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             bonFunctions={bonFunctions}
           />
         </>
+      )}
+
+      {/* Stock de l'ouvrage (table + mise en stock directe de secours) : placé
+          APRÈS la réception / contrôle qualité / entrée en stock (D-061), pour que
+          l'étape se lise dans l'ordre et que « Ajouter au stock » reste un secours. */}
+      {permissions.has("stock:consultation") && show("stock") && (
+        <ManuscriptStockSection manuscriptId={manuscript.id} canManage={permissions.has("stock:saisie")} />
       )}
 
       {/* Site vitrine : publication de l'ouvrage sur la boutique WordPress

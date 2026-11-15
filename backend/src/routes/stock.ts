@@ -1251,7 +1251,16 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ code: "no_conform", message: "Aucun exemplaire conforme sur cette réception : rien à mettre en stock." });
       }
 
-      const isbn = await prisma.isbn.findFirst({ where: { manuscriptId: receipt.po.quote.manuscriptId, format: "print" } });
+      // Rattachement à l'ouvrage : via le bon de commande, OU directement
+      // (réception sans bon, D-061). Le tirage et le libellé s'adaptent.
+      const manuscriptId = receipt.po?.quote.manuscriptId ?? receipt.manuscriptId;
+      if (!manuscriptId) {
+        return reply.code(409).send({ code: "no_manuscript", message: "Cette réception n'est rattachée à aucun ouvrage." });
+      }
+      const printRun = receipt.po?.reprintNumber ?? 0;
+      const originLabel = receipt.po ? `bon ${receipt.po.poNumber}` : "réception directe (sans bon de commande)";
+
+      const isbn = await prisma.isbn.findFirst({ where: { manuscriptId, format: "print" } });
       if (!isbn) {
         return reply.code(409).send({ code: "isbn_missing", message: "Aucun ISBN papier attribué pour cet ouvrage." });
       }
@@ -1271,17 +1280,17 @@ export default async function stockRoutes(fastify: FastifyInstance) {
           data: {
             type: "production_in",
             isbnId: isbn.id,
-            printRun: receipt.po.reprintNumber,
+            printRun,
             toLocationId: locationId,
             quantity: conform,
-            reason: `Entrée en stock — exemplaires conformes (bon ${receipt.po.poNumber})`,
+            reason: `Entrée en stock — exemplaires conformes (${originLabel})`,
             referenceType: "goods_receipt",
             referenceId: receipt.id,
             status: "completed",
             movedBy: request.user!.id,
           },
         });
-        await adjustStockItem(tx, isbn.id, locationId!, receipt.po.reprintNumber, conform);
+        await adjustStockItem(tx, isbn.id, locationId!, printRun, conform);
         await tx.goodsReceipt.update({ where: { id }, data: { stockEnteredAt: new Date() } });
         return created;
       });
@@ -1299,7 +1308,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         type: "affectation",
         priority: "medium",
         title: "Entrée de fabrication à ranger",
-        body: `${conform} exemplaire(s) conforme(s) reçus (${receipt.po.poNumber}) à ranger.`,
+        body: `${conform} exemplaire(s) conforme(s) reçus (${originLabel}) à ranger.`,
         entityType: "stock_movement",
         entityId: movement.id,
       });

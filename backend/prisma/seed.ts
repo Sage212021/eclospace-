@@ -1564,6 +1564,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-pv-reception",
+      version: "2026.11",
+      title: "Nouveauté — Procès-verbal de réception (imprimable / PDF)",
+      body: "À l'étape « Réception et mise en stock », un bouton « PV de réception » permet d'éditer le procès-verbal officiel d'un bon de commande : il récapitule toutes les livraisons (quantité commandée, cumul reçu, reste), le contrôle qualité (conformes / non conformes), les réclamations, et les exemplaires entrés en stock — avec une zone de signatures (magasinier, responsable, imprimeur). Il s'imprime et se télécharge en PDF (transférable). Note : on n'ajoute pas d'« ordre de fabrication » séparé — le bon de commande joue déjà ce rôle.",
+      permissionModules: ["stock", "printing"],
+      departmentCodes: ["STOCK", "IMPR", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-reception-mise-en-stock",
       version: "2026.11",
       title: "Nouveauté — Réception et mise en stock regroupées en une seule étape",

@@ -964,6 +964,101 @@ export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts, sign?: C
   openPrintWindow(`${tr("Bon de commande", "Purchase order")} ${po.poNumber}`, body, opts);
 }
 
+// Libellés des verdicts de contrôle qualité (exemplaires reçus).
+const QC_VERDICT_LABELS: Record<string, [string, string]> = {
+  conform: ["Conforme", "Compliant"],
+  with_reserves: ["Conforme avec réserves", "Compliant with reserves"],
+  non_conform: ["Non conforme", "Non-compliant"],
+};
+
+// Procès-Verbal de réception (D-057) : document officiel et signable qui récapitule,
+// pour un bon de commande, TOUTES les réceptions (livraisons partielles cumulées),
+// le contrôle qualité (quantités conformes / non conformes), les réclamations et
+// la mise en stock. Reprend l'en-tête de maison et une zone de signatures.
+export function printReceptionReport(po: PurchaseOrder, opts?: PrintOpts): void {
+  const printer = po.printer ? `${po.printer.partner.firstName} ${po.printer.partner.lastName}` : "—";
+  const book = po.quote?.manuscript;
+  const { author, isbn } = purchaseOrderExtras(po);
+  const receipts = po.goodsReceipts ?? [];
+
+  const totalReceived = receipts.reduce((s, r) => s + r.quantityReceived, 0);
+  const totalConform = receipts.reduce((s, r) => s + (r.quantityConform ?? 0), 0);
+  const totalNonConform = Math.max(0, totalReceived - totalConform);
+  const totalInStock = receipts.filter((r) => r.stockEnteredAt).reduce((s, r) => s + (r.quantityConform ?? 0), 0);
+  const remaining = Math.max(0, po.orderedQuantity - totalReceived);
+
+  const rows = receipts.map((r, i) => {
+    const nonConf = r.qcVerdict ? Math.max(0, r.quantityReceived - (r.quantityConform ?? 0)) : null;
+    return `<tr>
+      <td class="num">${i + 1}</td>
+      <td class="num">${r.receivedAt ? fdate(r.receivedAt) : "—"}</td>
+      <td class="r num">${r.quantityReceived}</td>
+      <td class="r num">${r.qcVerdict ? (r.quantityConform ?? 0) : "—"}</td>
+      <td class="r num">${nonConf ?? "—"}</td>
+      <td>${r.qcVerdict ? escapeHtml(label(QC_VERDICT_LABELS, r.qcVerdict)) : tr("À contrôler", "To check")}</td>
+      <td>${r.stockEnteredAt ? tr("oui", "yes") : "—"}</td>
+    </tr>`;
+  }).join("");
+
+  const claims = receipts.flatMap((r) => (r.claims ?? []).map((c) => c.description));
+  const claimsHtml = claims.length > 0
+    ? `<div class="meta" style="margin-top:12px"><b>${tr("Réclamations ouvertes", "Open claims")}</b></div>
+       <ul style="margin:4px 0 0; padding-left:18px; font-size:11.5px">${claims.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>`
+    : "";
+
+  const sigCol = (role: [string, string], note: [string, string]) =>
+    `<div style="flex:1; min-width:170px"><div class="party__label">${tr(role[0], role[1])}</div><div style="border-top:1px solid #0b0b0c; margin-top:40px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr(note[0], note[1])}</div></div>`;
+
+  const body = `
+    <div class="doc__title">${tr("Procès-verbal de réception", "Goods reception report")}</div>
+    <div class="meta">
+      <span>${tr("Bon de commande", "Purchase order")} <b class="num">${escapeHtml(po.poNumber)}</b></span>
+      <span>${tr("Édité le", "Issued on")} <b class="num">${fdate(new Date())}</b></span>
+    </div>
+    <div class="party">
+      <div><span class="party__label">${tr("Fournisseur (imprimeur)", "Supplier (printer)")} :</span> <b style="font-size:13px">${escapeHtml(printer)}</b></div>
+      ${book ? `<div class="meta" style="margin-top:4px"><span>${tr("Ouvrage", "Title")} : <b>${escapeHtml(book.title ?? "—")}</b></span>${author ? `<span>${tr("Auteur", "Author")} : <b>${escapeHtml(author)}</b></span>` : ""}${isbn ? `<span>ISBN : <b class="num">${escapeHtml(isbn)}</b></span>` : ""}</div>` : ""}
+    </div>
+
+    <table class="lines">
+      <thead><tr>
+        <th>N°</th>
+        <th>${tr("Date", "Date")}</th>
+        <th class="r">${tr("Reçus", "Received")}</th>
+        <th class="r">${tr("Conformes", "Compliant")}</th>
+        <th class="r">${tr("Non conf.", "Non-compl.")}</th>
+        <th>${tr("Contrôle qualité", "Quality control")}</th>
+        <th>${tr("En stock", "In stock")}</th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="7">${tr("Aucune réception enregistrée.", "No reception recorded.")}</td></tr>`}</tbody>
+    </table>
+
+    <div class="totals" style="margin-top:14px">
+      <div><span>${tr("Quantité commandée", "Ordered quantity")}</span><span class="num">${po.orderedQuantity}</span></div>
+      <div><span>${tr("Total reçu (cumulé)", "Total received")}</span><span class="num">${totalReceived}</span></div>
+      ${remaining > 0 ? `<div><span>${tr("Reste à recevoir", "Left to receive")}</span><span class="num">${remaining}</span></div>` : ""}
+      <div><span>${tr("Non conformes (isolés)", "Non-compliant (isolated)")}</span><span class="num">${totalNonConform}</span></div>
+      <div class="ttc"><span>${tr("Conformes entrés en stock", "Compliant entered in stock")}</span><span class="num">${totalInStock}</span></div>
+    </div>
+    <div style="clear:both"></div>
+    ${claimsHtml}
+
+    <div class="meta" style="margin-top:16px; font-size:10.5px; color:#6b7280">
+      ${tr(
+        "Procès-verbal établi à la réception des exemplaires imprimés. Seuls les exemplaires jugés conformes sont entrés en stock commercial ; les non conformes sont isolés et font, le cas échéant, l'objet d'une réclamation auprès de l'imprimeur.",
+        "Report drawn up upon reception of the printed copies. Only copies deemed compliant are entered into sale stock; non-compliant copies are isolated and may be subject to a claim to the printer.",
+      )}
+    </div>
+
+    <div style="margin-top:26px; display:flex; gap:36px; flex-wrap:wrap; break-inside:avoid">
+      ${sigCol(["Le magasinier (réception & contrôle)", "Storekeeper (reception & control)"], ["Nom & signature", "Name & signature"])}
+      ${sigCol(["Le responsable habilité", "Authorized manager"], ["Visa", "Approval"])}
+      ${sigCol(["L'imprimeur / le livreur", "The printer / carrier"], ["Reçu — signature", "Received — signature"])}
+    </div>`;
+
+  openPrintWindow(`${tr("PV de réception", "Reception report")} ${po.poNumber}`, body, opts);
+}
+
 const CONTRACT_TYPE_LABELS: Record<string, [string, string]> = {
   edition: ["Contrat d'édition", "Publishing contract"],
   cession: ["Contrat de cession", "Rights assignment contract"],

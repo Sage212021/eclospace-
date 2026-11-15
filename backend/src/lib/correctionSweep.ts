@@ -23,27 +23,146 @@ const SWEEP_THINK_BUDGET = 3000;
 // (verrouillage demandé par l'opérateur après des coquilles passées en BAT1/BAT2).
 export const SEGMENT_CHARS = 12_000;
 
-// Découpe le texte en segments d'environ maxChars, sur des frontières de
-// paragraphe quand c'est possible (sinon coupe nette). Conserve TOUT le texte,
-// dans l'ordre. Un paragraphe plus long que maxChars est tranché tel quel.
+// ─────────────────────────────────────────────────────────────────────────
+// DÉCOUPAGE PROPRE (correctif « scandale BAT2 », demande opérateur 15/11/2026).
+// Ancien défaut : le texte n'était coupé que sur « \n\n » alors que l'extraction
+// (.docx/.odt/.pdf) ne produit qu'un SEUL « \n » entre paragraphes → les
+// frontières de paragraphe étaient invisibles, et un bloc trop long était
+// TRANCHÉ EN PLEIN MOT / EN PLEINE PHRASE. Conséquence : le relecteur voyait de
+// fausses « phrases inachevées » (la phrase continuait en réalité dans le
+// segment suivant) et, sans repère de chapitre, INVENTAIT un numéro de chapitre
+// (« chapitre 12 » pour une phrase du chapitre 11).
+//
+// Correctif : (1) couper UNIQUEMENT sur de vraies frontières — paragraphe, puis
+// phrase, puis mot — jamais au milieu d'un mot ; (2) détecter les titres de
+// chapitre et ne JAMAIS faire chevaucher deux chapitres dans un même segment ;
+// (3) étiqueter chaque segment avec son chapitre réel + un drapeau « la suite du
+// chapitre continue » pour que le relecteur ne crie pas à la « phrase inachevée »
+// sur une simple coupe technique.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Coupe un bloc de texte en portions ≤ maxChars sur des frontières PROPRES :
+// d'abord sur les sauts de ligne (paragraphes), puis, pour une ligne trop
+// longue, sur les fins de phrase (. ! ? …), puis en dernier recours sur les
+// espaces (jamais au milieu d'un mot). Conserve tout le texte dans l'ordre.
+function splitClean(block: string, maxChars: number): string[] {
+  const t = block.trim();
+  if (!t) return [];
+  if (t.length <= maxChars) return [t];
+
+  // Unités atomiques insécables : une ligne, sinon une phrase, sinon un mot.
+  const atoms: string[] = [];
+  for (const line of t.split(/\n/)) {
+    if (line.length <= maxChars) { atoms.push(line); continue; }
+    // Ligne trop longue → phrases (on garde la ponctuation finale).
+    for (const sentence of line.split(/(?<=[.!?…»])\s+/)) {
+      if (sentence.length <= maxChars) { atoms.push(sentence); continue; }
+      // Phrase trop longue → mots (jamais au milieu d'un mot).
+      let word = "";
+      for (const w of sentence.split(/(\s+)/)) {
+        if ((word + w).length > maxChars) {
+          if (word.trim()) atoms.push(word.trim());
+          // Mot unique démesuré (URL, suite sans espace) : dernier recours,
+          // tranche nette — cas pathologique, jamais une vraie phrase.
+          if (w.length > maxChars) { for (let i = 0; i < w.length; i += maxChars) atoms.push(w.slice(i, i + maxChars)); word = ""; }
+          else word = w;
+        } else word += w;
+      }
+      if (word.trim()) atoms.push(word.trim());
+    }
+  }
+
+  // Regroupe les unités en portions ≤ maxChars (recollées par saut de ligne).
+  const parts: string[] = [];
+  let buf = "";
+  for (const a of atoms) {
+    const add = buf ? `\n${a}` : a;
+    if (buf && buf.length + add.length > maxChars) { parts.push(buf); buf = a; }
+    else buf += add;
+  }
+  if (buf.trim()) parts.push(buf.trim());
+  return parts;
+}
+
+// Découpe le texte en segments d'environ maxChars, sur des frontières PROPRES
+// (paragraphe → phrase → mot, jamais en plein mot). Conserve TOUT le texte,
+// dans l'ordre. Conservé pour les contrôles de fiabilité ; la lecture éditoriale
+// utilise segmentForReview (consciente des chapitres).
 export function segmentText(text: string, maxChars: number): string[] {
   const t = (text ?? "").trim();
   if (!t) return [];
   if (t.length <= maxChars) return [t];
-  const paras = t.split(/\n{2,}/);
-  const segs: string[] = [];
-  let buf = "";
-  const flush = () => { if (buf.trim()) segs.push(buf.trim()); buf = ""; };
-  for (const p of paras) {
-    if (p.length > maxChars) {
-      flush();
-      for (let i = 0; i < p.length; i += maxChars) segs.push(p.slice(i, i + maxChars));
-      continue;
-    }
-    if (buf.length + p.length + 2 > maxChars) flush();
-    buf = buf ? `${buf}\n\n${p}` : p;
+  return splitClean(t, maxChars);
+}
+
+// Un segment de lecture ÉTIQUETÉ : son chapitre réel + un drapeau de continuité.
+export interface ReviewSegment {
+  label: string; // ex. « Chapitre 11 » ou « Chapitre 11 (partie 2/3) »
+  chapter: string; // ex. « Chapitre 11 » (sans la mention de partie) — pour la localisation
+  text: string;
+  continues: boolean; // true si la suite du MÊME chapitre arrive au segment suivant
+}
+
+// Reconnaît un titre de chapitre/section en DÉBUT de ligne. Volontairement
+// prudent : « Chapitre » / « Chapter » / « Chap. » suivi d'un numéro (chiffres,
+// romain ou ordinal), ou une section liminaire nommée (Prologue, Épilogue…).
+const CHAPTER_RE =
+  /^\s*(chapitre|chapter|chap\.)\s+([0-9]{1,3}|[ivxlcdm]{1,8}|premier|première|premiere|deuxième|deuxieme|second[e]?|troisième|troisieme|quatrième|quatrieme|cinquième|cinquieme|sixième|sixieme|septième|septieme|huitième|huitieme|neuvième|neuvieme|dixième|dixieme)\b/i;
+const SECTION_RE = /^\s*(prologue|épilogue|epilogue|avant[- ]propos|avant[- ]?propos|préface|preface|introduction|conclusion|postface|liminaire|ouverture|exergue|remerciements|dédicace|dedicace)\b/i;
+
+function isHeading(line: string): boolean {
+  const l = line.trim();
+  if (!l || l.length > 90) return false; // un titre reste court
+  return CHAPTER_RE.test(l) || SECTION_RE.test(l);
+}
+
+// Normalise un titre en libellé court et propre (sert à citer le BON chapitre).
+function headingLabel(line: string): string {
+  return line.trim().replace(/\s+/g, " ").slice(0, 70);
+}
+
+// Découpe le texte en segments ÉTIQUETÉS, conscients des chapitres :
+//  1. on repère les titres de chapitre/section (en début de ligne) ;
+//  2. aucun segment ne chevauche deux chapitres (coupe nette au titre suivant) ;
+//  3. un chapitre plus long que maxChars est découpé en portions PROPRES
+//     (paragraphe → phrase → mot) étiquetées « (partie k/m) » ;
+//  4. chaque segment porte le libellé du chapitre réel + un drapeau de continuité
+//     (pour ne pas confondre une coupe technique avec une « phrase inachevée »).
+export function segmentForReview(text: string, maxChars: number): ReviewSegment[] {
+  const t = (text ?? "").trim();
+  if (!t) return [];
+
+  // 1) Regroupe les lignes en BLOCS de chapitre (titre + corps jusqu'au titre suivant).
+  const lines = t.split(/\n/);
+  const blocks: { label: string; body: string }[] = [];
+  let curLabel = "Ouverture"; // texte avant le 1ᵉʳ titre (page de titre, exergue…)
+  let curLines: string[] = [];
+  const pushBlock = () => {
+    const body = curLines.join("\n").trim();
+    if (body) blocks.push({ label: curLabel, body });
+    curLines = [];
+  };
+  for (const line of lines) {
+    if (isHeading(line)) { pushBlock(); curLabel = headingLabel(line); }
+    curLines.push(line);
   }
-  flush();
+  pushBlock();
+  if (!blocks.length) blocks.push({ label: "Ouverture", body: t });
+
+  // 2+3) Chaque bloc de chapitre → un ou plusieurs segments étiquetés.
+  const segs: ReviewSegment[] = [];
+  for (const b of blocks) {
+    const parts = splitClean(b.body, maxChars);
+    const m = parts.length;
+    parts.forEach((part, k) => {
+      segs.push({
+        label: m > 1 ? `${b.label} (partie ${k + 1}/${m})` : b.label,
+        chapter: b.label,
+        text: part,
+        continues: k < m - 1, // la suite du même chapitre arrive au segment suivant
+      });
+    });
+  }
   return segs;
 }
 
@@ -61,7 +180,7 @@ export interface SweepResult {
 export async function runAnomalySweep(opts: {
   client: Anthropic;
   model: string;
-  segments: string[];
+  segments: ReviewSegment[];
   passLabel: string; // ex. « BAT1 (première relecture) »
   methodBlock: string; // grille + guide de sévérité + règles de fiabilité
   maxTokens?: number;
@@ -87,11 +206,22 @@ export async function runAnomalySweep(opts: {
   let outTok = 0;
   for (let i = 0; i < total; i++) {
     if (opts.beforeEach) await opts.beforeEach();
+    const seg = opts.segments[i];
+    // Repère de chapitre RÉEL : le relecteur localise l'anomalie dans CE chapitre,
+    // il n'invente JAMAIS un autre numéro (correctif « chapitre 12 » pour une
+    // phrase du chapitre 11).
+    const continuationNote = seg.continues
+      ? `\n\n⚠ Ce segment est une PORTION du « ${seg.chapter} » : le texte se POURSUIT dans le segment suivant. ` +
+        "Ne signale donc NI « phrase inachevée » NI « chapitre incomplet » à la toute fin de ce segment : c'est une coupe technique de lecture, PAS une anomalie du texte. Analyse uniquement ce qui est présent ici."
+      : "";
     const user =
-      `=== SEGMENT ${i + 1}/${total} (à lire INTÉGRALEMENT) ===\n${opts.segments[i]}\n\n` +
+      `=== SEGMENT ${i + 1}/${total} — ${seg.label} (à lire INTÉGRALEMENT) ===\n` +
+      `Chapitre de ce segment : « ${seg.chapter} ». Toute anomalie doit être localisée dans CE chapitre ; n'indique jamais un autre numéro de chapitre que celui-ci.` +
+      continuationNote +
+      `\n\n${seg.text}\n\n` +
       "=== CONSIGNE ===\n" +
       "Relève TOUTES les anomalies de CE segment, une par ligne, au format :\n" +
-      "- [catégorie · sévérité C1/C2/C3/S] « passage fautif cité exactement » → correction proposée (justification courte si utile)\n" +
+      `- [catégorie · sévérité C1/C2/C3/S] « passage fautif cité exactement » (${seg.chapter}) → correction proposée (justification courte si utile)\n` +
       `Si le segment ne contient aucune anomalie, écris exactement : « Segment ${i + 1} : RAS ».`;
     // Jusqu'à 2 tentatives : un incident ponctuel sur un segment ne doit pas
     // laisser un trou de couverture ni une mention technique dans le relevé.
@@ -102,7 +232,7 @@ export async function runAnomalySweep(opts: {
         inTok += resp.usage?.input_tokens ?? 0;
         outTok += resp.usage?.output_tokens ?? 0;
         const txt = (resp.content as Array<{ type: string; text?: string }>).filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
-        releve += `\n\n----- SEGMENT ${i + 1}/${total} -----\n${txt || `Segment ${i + 1} : RAS`}`;
+        releve += `\n\n----- SEGMENT ${i + 1}/${total} · ${seg.label} -----\n${txt || `Segment ${i + 1} : RAS`}`;
         covered++;
         done = true;
       } catch (e) {

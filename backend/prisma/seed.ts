@@ -409,6 +409,11 @@ async function main() {
     "stock:saisie",
     "stock:validation",
     "stock:administration",
+    // D-058 : le Responsable Stock gère en priorité la fin de production
+    // (Impression, Réception et mise en stock, Commercialisation). Il doit pouvoir
+    // OUVRIR la fiche de l'ouvrage pour agir ; `manuscripts:consultation` (déjà
+    // partagé avec production/qualité/juridique) lui donne cette lecture.
+    "manuscripts:consultation",
   ]);
   await grant("RESP_COMMERCIAL", ["stock:consultation"]);
   await grant("DIR_GENERAL", ["stock:consultation", "stock:validation"]);
@@ -1563,6 +1568,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-mon-espace-stock-magasin",
+      version: "2026.11",
+      title: "Nouveauté — « Mon espace Stock & magasin » : vos tâches arrivent à vous",
+      body: "Le pôle Stock & magasin a désormais son propre écran de tâches, « Mon espace Stock & magasin » (comme la Production et la Direction ont le leur). Il liste les ouvrages arrivés aux étapes que vous gérez en priorité : Impression (suivi du bon), Réception et mise en stock, et Commercialisation. Chaque ligne indique l'état (à traiter / en attente, avec le motif) et s'ouvre directement sur la fiche de l'ouvrage pour agir. Vous pouvez aussi désormais définir le prix public et clôturer la commercialisation. L'impression reste lancée par la Direction générale (vous préparez le bon).",
+      permissionModules: ["stock"],
+      departmentCodes: ["STOCK", "FIN", "DG"],
+    },
     {
       slug: "2026-11-pv-reception",
       version: "2026.11",

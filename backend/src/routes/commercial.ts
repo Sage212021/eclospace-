@@ -623,7 +623,9 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
   // nouvelle ligne par changement.
   fastify.post(
     "/api/v1/isbn/:isbnId/prices",
-    { preHandler: requirePermission("commercial", "saisie") },
+    // Commercial (saisie) OU Stock & magasin (saisie) — D-058 : le Responsable
+    // Stock gère la commercialisation en priorité (dont la définition du prix public).
+    { preHandler: requireAnyPermission([{ module: "commercial", action: "saisie" }, { module: "stock", action: "saisie" }]) },
     async (request, reply) => {
       const { isbnId } = request.params as { isbnId: string };
       const parsed = priceSchema.safeParse(request.body);

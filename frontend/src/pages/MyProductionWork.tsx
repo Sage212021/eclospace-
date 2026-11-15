@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { getMyProductionWork, type MyProductionWork as Work } from "../api/client";
 
+export type WorkStage = { key: string; label: string; codes: string[] };
+
 // « Mes travaux de production » (demande opérateur 03/10) — TABLEAU DE BORD du
 // pôle Production : un TABLEAU récapitulatif de toute la charge de l'utilisateur,
 // par ÉTAPE de production (ordre réel), colonnes Total / En attente / En cours /
@@ -8,7 +10,7 @@ import { getMyProductionWork, type MyProductionWork as Work } from "../api/clien
 // ouvre sa fiche de travail. Relook charte Éclospace, lisible sur téléphone
 // (colonnes compactes + défilement horizontal de secours, jamais de coupe).
 
-const STAGES: { key: string; label: string; codes: string[] }[] = [
+const PRODUCTION_STAGES: WorkStage[] = [
   { key: "integration", label: "Mes intégrations & corrections", codes: ["INTEGRATION_COUVERTURE", "INTEGRATION_TEXTE"] },
   { key: "maquette", label: "Maquette / Mise en page", codes: ["MISE_EN_PAGE"] },
   { key: "infographie", label: "Infographie / Couverture", codes: ["INFOGRAPHIE"] },
@@ -30,25 +32,46 @@ const ETAT_COLOR: Record<EtatCol, string> = { attente: ATTENTE, cours: COURS, li
 // Grille commune en-tête/lignes : nom (souple) + 4 colonnes chiffrées compactes.
 const COLS = "minmax(104px,1fr) 42px 50px 50px 50px";
 
-export function MyProductionWork({ onOpenManuscript, onOpenIntegration, canOpen }: { onOpenManuscript: (id: string) => void; onOpenIntegration: (id: string) => void; canOpen: boolean }) {
+export function MyProductionWork({
+  onOpenManuscript,
+  onOpenIntegration,
+  canOpen,
+  stages = PRODUCTION_STAGES,
+  fetcher = getMyProductionWork,
+  title = "Mes travaux de production",
+  intro = "Vue d'ensemble de toute votre charge de production, étape par étape. Touchez une étape pour voir les ouvrages concernés, puis un ouvrage pour ouvrir son travail.",
+  emptyText = "Aucun travail de production ne vous est confié pour l'instant. Dès qu'un ouvrage vous sera transmis (intégration, mise en page, infographie, références, BAT…), il apparaîtra ici.",
+  headLabel = "Étape de production",
+}: {
+  onOpenManuscript: (id: string) => void;
+  onOpenIntegration: (id: string) => void;
+  canOpen: boolean;
+  stages?: WorkStage[];
+  fetcher?: () => Promise<Work[]>;
+  title?: string;
+  intro?: string;
+  emptyText?: string;
+  headLabel?: string;
+}) {
+  const STAGES = stages;
   const [rows, setRows] = useState<Work[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openStage, setOpenStage] = useState<string | null>(null);
 
   useEffect(() => {
-    getMyProductionWork()
+    fetcher()
       .then(setRows)
       .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
-  }, []);
+  }, [fetcher]);
 
   const stageRows = (codes: string[]) => (rows ?? []).filter((r) => codes.includes(r.step_code));
   const hasAny = (rows ?? []).length > 0;
 
   return (
     <section style={{ maxWidth: 860 }}>
-      <h1 style={{ fontSize: 21, margin: "0 0 4px", fontFamily: "var(--font-title, inherit)" }}>Mes travaux de production</h1>
+      <h1 style={{ fontSize: 21, margin: "0 0 4px", fontFamily: "var(--font-title, inherit)" }}>{title}</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 14px", lineHeight: 1.5 }}>
-        Vue d'ensemble de toute votre charge de production, étape par étape. Touchez une étape pour voir les ouvrages concernés, puis un ouvrage pour ouvrir son travail.
+        {intro}
       </p>
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
@@ -56,7 +79,7 @@ export function MyProductionWork({ onOpenManuscript, onOpenIntegration, canOpen 
 
       {rows !== null && !hasAny && (
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--muted)", fontSize: 13.5 }}>
-          Aucun travail de production ne vous est confié pour l'instant. Dès qu'un ouvrage vous sera transmis (intégration, mise en page, infographie, références, BAT…), il apparaîtra ici.
+          {emptyText}
         </div>
       )}
 
@@ -68,7 +91,7 @@ export function MyProductionWork({ onOpenManuscript, onOpenIntegration, canOpen 
             <div style={{ minWidth: 300 }}>
               {/* En-tête */}
               <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 4, padding: "10px 12px", background: "var(--ivory, #FAF8F2)", borderBottom: "2px solid var(--eclosion, #D9B21A)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.3, color: "var(--muted)", alignItems: "end" }}>
-                <span>Étape de production</span>
+                <span>{headLabel}</span>
                 <HeadCell label="Total" />
                 <HeadCell label="En attente" dot={ATTENTE} />
                 <HeadCell label="En cours" dot={COURS} />

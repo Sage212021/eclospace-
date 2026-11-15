@@ -848,6 +848,92 @@ export function downloadPurchaseOrderPdf(po: PurchaseOrder, sign?: ContractStamp
   purchaseOrderPdf(po, sign).save(`Bon-de-commande-${po.poNumber}.pdf`);
 }
 
+// ── Procès-verbal de réception (D-057) ───────────────────────────────────────
+// Récapitule, pour un bon de commande, toutes les réceptions (livraisons
+// partielles), le contrôle qualité (conformes / non conformes), les réclamations
+// et la mise en stock. Document officiel et signable, fidèle à la version imprimée.
+const PV_QC_LABELS: Record<string, string> = {
+  conform: "Conforme",
+  with_reserves: "Conforme avec réserves",
+  non_conform: "Non conforme",
+};
+export function receptionReportPdf(po: PurchaseOrder): jsPDF {
+  const printer = po.printer ? `${po.printer.partner.firstName} ${po.printer.partner.lastName}` : "—";
+  const book = po.quote?.manuscript;
+  const { author, isbn } = purchaseOrderExtras(po);
+  const receipts = po.goodsReceipts ?? [];
+
+  const totalReceived = receipts.reduce((s, r) => s + r.quantityReceived, 0);
+  const totalConform = receipts.reduce((s, r) => s + (r.quantityConform ?? 0), 0);
+  const totalNonConform = Math.max(0, totalReceived - totalConform);
+  const totalInStock = receipts.filter((r) => r.stockEnteredAt).reduce((s, r) => s + (r.quantityConform ?? 0), 0);
+  const remaining = Math.max(0, po.orderedQuantity - totalReceived);
+  const fr = (d?: string | null) => (d ? new Date(d).toLocaleDateString("fr-FR") : "—");
+
+  const rows: string[][] = receipts.map((r, i) => {
+    const nonConf = r.qcVerdict ? Math.max(0, r.quantityReceived - (r.quantityConform ?? 0)) : null;
+    return [
+      String(i + 1),
+      fr(r.receivedAt),
+      String(r.quantityReceived),
+      r.qcVerdict ? String(r.quantityConform ?? 0) : "—",
+      nonConf == null ? "—" : String(nonConf),
+      r.qcVerdict ? PV_QC_LABELS[r.qcVerdict] ?? r.qcVerdict : "À contrôler",
+      r.stockEnteredAt ? "oui" : "—",
+    ];
+  });
+
+  const partyExtra: string[] = [];
+  const ref = [book?.title ? `Ouvrage : ${book.title}` : "", author ? `Auteur : ${author}` : "", isbn ? `ISBN : ${isbn}` : ""].filter(Boolean);
+  if (ref.length) partyExtra.push(ref.join("    ·    "));
+
+  const infoLines: string[] = [];
+  const claims = receipts.flatMap((r) => (r.claims ?? []).map((c) => c.description));
+  if (claims.length) {
+    infoLines.push("Réclamations ouvertes :");
+    for (const c of claims) infoLines.push(`• ${c}`);
+    infoLines.push("");
+  }
+  infoLines.push("Seuls les exemplaires conformes sont entrés en stock commercial ; les non conformes sont isolés (jamais vendus) et font, le cas échéant, l'objet d'une réclamation auprès de l'imprimeur.");
+
+  const totals = [
+    { label: "Quantité commandée", value: String(po.orderedQuantity) },
+    { label: "Total reçu (cumulé)", value: String(totalReceived) },
+    ...(remaining > 0 ? [{ label: "Reste à recevoir", value: String(remaining) }] : []),
+    { label: "Non conformes (isolés)", value: String(totalNonConform) },
+    { label: "Conformes entrés en stock", value: String(totalInStock), strong: true },
+  ];
+
+  return renderHouseDoc({
+    docName: "Procès-verbal de réception",
+    fileName: `PV réception ${po.poNumber}`,
+    number: po.poNumber,
+    meta: [{ label: "Édité le", value: new Date().toLocaleDateString("fr-FR") }],
+    partyLabel: "Fournisseur (imprimeur)",
+    partyName: printer,
+    partyExtra,
+    columns: [
+      { label: "N°", width: 10, align: "right" },
+      { label: "Date", width: 24, align: "left" },
+      { label: "Reçus", width: 20, align: "right" },
+      { label: "Conformes", width: 24, align: "right" },
+      { label: "Non conf.", width: 22, align: "right" },
+      { label: "Contrôle qualité", width: CONTENT_W - 118, align: "left" },
+      { label: "Stock", width: 18, align: "left" },
+    ],
+    rows,
+    totals,
+    infoLines,
+    signatures: ["Le magasinier (réception & contrôle)", "Le responsable habilité", "L'imprimeur / le livreur"],
+  });
+}
+export function receptionReportPdfFile(po: PurchaseOrder): File {
+  return new File([receptionReportPdf(po).output("blob")], `PV-reception-${po.poNumber}.pdf`, { type: "application/pdf" });
+}
+export function downloadReceptionReportPdf(po: PurchaseOrder): void {
+  receptionReportPdf(po).save(`PV-reception-${po.poNumber}.pdf`);
+}
+
 // ── Relevé de droits d'auteur (par contrat, sur une période) ─────────────────
 const ROYALTY_SOURCE: Record<string, string> = {
   sales_order_line: "Vente", delivery: "Livraison", return_line: "Retour",

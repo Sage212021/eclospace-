@@ -33,8 +33,8 @@ import {
   BON_FUNCTION_LABELS,
   purchaseOrderExtras,
 } from "../api/client";
-import { printPurchaseOrder, type ContractStampData } from "../lib/print";
-import { downloadPurchaseOrderPdf, purchaseOrderPdfFile } from "../lib/financePdf";
+import { printPurchaseOrder, printReceptionReport, type ContractStampData } from "../lib/print";
+import { downloadPurchaseOrderPdf, purchaseOrderPdfFile, downloadReceptionReportPdf } from "../lib/financePdf";
 import { TransferDocDialog } from "./TransferDocDialog";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -386,8 +386,16 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
 
           {(po.goodsReceipts ?? []).length > 0 && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                Réception · contrôle qualité · mise en stock
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                  Réception · contrôle qualité · mise en stock
+                </div>
+                {/* Procès-verbal de réception (D-057) : document officiel récapitulatif, imprimable / PDF. */}
+                <DocPrintMenu
+                  label="PV de réception"
+                  onPrint={(o) => printReceptionReport(po, o)}
+                  onDownloadPdf={() => downloadReceptionReportPdf(po)}
+                />
               </div>
               {(() => {
                 const recs = po.goodsReceipts ?? [];

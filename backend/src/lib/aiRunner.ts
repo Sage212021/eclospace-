@@ -31,20 +31,85 @@ export class AiRunError extends Error {
 }
 
 // Texte d'un .docx : on dézippe word/document.xml et on retire le balisage.
+// ─────────────────────────────────────────────────────────────────────────
+// FIABILISATION DE LA LECTURE (demande opérateur 15/11/2026) : le texte remis à
+// l'IA ne doit JAMAIS être altéré par l'extraction. Trois nettoyages réutilisés
+// par tous les extracteurs : décodage COMPLET des caractères spéciaux, retrait
+// des résidus de balises, et normalisation des caractères invisibles/espaces.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Décode TOUTES les entités XML/HTML (nommées + numériques décimales &#233; et
+// hexadécimales &#xE9;), pas seulement une poignée — sinon des accents/guillemets
+// arrivaient bruts (« &#233;tait ») et étaient pris pour des fautes.
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "’", nbsp: " ",
+  laquo: "«", raquo: "»", hellip: "…", mdash: "—", ndash: "–",
+  lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", sbquo: "‚", bdquo: "„",
+  oelig: "œ", OElig: "Œ", aelig: "æ", AElig: "Æ", eacute: "é", egrave: "è",
+  agrave: "à", ccedil: "ç", ugrave: "ù", acirc: "â", ecirc: "ê", icirc: "î",
+  ocirc: "ô", ucirc: "û", euml: "ë", iuml: "ï", uuml: "ü", ouml: "ö", auml: "ä",
+  deg: "°", euro: "€", copy: "©", reg: "®", trade: "™", times: "×", divide: "÷",
+  middot: "·", bull: "•", dagger: "†", Dagger: "‡", permil: "‰", prime: "′", Prime: "″",
+};
+export function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (_m, h) => safeCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_m, d) => safeCodePoint(parseInt(d, 10)))
+    .replace(/&([a-zA-Z][a-zA-Z0-9]+);/g, (m, name) => (name in NAMED_ENTITIES ? NAMED_ENTITIES[name] : m))
+    .replace(/&amp;/g, "&");
+}
+function safeCodePoint(cp: number): string {
+  if (!Number.isFinite(cp) || cp <= 0 || cp > 0x10ffff) return "";
+  try { return String.fromCodePoint(cp); } catch { return ""; }
+}
+
+// Retire tout résidu de balise « <…> » (RÉSERVÉ aux formats XML : .docx/.odt/.epub).
+// On ne l'applique JAMAIS à un PDF/RTF/texte où « < » et « > » peuvent être de
+// vrais caractères de l'auteur (ex. « si x < 3 »).
+function stripXmlTags(s: string): string {
+  return s.replace(/<[^>]*>/g, "");
+}
+
+// Normalise les caractères invisibles et les espaces, pour TOUS les formats :
+// supprime les octets de contrôle, le trait d'union conditionnel et les espaces
+// de largeur nulle (qui coupent un mot en silence), ramène les espaces spéciales
+// (insécables, fines) à une espace simple, et compacte. Ne touche ni aux lettres
+// ni à la ponctuation réelle.
+export function normalizeText(s: string): string {
+  return s
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, "")
+    .replace(/[­​‌‍⁠﻿]/g, "")
+    .replace(/[  -   　]/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function docxToText(buffer: Buffer): string {
   // Un .docx est un ZIP ; on lit l'entrée word/document.xml sans dépendance ZIP
   // en cherchant l'en-tête local — mais plus simple et robuste : on tente une
   // décompression des flux DEFLATE. Ici on s'appuie sur la présence du XML en
   // clair après inflation de chaque entrée.
-  const text = extractDocxXml(buffer);
-  if (!text) return "";
-  const paras = text.split(/<\/w:p>/).map((p) => {
-    const runs = [...p.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]);
-    return runs
-      .join("")
-      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#8217;/g, "’").replace(/&#8230;/g, "…");
+  const xml = extractDocxXml(buffer);
+  if (!xml) return "";
+  const paras = xml.split(/<\/w:p>/).map((p) => {
+    // Avant d'extraire le texte, on matérialise les séparateurs INTERNES au
+    // paragraphe pour ne PAS coller deux mots : tabulation → espace, saut de
+    // ligne / retour chariot (<w:br/>, <w:cr/>) → espace.
+    const withSeps = p.replace(/<w:(?:tab|br|cr)\b[^>]*\/?>/gi, " ");
+    // On ne garde QUE le VRAI élément de texte « <w:t> » : la frontière de nom
+    // (?=[\s/>]) empêche de confondre <w:t> avec <w:tab>, <w:tabs>, <w:tbl…>
+    // (cause de la fuite de balises Word dans le texte lu par l'IA).
+    const runs = [...withSeps.matchAll(/<w:t(?=[\s/>])[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]);
+    // Décodage APRÈS retrait des balises de run : on retire d'abord tout <...>
+    // interne au run (rarissime), puis on décode les entités du vrai texte.
+    return decodeXmlEntities(stripXmlTags(runs.join("")));
   });
-  return paras.filter((l) => l.trim()).join("\n");
+  // Filet de sécurité : AUCUN résidu de balise ne doit subsister, puis
+  // normalisation des caractères invisibles/espaces.
+  return normalizeText(stripXmlTags(paras.filter((l) => l.trim()).join("\n")));
 }
 
 // Extraction de word/document.xml d'un ZIP .docx (entrées DEFLATE ou STORE).
@@ -98,12 +163,13 @@ function readZipEntries(buffer: Buffer): { name: string; data: Buffer }[] {
 // deviennent des retours à la ligne, le reste du balisage est retiré, les entités
 // usuelles décodées.
 function officeXmlToText(xml: string): string {
-  return xml
+  const withBreaks = xml
+    // Séparateurs de blocs → saut de ligne ; tabulations/sauts internes → espace
+    // (pour ne pas coller deux mots quand une balise les séparait).
     .replace(/<(text:p|text:h|p|br|h[1-6]|li|div|tr)\b[^>]*>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-    .replace(/&apos;/g, "’").replace(/&quot;/g, '"').replace(/&#8217;/g, "’").replace(/&#8230;/g, "…").replace(/&nbsp;/g, " ")
-    .replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+    .replace(/<(text:tab|text:line-break|w:tab|w:br|w:cr)\b[^>]*\/?>/gi, " ");
+  // Retrait de TOUTES les balises, décodage COMPLET des entités, normalisation.
+  return normalizeText(decodeXmlEntities(stripXmlTags(withBreaks)));
 }
 
 // OpenDocument (.odt/.ods/.odp) : ZIP dont « content.xml » porte le texte.
@@ -131,15 +197,15 @@ function rtfToText(buffer: Buffer): string {
   s = s.replace(/\\par[d]?\b/g, "\n").replace(/\\line\b/g, "\n").replace(/\\tab\b/g, "\t");
   s = s.replace(/\\[a-zA-Z]+-?\d* ?/g, ""); // autres mots de contrôle
   s = s.replace(/[{}]/g, "");
-  return s.replace(/\r/g, "").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return normalizeText(s);
 }
 
 // DERNIER RECOURS (« lire n'importe quel fichier ») : extraction au mieux du texte
 // lisible contenu dans un fichier de format inconnu ou binaire (ancien .doc, etc.).
 // On retire les octets de contrôle et on compacte, sans rien inventer.
 function bestEffortText(buffer: Buffer): string {
-  const s = buffer.toString("latin1").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, " ");
-  return s.replace(/[^\S\n]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  const s = buffer.toString("latin1");
+  return normalizeText(s);
 }
 
 type PageImage = { base64: string; mediaType: "image/jpeg" | "image/webp" };
@@ -171,7 +237,9 @@ export async function extractPdfText(buffer: Buffer, charBudget: number): Promis
       if (total > charBudget * 1.4) break;
     }
     await doc.cleanup?.();
-    const text = parts.join("\n\n").trim();
+    // Normalisation universelle (caractères invisibles/espaces) — sans retrait de
+    // « <…> » : dans un PDF, « < » et « > » peuvent être de vrais caractères.
+    const text = normalizeText(parts.join("\n\n"));
     return { text, pages: doc.numPages };
   } catch {
     return null;
@@ -281,9 +349,23 @@ export function looksTextual(buffer: Buffer): boolean {
 //   et ré-encodée JPEG (CMYK→RGB) → vision ; • WEBP → tel quel (vision) ;
 //   • texte lisible → texte ; • sinon (PSD/AI/EPS/SVG/HEIC/binaire inconnu) →
 //   message clair. Le PDF est traité en amont (extraction texte / rastérisation).
+// Extraction .docx FIABILISÉE : on utilise d'abord la bibliothèque éprouvée
+// (mammoth, déjà présente et utilisée par l'assistant), qui lit proprement le
+// texte sans laisser de balises Word ; en cas d'échec, on retombe sur le lecteur
+// interne DURCI (docxToText). Dans les deux cas, normalisation finale.
+async function docxToTextRobust(buffer: Buffer): Promise<string> {
+  try {
+    const mammoth = (await import("mammoth")).default;
+    const res = await mammoth.extractRawText({ buffer });
+    const t = normalizeText(res?.value ?? "");
+    if (t.replace(/\s/g, "").length > 20) return t;
+  } catch { /* bibliothèque indisponible ou document atypique : on bascule sur le lecteur interne */ }
+  return docxToText(buffer);
+}
+
 export async function prepareVisualOrText(mime: string, buffer: Buffer): Promise<ManuscriptInput> {
   if (mime.includes("wordprocessingml")) {
-    return { kind: "text", text: docxToText(buffer) };
+    return { kind: "text", text: await docxToTextRobust(buffer) };
   }
   // Vrai format d'après la signature des octets (robuste aux mimes erronés).
   let realMime = mime || "";
@@ -293,7 +375,7 @@ export async function prepareVisualOrText(mime: string, buffer: Buffer): Promise
     if (ft?.mime) realMime = ft.mime;
   } catch { /* détection indisponible : on garde le mime déposé */ }
 
-  if (realMime.includes("wordprocessingml")) return { kind: "text", text: docxToText(buffer) };
+  if (realMime.includes("wordprocessingml")) return { kind: "text", text: await docxToTextRobust(buffer) };
 
   // WEBP : accepté tel quel par la vision (jimp ne le décode pas). Au-delà de la
   // limite d'image de l'API, on ne peut pas le réduire sans décodeur → message clair.
@@ -325,7 +407,7 @@ export async function prepareVisualOrText(mime: string, buffer: Buffer): Promise
   }
 
   // Texte lisible (txt, csv, md, html, ou fichier sans signature binaire).
-  if (looksTextual(buffer)) return { kind: "text", text: buffer.toString("utf8") };
+  if (looksTextual(buffer)) return { kind: "text", text: normalizeText(buffer.toString("utf8")) };
 
   // DERNIER RECOURS (demande opérateur : « qu'il puisse lire n'importe quel
   // fichier ») : on extrait au mieux le texte lisible contenu dans le fichier

@@ -28,6 +28,7 @@ const ManuscriptDetail = lazy(() => import("./pages/ManuscriptDetail").then((m) 
 const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ default: m.MyReadings })));
 const MyDossiers = lazy(() => import("./pages/MyDossiers").then((m) => ({ default: m.MyDossiers })));
 const MyProductionWork = lazy(() => import("./pages/MyProductionWork").then((m) => ({ default: m.MyProductionWork })));
+const MyStockWork = lazy(() => import("./pages/MyStockWork").then((m) => ({ default: m.MyStockWork })));
 const MyProductionValidations = lazy(() => import("./pages/MyProductionValidations").then((m) => ({ default: m.MyProductionValidations })));
 const ContractualisationInbox = lazy(() => import("./pages/ContractualisationPage").then((m) => ({ default: m.ContractualisationInbox })));
 const AiEditorPage = lazy(() => import("./pages/AiEditorPage").then((m) => ({ default: m.AiEditorPage })));
@@ -102,6 +103,7 @@ type PageId =
   | "my-readings"
   | "my-dossiers"
   | "my-production-work"
+  | "my-stock-work"
   | "my-production-validations"
   | "ai-editor"
   | "sage-chat"
@@ -268,6 +270,7 @@ const NAV_POLES: NavPole[] = [
       { key: "jf-paie-suivi", label: "Paie — validation (DG) & suivi (DAF)", anyPermission: ["finance:validation", "paie:consultation"] },
       // Stock & magasin rattaché au pôle Finance (décision opérateur 13/08/2026) :
       // la gestion des stocks quitte le Commercial pour la Finance.
+      { key: "st-mes-taches", label: "Mon espace Stock & magasin", permission: "stock:consultation" },
       { key: "co-stock", label: "Stock & magasin", permission: "stock:consultation" },
       { key: "co-commissions", label: "Commissions commerciales", anyPermission: ["finance:consultation", "commercial:consultation"] },
       { key: "jf-droits-annuels", label: "États annuels de droits d'auteur", permission: "royalties:consultation" },
@@ -330,6 +333,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-catalogue-ref": { page: "catalogue-ref" },
   "ed-archives": { page: "archives" },
   "pr-mes-travaux": { page: "my-production-work" },
+  "st-mes-taches": { page: "my-stock-work" },
   "pi-mes-validations": { page: "my-production-validations" },
   "pi-editeur-ia": { page: "ai-editor" },
   "pi-sage-chat": { page: "sage-chat" },
@@ -910,6 +914,9 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "my-production-work" && (
           <MyProductionWork onOpenManuscript={openManuscript} onOpenIntegration={openIntegration} canOpen={permissions.has("manuscripts:consultation")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "my-stock-work" && (
+          <MyStockWork onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation") || permissions.has("stock:consultation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-production-validations" && (
           <>

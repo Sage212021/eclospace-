@@ -50,7 +50,7 @@ const CORRECTION_TASK_TYPE_CODES = ["correction", "correction_ortho", "correctio
 // Étapes qu'un opérateur AFFECTÉ (sans droit de validation large) peut clôturer
 // lui-même : la correction par le correcteur, la mise en page par le maquettiste,
 // l'infographie par l'infographe, l'attribution des références par le secrétariat.
-const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES", "CONTROLE_QUALITE_IMPRESSION"]);
+const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES", "CONTROLE_QUALITE_IMPRESSION", "COMMERCIALISATION"]);
 
 // L'opérateur AFFECTÉ à l'étape courante : responsable de l'étape OU (pour la
 // correction) porteur d'une tâche de correction assignée. Sert à l'autoriser à
@@ -83,6 +83,9 @@ const STEP_SAISIE_PERM: Record<string, string> = {
   // « Réception et mise en stock » (D-056) : pilotée par le pôle Stock & magasin —
   // le magasinier (stock:saisie) peut clôturer l'étape lui-même.
   CONTROLE_QUALITE_IMPRESSION: "stock:saisie",
+  // Commercialisation (D-058) : le Responsable Stock la gère en priorité — il peut
+  // la clôturer dès que le prix public est défini.
+  COMMERCIALISATION: "stock:saisie",
 };
 
 // Un utilisateur SANS « manuscripts:validation » peut-il clôturer cette étape ?
@@ -1801,6 +1804,70 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }));
 
       return reply.send([...activeRows, ...doneRows]);
+    },
+  );
+
+  // « Mon espace Stock & magasin » (demande opérateur 15/11, D-058) — TABLEAU DE
+  // BORD du Responsable Stock : les ouvrages arrivés aux étapes qu'il gère EN
+  // PRIORITÉ — Impression (suivi du bon), Réception et mise en stock,
+  // Commercialisation. On liste TOUS les ouvrages à ces étapes (pôle, pas
+  // seulement ceux qui lui sont « confiés »), avec l'action attendue et le motif
+  // d'attente (mêmes contrôles que la validation d'étape, pour rester fiable).
+  fastify.get(
+    "/api/v1/my-stock-work",
+    { preHandler: requirePermission("stock", "consultation") },
+    async (_request, reply) => {
+      const STOCK_SEGMENT = ["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION", "COMMERCIALISATION"];
+      const total = STOCK_SEGMENT.length;
+
+      const manuscripts = await prisma.manuscript.findMany({
+        where: { deletedAt: null, status: { code: { in: STOCK_SEGMENT } } },
+        select: { id: true, manuscriptNumber: true, title: true, statusId: true, status: { select: { code: true, label: true } } },
+        orderBy: { updatedAt: "desc" },
+      });
+
+      async function evaluate(code: string, manuscriptId: string): Promise<{ bucket: "en_attente" | "en_cours"; blocked_reason: string | null; detail: string | null }> {
+        const printIsbn = await prisma.isbn.findFirst({ where: { manuscriptId, format: "print" } });
+        if (code === "IMPRESSION") {
+          const sent = await prisma.purchaseOrder.findFirst({ where: { quote: { manuscriptId }, status: { in: ["sent", "in_production", "completed"] } } });
+          if (!sent) return { bucket: "en_attente", blocked_reason: "bon de commande à établir / transmettre à l'imprimeur", detail: null };
+          return { bucket: "en_cours", blocked_reason: null, detail: "impression lancée — en attente de livraison" };
+        }
+        if (code === "CONTROLE_QUALITE_IMPRESSION") {
+          const accepted = await prisma.goodsReceipt.findFirst({ where: { po: { quote: { manuscriptId } }, qcVerdict: { in: ["conform", "with_reserves"] } } });
+          if (!accepted) return { bucket: "en_attente", blocked_reason: "réception des exemplaires et contrôle qualité à faire", detail: null };
+          const entry = printIsbn ? await prisma.stockMovement.findFirst({ where: { isbnId: printIsbn.id, type: "production_in" } }) : null;
+          if (!entry) return { bucket: "en_cours", blocked_reason: null, detail: "exemplaires conformes à entrer en stock" };
+          return { bucket: "en_cours", blocked_reason: null, detail: "à clôturer (conformes entrés en stock)" };
+        }
+        if (code === "COMMERCIALISATION") {
+          const price = printIsbn ? await prisma.priceList.findFirst({ where: { isbnId: printIsbn.id } }) : null;
+          if (!price) return { bucket: "en_attente", blocked_reason: "prix public à définir", detail: null };
+          return { bucket: "en_cours", blocked_reason: null, detail: "à mettre en vente / clôturer" };
+        }
+        return { bucket: "en_cours", blocked_reason: null, detail: null };
+      }
+
+      const rows = await Promise.all(
+        manuscripts.map(async (m) => {
+          const ev = await evaluate(m.status.code, m.id);
+          return {
+            kind: "step" as const,
+            manuscript_id: m.id,
+            manuscript_number: m.manuscriptNumber,
+            title: m.title,
+            step_code: m.status.code,
+            step_label: m.status.label,
+            bucket: ev.bucket,
+            started: ev.bucket === "en_cours",
+            blocked_reason: ev.blocked_reason,
+            detail: ev.detail,
+            progression: { done: 0, total },
+            since: null as string | null,
+          };
+        }),
+      );
+      return reply.send(rows);
     },
   );
 

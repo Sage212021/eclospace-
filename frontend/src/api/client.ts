@@ -760,6 +760,12 @@ export function getMyProductionWork() {
 export function getMyProductionValidations() {
   return request<MyProductionWork[]>("/api/v1/my-production-validations");
 }
+// « Mon espace Stock & magasin » (D-058) : les ouvrages aux étapes gérées en
+// priorité par le Responsable Stock (Impression, Réception et mise en stock,
+// Commercialisation). Même forme de lignes que « Mes travaux de production ».
+export function getMyStockWork() {
+  return request<MyProductionWork[]>("/api/v1/my-stock-work");
+}
 
 // Retour à l'étape précédente (correction d'une validation faite par erreur).
 export function revertManuscriptStep(manuscriptId: string, reason?: string) {

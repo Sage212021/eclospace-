@@ -661,7 +661,12 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       //       stock commercial.
       if (targetStatus.code === "CONTROLE_QUALITE_IMPRESSION") {
         const acceptedReceipt = await prisma.goodsReceipt.findFirst({
-          where: { po: { quote: { manuscriptId: id } }, qcVerdict: { in: ["conform", "with_reserves"] } },
+          where: {
+            qcVerdict: { in: ["conform", "with_reserves"] },
+            // Réception rattachée via le bon de commande OU directement à l'ouvrage
+            // (réception sans bon, D-061).
+            OR: [{ po: { quote: { manuscriptId: id } } }, { manuscriptId: id }],
+          },
         });
         if (!acceptedReceipt) {
           return reply.code(409).send({

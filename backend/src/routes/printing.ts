@@ -514,6 +514,54 @@ export default async function printingRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // RÉCEPTIONS DIRECTES (D-061) : réceptions SANS bon de commande rattachées
+  // directement à l'ouvrage (livre déjà paru / importé sans passer par l'impression).
+  // La procédure réception → contrôle qualité → entrée en stock reste identique.
+  fastify.get(
+    "/api/v1/manuscripts/:id/goods-receipts",
+    { preHandler: requireAnyPermission(BON_CONSULT) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const receipts = await prisma.goodsReceipt.findMany({
+        where: { manuscriptId: id, poId: null },
+        include: { claims: { orderBy: { createdAt: "desc" } } },
+        orderBy: { receivedAt: "desc" },
+      });
+      return reply.send(receipts);
+    },
+  );
+
+  // Enregistrer une réception DIRECTE (sans bon de commande) sur un ouvrage.
+  // Aucune quantité commandée de référence : pas de contrôle de sur-réception,
+  // écart à 0. Le contrôle qualité et l'entrée en stock suivent la même voie.
+  fastify.post(
+    "/api/v1/manuscripts/:id/goods-receipts",
+    { preHandler: requireAnyPermission(RMS_SAISIE) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = goodsReceiptSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      if (!manuscript) {
+        return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+      }
+      const receipt = await prisma.goodsReceipt.create({
+        data: { manuscriptId: id, poId: null, quantityReceived: parsed.data.quantity_received, variance: 0 },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "goods_receipt",
+        entityId: receipt.id,
+        newValues: { manuscriptId: id, direct: true, quantityReceived: parsed.data.quantity_received },
+        ipAddress: request.ip,
+      });
+      return reply.code(201).send({ ...receipt, within_tolerance: true, cumulative_received: parsed.data.quantity_received, remaining_after: 0 });
+    },
+  );
+
   // Consignes libres à l'imprimeur sur un bon de commande (texte repris à l'impression).
   fastify.patch(
     "/api/v1/purchase-orders/:id/instructions",
@@ -778,15 +826,20 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       if (receipt.stockEnteredAt) {
         return reply.code(409).send({ code: "stock_locked", message: "Cette réception est déjà entrée en stock : sa quantité ne peut plus être rectifiée." });
       }
-      const others = await prisma.goodsReceipt.aggregate({ where: { poId: receipt.poId, id: { not: id } }, _sum: { quantityReceived: true } });
-      const cumulative = (others._sum.quantityReceived ?? 0) + parsed.data.quantity_received;
-      if (cumulative > receipt.po.orderedQuantity && !parsed.data.allow_regularization) {
-        return reply.code(409).send({
-          code: "over_reception",
-          message: `Rectification impossible : le cumul reçu (${cumulative}) dépasserait les ${receipt.po.orderedQuantity} commandés. Cochez « régularisation » pour l'autoriser.`,
-        });
+      // Réception DIRECTE (sans bon de commande, D-061) : aucune quantité commandée
+      // de référence → pas de contrôle de sur-réception, écart à 0.
+      let variance = 0;
+      if (receipt.poId && receipt.po) {
+        const others = await prisma.goodsReceipt.aggregate({ where: { poId: receipt.poId, id: { not: id } }, _sum: { quantityReceived: true } });
+        const cumulative = (others._sum.quantityReceived ?? 0) + parsed.data.quantity_received;
+        if (cumulative > receipt.po.orderedQuantity && !parsed.data.allow_regularization) {
+          return reply.code(409).send({
+            code: "over_reception",
+            message: `Rectification impossible : le cumul reçu (${cumulative}) dépasserait les ${receipt.po.orderedQuantity} commandés. Cochez « régularisation » pour l'autoriser.`,
+          });
+        }
+        variance = cumulative - receipt.po.orderedQuantity;
       }
-      const variance = cumulative - receipt.po.orderedQuantity;
       const updated = await prisma.goodsReceipt.update({
         where: { id },
         data: { quantityReceived: parsed.data.quantity_received, variance },
@@ -797,7 +850,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
         action: "update",
         entityType: "goods_receipt",
         entityId: id,
-        newValues: { quantityReceived: parsed.data.quantity_received, cumulative, variance },
+        newValues: { quantityReceived: parsed.data.quantity_received, variance },
         ipAddress: request.ip,
       });
       return reply.send(updated);

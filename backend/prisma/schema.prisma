@@ -2045,6 +2045,7 @@ model Manuscript {
   marketingCampaigns   MarketingCampaign[]
   authorReceipts       AuthorReceipt[]
   correctionCycles     CorrectionCycle[]
+  goodsReceipts        GoodsReceipt[]    @relation("ManuscriptGoodsReceipts")
 
   @@map("manuscripts")
 }
@@ -3563,8 +3564,14 @@ enum QcVerdict {
 
 model GoodsReceipt {
   id               String        @id @default(uuid())
-  poId             String        @map("po_id")
-  po               PurchaseOrder @relation(fields: [poId], references: [id])
+  // Bon de commande : OPTIONNEL depuis D-061. Une réception peut être « directe »
+  // (sans bon de commande) pour un ouvrage déjà paru / importé sans passer par
+  // l'impression — la procédure réception → contrôle qualité → entrée en stock
+  // reste identique. Dans ce cas, manuscriptId porte le rattachement à l'ouvrage.
+  poId             String?       @map("po_id")
+  po               PurchaseOrder? @relation(fields: [poId], references: [id])
+  manuscriptId     String?       @map("manuscript_id")
+  manuscript       Manuscript?   @relation("ManuscriptGoodsReceipts", fields: [manuscriptId], references: [id])
   receivedAt       DateTime      @default(now()) @map("received_at")
   quantityReceived Int           @map("quantity_received")
   variance         Int           @default(0)

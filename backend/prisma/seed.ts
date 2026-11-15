@@ -1569,6 +1569,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-reception-directe-sans-bon",
+      version: "2026.11",
+      title: "Nouveauté — Réception et mise en stock : possible même sans bon de commande",
+      body: "À l'étape « Réception et mise en stock », la procédure est désormais la même pour TOUS les ouvrages : d'abord la réception des exemplaires, puis le contrôle qualité (conforme / avec réserves / non conforme), puis l'entrée en stock des seuls exemplaires conformes. Avant, cette suite n'était possible que lorsqu'un bon de commande d'impression existait. Pour un livre déjà paru ou importé sans passer par l'impression (donc sans bon de commande), on voit maintenant un bloc « Réception et mise en stock — sans bon de commande » avec un bouton « Enregistrer une réception » : la réception, le contrôle qualité et l'entrée en stock se font exactement comme pour une fabrication normale. Le bloc « Ajouter au stock » (mise en stock directe) reste disponible mais devient un simple secours, placé après — à n'utiliser qu'en dépannage. Ainsi l'étape se lit toujours dans le bon ordre : réception → contrôle qualité → entrée en stock. Géré en priorité par le pôle Stock & magasin (DAF et Direction générale également habilités).",
+      permissionModules: ["stock", "printing"],
+      departmentCodes: ["STOCK", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-relecture-lecture-fiable-sans-residus",
       version: "2026.11",
       title: "Nouveauté — Relecture : le texte lu est enfin propre (fini le code technique dans les rapports)",

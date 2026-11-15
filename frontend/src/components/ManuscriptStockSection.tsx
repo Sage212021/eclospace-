@@ -95,7 +95,15 @@ export function ManuscriptStockSection({ manuscriptId, canManage }: { manuscript
       ))}
 
       {stock?.has_isbn && canManage && (
-        <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+        <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 4 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+            Mise en stock directe — secours
+          </div>
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "3px 0 8px" }}>
+            À n'utiliser qu'en dépannage (chargement d'un inventaire, régularisation). La voie normale est la
+            <strong> réception → contrôle qualité → entrée en stock</strong> ci-dessus.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
           {stock.isbns.length > 1 && (
             <Field label="ISBN">
               <select value={form.isbn_id} onChange={(e) => setForm((f) => ({ ...f, isbn_id: e.target.value }))}>
@@ -113,6 +121,7 @@ export function ManuscriptStockSection({ manuscriptId, canManage }: { manuscript
             <input type="number" min={1} value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} style={{ width: 120, fontFamily: "var(--font-mono)" }} />
           </Field>
           <Button variant="add" size="sm" type="button" disabled={busy} onClick={addInitial}>Ajouter au stock</Button>
+          </div>
         </div>
       )}
     </Card>

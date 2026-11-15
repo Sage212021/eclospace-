@@ -12,6 +12,8 @@ import {
   listQcChecklistItems,
   enterGoodsReceiptStock,
   recordGoodsReceipt,
+  listDirectGoodsReceipts,
+  recordDirectGoodsReceipt,
   recordPrintQuoteAmounts,
   requestPrintQuote,
   selectPrintQuote,
@@ -59,6 +61,8 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  // Réceptions DIRECTES (sans bon de commande, D-061) : ouvrage déjà paru / importé.
+  const [directReceipts, setDirectReceipts] = useState<GoodsReceipt[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [qcItems, setQcItems] = useState<QcChecklistItem[]>([]);
   const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
@@ -74,14 +78,16 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   const [qtys, setQtys] = useState("500, 1000");
 
   const refresh = async () => {
-    const [printerList, quoteData, orderList, specsData] = await Promise.all([
+    const [printerList, quoteData, orderList, specsData, directList] = await Promise.all([
       listPrinters(), listPrintQuotes(manuscriptId), listPurchaseOrders(manuscriptId),
       getProductionSpecs(manuscriptId).catch(() => null),
+      listDirectGoodsReceipts(manuscriptId).catch(() => [] as GoodsReceipt[]),
     ]);
     setPrinters(printerList);
     setQuotes(quoteData.quotes);
     setOrders(orderList);
     setSpecs(specsData);
+    setDirectReceipts(directList);
   };
 
   useEffect(() => {
@@ -246,6 +252,25 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
       setError(msg);
     }
   }
+
+  // Réception DIRECTE (sans bon de commande, D-061) : ouvrage déjà paru / importé
+  // sans passer par l'impression. On saisit la quantité reçue, puis le contrôle
+  // qualité et l'entrée en stock suivent la même voie que pour un bon de commande.
+  async function handleDirectReceipt() {
+    const quantity = Number(window.prompt("Quantité reçue (réception directe, sans bon de commande).\nIndiquez le nombre d'exemplaires effectivement reçus :", "") ?? "0");
+    if (!quantity || quantity <= 0) return;
+    try {
+      await recordDirectGoodsReceipt(manuscriptId, quantity);
+      await refresh();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de l'enregistrement de la réception.");
+    }
+  }
+
+  // Y a-t-il un bon de commande sur lequel réceptionner ? Sinon (ouvrage déjà
+  // paru / importé), on propose la réception DIRECTE.
+  const hasReceivablePo = orders.some((po) => po.status !== "draft" && po.status !== "cancelled");
 
   return (
     <CollapsibleSection title="Impression et fabrication" storageKey="fiche:impression">
@@ -424,6 +449,41 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
           )}
         </div>
       ))}
+
+      {/* RÉCEPTION DIRECTE (sans bon de commande, D-061) : pour un ouvrage déjà
+          paru / importé sans passer par l'impression. Même suite réception →
+          contrôle qualité → entrée en stock. Affichée quand il n'y a pas de bon à
+          réceptionner (ou qu'une réception directe existe déjà). */}
+      {canReceiveStock && (!hasReceivablePo || directReceipts.length > 0) && (
+        <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700 }}>Réception et mise en stock — sans bon de commande</div>
+          <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 8px" }}>
+            Cet ouvrage n'a pas de bon de commande (livre déjà paru ou importé sans passer par l'impression).
+            Enregistrez la réception des exemplaires, puis le contrôle qualité, puis l'entrée en stock — comme pour une fabrication normale.
+          </p>
+          <button onClick={handleDirectReceipt} style={secondaryButtonStyle}>
+            Enregistrer une réception
+          </button>
+          {directReceipts.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                Réception · contrôle qualité · mise en stock
+              </div>
+              {directReceipts.map((r) => (
+                <ReceiptCard
+                  key={r.id}
+                  receipt={r}
+                  qcItems={qcItems}
+                  canManage={canReceiveStock}
+                  canValidate={canReceiveStock}
+                  onDone={refresh}
+                  onError={setError}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {transferPo && (
         <TransferDocDialog

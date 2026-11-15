@@ -140,4 +140,52 @@ describe("Réception et mise en stock (D-056)", () => {
 
     expect(await stockOf(isbnId)).toBe(200);
   });
+
+  // Ouvrage SANS bon de commande (déjà paru / importé) : même procédure réception
+  // → contrôle qualité → entrée en stock, via une réception DIRECTE (D-061).
+  async function makeBookWithoutPo() {
+    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CONTROLE_QUALITE_IMPRESSION" } });
+    const m = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-DIR-${rnd()}`, title: `DIR ${rnd()}`, statusId: status.id, ownerId: adminId, origin: "soumission", language: "fr", receivedAt: new Date() },
+    });
+    // Étape courante sans responsable → auto-clôture possible par le pôle Stock.
+    await prisma.manuscriptStep.create({ data: { manuscriptId: m.id, statusId: status.id, responsibleId: null, actualStart: new Date() } });
+    const isbn = await prisma.isbn.create({ data: { isbn13: nextIsbn13(), format: "print", status: "assigned", manuscriptId: m.id } });
+    return { manuscriptId: m.id, isbnId: isbn.id };
+  }
+
+  it("réception DIRECTE sans bon de commande : réception → contrôle qualité → entrée en stock (D-061)", async () => {
+    const { manuscriptId, isbnId } = await makeBookWithoutPo();
+
+    // Aucune réception directe au départ.
+    const empty = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/goods-receipts`, headers: { cookie: adminCookie } });
+    expect(empty.statusCode).toBe(200);
+    expect((empty.json() as unknown[]).length).toBe(0);
+
+    // Réception directe de 150 exemplaires.
+    const rec = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/goods-receipts`, headers: { cookie: adminCookie }, payload: { quantity_received: 150 } });
+    expect(rec.statusCode).toBe(201);
+    const receiptId = rec.json().id as string;
+
+    const listed = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/goods-receipts`, headers: { cookie: adminCookie } });
+    expect((listed.json() as { id: string }[]).map((r) => r.id)).toContain(receiptId);
+
+    // Contrôle qualité : 140 conformes / 10 non conformes.
+    const q = await qc(receiptId, "with_reserves", 140);
+    expect(q.statusCode).toBe(200);
+    expect(q.json().quantityConform).toBe(140);
+
+    // Entrée en stock des SEULS conformes.
+    const entered = await enterStock(receiptId);
+    expect(entered.statusCode).toBe(201);
+    expect(entered.json().quantity_entered).toBe(140);
+    expect(await stockOf(isbnId)).toBe(140);
+
+    // La validation de l'étape passe ensuite vers Commercialisation.
+    const price = await app.inject({ method: "POST", url: `/api/v1/isbn/${isbnId}/prices`, headers: { cookie: adminCookie }, payload: { country: "Cameroun", currency: "XAF", price: 5000, effective_from: "2026-11-01T00:00:00.000Z" } });
+    expect(price.statusCode).toBeLessThan(300);
+    const validate = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/steps/CONTROLE_QUALITE_IMPRESSION/validate`, headers: { cookie: adminCookie }, payload: {} });
+    expect(validate.statusCode).toBe(200);
+    expect(validate.json().status).toBe("COMMERCIALISATION");
+  });
 });

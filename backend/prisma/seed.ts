@@ -126,9 +126,12 @@ const workflowStatuses: {
   // Ancienne étape « Entrée en stock » RETIRÉE du circuit actif (absorbée ci-dessus) :
   // conditionnelle → sautée par la navigation. Ligne conservée pour l'historique.
   { code: "ENTREE_STOCK", label: "Entrée en stock", stepOrder: 16, departmentCode: "STOCK", isConditional: true },
-  { code: "COMMERCIALISATION", label: "Commercialisation", stepOrder: 17, departmentCode: "COM" },
-  { code: "VENTE_LIVRAISON", label: "Vente et livraison", stepOrder: 18, departmentCode: "COM" },
-  { code: "SUIVI_POST_PUBLICATION", label: "Suivi post-publication", stepOrder: 19, departmentCode: "COM" },
+  // Commercialisation → Vente → Suivi : CONDITIONNELLES depuis D-064 — SAUTÉES pour
+  // un ouvrage à COMPTE D'AUTEUR (exemplaires remis à l'auteur, pas de vente par
+  // l'éditeur → directement l'archivage). Requises pour compte d'éditeur / à demi.
+  { code: "COMMERCIALISATION", label: "Commercialisation", stepOrder: 17, departmentCode: "COM", isConditional: true },
+  { code: "VENTE_LIVRAISON", label: "Vente et livraison", stepOrder: 18, departmentCode: "COM", isConditional: true },
+  { code: "SUIVI_POST_PUBLICATION", label: "Suivi post-publication", stepOrder: 19, departmentCode: "COM", isConditional: true },
   { code: "ARCHIVAGE", label: "Archivage", stepOrder: 20, departmentCode: "ARCH" },
 ];
 
@@ -1568,6 +1571,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-compte-auteur-remise-pas-de-stock",
+      version: "2026.11",
+      title: "Nouveauté — Compte d'auteur : les exemplaires sont remis à l'auteur (pas d'entrée en stock)",
+      body: "Les livres à COMPTE D'AUTEUR sont désormais bien gérés à l'étape « Réception et mise en stock ». Après impression, tous les exemplaires reviennent à l'auteur : on ne les fait donc PAS entrer dans le stock de l'éditeur. Concrètement, à la réception, vous choisissez le « Modèle économique » de l'ouvrage (compte d'éditeur / compte d'auteur / compte à demi). Pour un compte d'auteur, après le contrôle qualité, un bouton « Remettre les exemplaires à l'auteur » remplace l'entrée en stock ; l'ouvrage part ensuite directement à l'archivage (pas de commercialisation par l'éditeur). Le compte d'éditeur et le compte à demi continuent d'entrer en stock et d'être commercialisés normalement. Le passage d'un livre de compte d'auteur à compte d'éditeur est possible, mais il EXIGE un avenant au contrat, établi et validé : tant que l'avenant n'est pas actif, le livre reste en compte d'auteur. Cela permet aussi de « rattraper » proprement des livres édités hors Eclospace : on choisit leur modèle économique à la réception. Géré par le pôle Stock & magasin (DAF, Direction éditoriale et Direction générale également concernés).",
+      permissionModules: ["stock", "contracts"],
+      departmentCodes: ["STOCK", "FIN", "DIRED", "DG"],
+    },
     {
       slug: "2026-11-lecture-gros-blocs-qualite-conversation",
       version: "2026.11",

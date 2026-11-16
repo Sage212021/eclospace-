@@ -1931,6 +1931,14 @@ model Manuscript {
   genreId           String?           @map("genre_id")
   genre             Genre?            @relation(fields: [genreId], references: [id])
   language          String
+  // Modèle économique EFFECTIF de l'ouvrage (D-064) — compte d'éditeur / compte
+  // d'auteur / compte à demi. Déduit du contrat actif (synchronisé à l'activation
+  // d'un contrat ou d'un avenant), ou sélectionné à la réception pour un ouvrage
+  // « rattrapé » (édité hors Eclospace, sans contrat). Pilote la fin de production :
+  // un COMPTE D'AUTEUR n'entre PAS en stock (exemplaires remis à l'auteur) et saute
+  // la commercialisation ; compte d'éditeur / à demi → stock + commercialisation.
+  // Null = traité comme compte d'éditeur (comportement hérité).
+  economicModel     EconomicModel?    @map("economic_model")
   estimatedPages    Int?              @map("estimated_pages")
   // Segment éditorial (renseigné par l'éditorial) : sépare le chiffre d'affaires
   // « livre scolaire & parascolaire » du « livre général / littérature ».
@@ -3590,6 +3598,11 @@ model GoodsReceipt {
   // (mouvement production_in créé). Null tant que les conformes ne sont pas
   // entrés en stock. Garantit qu'une même réception n'entre pas deux fois.
   stockEnteredAt   DateTime?     @map("stock_entered_at")
+  // Horodatage de la REMISE DES EXEMPLAIRES À L'AUTEUR (compte d'auteur, D-064) :
+  // alternative à l'entrée en stock. Les exemplaires conformes sont remis à
+  // l'auteur et N'ENTRENT PAS dans le stock commercial de l'éditeur. Null tant que
+  // la remise n'est pas enregistrée. Exclusif de stockEnteredAt.
+  authorHandoverAt DateTime?     @map("author_handover_at")
 
   claims SupplierClaim[]
 

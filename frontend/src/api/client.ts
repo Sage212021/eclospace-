@@ -249,6 +249,7 @@ export interface Manuscript {
   receivedAt: string;
   publicationDate: string | null;
   isBackCatalogue: boolean;
+  economicModel?: "compte_editeur" | "compte_auteur" | "compte_demi" | "autre" | null;
   status: { code: string; label: string; stepOrder: number };
   genre: Genre | null;
   collection: { id: string; label: string } | null;
@@ -3322,6 +3323,7 @@ export interface GoodsReceipt {
   qcComment?: string | null;
   quantityConform?: number | null;
   stockEnteredAt?: string | null;
+  authorHandoverAt?: string | null;
   claims?: GoodsReceiptClaim[];
 }
 
@@ -3446,6 +3448,23 @@ export function enterGoodsReceiptStock(receiptId: string, locationId?: string) {
   return request<{ id: string; quantity_entered: number }>(`/api/v1/goods-receipts/${receiptId}/stock-entry`, {
     method: "POST",
     body: JSON.stringify(locationId ? { location_id: locationId } : {}),
+  });
+}
+
+// Remise des exemplaires conformes à l'auteur (compte d'auteur, D-064) :
+// alternative à l'entrée en stock.
+export function recordAuthorHandover(receiptId: string) {
+  return request<{ id: string; author_handover_quantity: number }>(`/api/v1/goods-receipts/${receiptId}/author-handover`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+// Modèle économique effectif de l'ouvrage (D-064) — sélection à la réception.
+export function setManuscriptEconomicModel(manuscriptId: string, economicModel: "compte_editeur" | "compte_auteur" | "compte_demi" | "autre") {
+  return request<{ economic_model: string; changed?: boolean }>(`/api/v1/manuscripts/${manuscriptId}/economic-model`, {
+    method: "PATCH",
+    body: JSON.stringify({ economic_model: economicModel }),
   });
 }
 

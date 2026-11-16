@@ -4,7 +4,7 @@ import { withThinking } from "./aiThinking.js";
 // Budget de « réflexion approfondie » par segment (jetons de raisonnement) quand
 // le modèle la gère (Sonnet/Opus). Le relecteur réfléchit avant de lister les
 // anomalies du segment — meilleure détection des coquilles fines.
-const SWEEP_THINK_BUDGET = 3000;
+const SWEEP_THINK_BUDGET = 8000;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Lecture INTÉGRALE par segments (renforcement BAT1/BAT2, demande opérateur).
@@ -16,12 +16,17 @@ const SWEEP_THINK_BUDGET = 3000;
 // (N/N segments). Le relevé alimente ensuite le rapport structuré.
 // ─────────────────────────────────────────────────────────────────────────
 
-// Taille d'un segment de lecture. VOLONTAIREMENT COURTE (~7 pages) : sur un bloc
-// trop long, le modèle « survole » et laisse passer les coquilles de surface
-// (orthographe d'un nom propre, accord ou accent ponctuel). Des segments courts
-// forcent une lecture fine, phrase par phrase — meilleure détection des coquilles
-// (verrouillage demandé par l'opérateur après des coquilles passées en BAT1/BAT2).
-export const SEGMENT_CHARS = 12_000;
+// Taille d'un bloc de lecture (révisée le 16/11/2026, demande opérateur).
+// AVANT : blocs très courts (~7 pages) « pour forcer une lecture fine ». À l'usage,
+// le résultat était MOINS bon que la lecture en conversation (claude.ai), parce
+// que des blocs isolés font PERDRE LA VUE D'ENSEMBLE (cohérence des noms, du ton,
+// des renvois) et morcellent le raisonnement. On lit désormais en GROS BLOCS
+// COHÉRENTS : la plupart des ouvrages tiennent en UN SEUL bloc (lecture d'un seul
+// tenant, comme en conversation) ; seuls les manuscrits très volumineux sont
+// couverts en 2-3 grands blocs — jamais en dizaines de tranches. Chaque bloc
+// bénéficie d'un budget de réflexion approfondie élargi (SWEEP_THINK_BUDGET).
+// Valeur ajustable dans docs/JOURNAL_TECHNIQUE.md.
+export const SEGMENT_CHARS = 120_000;
 
 // ─────────────────────────────────────────────────────────────────────────
 // DÉCOUPAGE PROPRE (correctif « scandale BAT2 », demande opérateur 15/11/2026).
@@ -121,13 +126,24 @@ function headingLabel(line: string): string {
   return line.trim().replace(/\s+/g, " ").slice(0, 70);
 }
 
-// Découpe le texte en segments ÉTIQUETÉS, conscients des chapitres :
+// Libellé de couverture d'un bloc : un seul chapitre, ou une plage « X … Y ».
+function rangeLabel(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] ?? "Ouverture";
+  return `${labels[0]} … ${labels[labels.length - 1]}`;
+}
+
+// Découpe le texte en GROS BLOCS COHÉRENTS étiquetés, conscients des chapitres
+// (révisé 16/11/2026 — lecture en gros blocs, cf. SEGMENT_CHARS) :
 //  1. on repère les titres de chapitre/section (en début de ligne) ;
-//  2. aucun segment ne chevauche deux chapitres (coupe nette au titre suivant) ;
+//  2. on REGROUPE plusieurs chapitres consécutifs dans un même bloc tant qu'on
+//     reste sous maxChars (la plupart des ouvrages → UN SEUL bloc = lecture d'un
+//     seul tenant) ; les coupes tombent sur des frontières de chapitre ;
 //  3. un chapitre plus long que maxChars est découpé en portions PROPRES
 //     (paragraphe → phrase → mot) étiquetées « (partie k/m) » ;
-//  4. chaque segment porte le libellé du chapitre réel + un drapeau de continuité
-//     (pour ne pas confondre une coupe technique avec une « phrase inachevée »).
+//  4. chaque bloc porte le libellé des chapitres couverts + un drapeau de
+//     continuité (pour un chapitre coupé). Les TITRES DE CHAPITRE restent dans le
+//     texte du bloc : le relecteur localise chaque anomalie d'après le titre qui
+//     la précède — il n'invente donc jamais un numéro de chapitre.
 export function segmentForReview(text: string, maxChars: number): ReviewSegment[] {
   const t = (text ?? "").trim();
   if (!t) return [];
@@ -149,20 +165,38 @@ export function segmentForReview(text: string, maxChars: number): ReviewSegment[
   pushBlock();
   if (!blocks.length) blocks.push({ label: "Ouverture", body: t });
 
-  // 2+3) Chaque bloc de chapitre → un ou plusieurs segments étiquetés.
+  // 2+3) On EMPILE les chapitres consécutifs en gros blocs ≤ maxChars ; un
+  // chapitre trop long à lui seul est découpé en portions propres.
   const segs: ReviewSegment[] = [];
+  let buf = "";
+  let bufLabels: string[] = [];
+  const flushBuf = () => {
+    if (buf.trim()) segs.push({ label: rangeLabel(bufLabels), chapter: rangeLabel(bufLabels), text: buf.trim(), continues: false });
+    buf = "";
+    bufLabels = [];
+  };
   for (const b of blocks) {
-    const parts = splitClean(b.body, maxChars);
-    const m = parts.length;
-    parts.forEach((part, k) => {
-      segs.push({
-        label: m > 1 ? `${b.label} (partie ${k + 1}/${m})` : b.label,
-        chapter: b.label,
-        text: part,
-        continues: k < m - 1, // la suite du même chapitre arrive au segment suivant
+    if (b.body.length > maxChars) {
+      // Chapitre plus long que maxChars : on vide l'empilement courant, puis on
+      // le découpe en portions propres étiquetées (partie k/m), avec continuité.
+      flushBuf();
+      const parts = splitClean(b.body, maxChars);
+      parts.forEach((part, k) => {
+        segs.push({
+          label: parts.length > 1 ? `${b.label} (partie ${k + 1}/${parts.length})` : b.label,
+          chapter: b.label,
+          text: part,
+          continues: k < parts.length - 1,
+        });
       });
-    });
+      continue;
+    }
+    // Ajouter ce chapitre ferait-il déborder le bloc courant ? Si oui, on flush.
+    if (buf && buf.length + 2 + b.body.length > maxChars) flushBuf();
+    buf = buf ? `${buf}\n\n${b.body}` : b.body;
+    bufLabels.push(b.label);
   }
+  flushBuf();
   return segs;
 }
 
@@ -217,13 +251,13 @@ export async function runAnomalySweep(opts: {
         "Ne signale donc NI « phrase inachevée » NI « chapitre incomplet » à la toute fin de ce segment : c'est une coupe technique de lecture, PAS une anomalie du texte. Analyse uniquement ce qui est présent ici."
       : "";
     const user =
-      `=== SEGMENT ${i + 1}/${total} — ${seg.label} (à lire INTÉGRALEMENT) ===\n` +
-      `Chapitre de ce segment : « ${seg.chapter} ». Toute anomalie doit être localisée dans CE chapitre ; n'indique jamais un autre numéro de chapitre que celui-ci.` +
+      `=== BLOC ${i + 1}/${total} — ${seg.label} (à lire INTÉGRALEMENT) ===\n` +
+      `Ce bloc couvre : ${seg.chapter}. Les TITRES DE CHAPITRE figurent dans le texte ci-dessous : localise CHAQUE anomalie d'après le titre de chapitre qui la PRÉCÈDE dans le texte ; n'invente jamais un numéro de chapitre.` +
       continuationNote +
       `\n\n${seg.text}\n\n` +
       "=== CONSIGNE ===\n" +
-      "Relève TOUTES les anomalies de CE segment, une par ligne, au format :\n" +
-      `- [catégorie · sévérité C1/C2/C3/S] « PHRASE ENTIÈRE contenant l'anomalie, citée mot à mot » → correction proposée | Localisation : ${seg.chapter} (+ n° de page s'il est visible dans ce segment)\n` +
+      "Relève TOUTES les anomalies de CE bloc, une par ligne, au format :\n" +
+      "- [catégorie · sévérité C1/C2/C3/S] « PHRASE ENTIÈRE contenant l'anomalie, citée mot à mot » → correction proposée | Localisation : chapitre (d'après le titre qui précède) + n° de page s'il est visible\n" +
       "RÈGLE DE LOCALISATION (OBLIGATOIRE, pour faciliter l'intégration) : tu cites la PHRASE COMPLÈTE où se trouve le mot fautif (pas seulement le mot isolé), afin que l'intégrateur la retrouve immédiatement ; tu indiques la localisation (chapitre, et le numéro de page s'il apparaît dans le texte de ce segment).\n" +
       "Tu ne signales JAMAIS une « coupure de mot » ou un « mot coupé » : un mot coupé en fin de ligne (césure) n'est PAS une faute de l'auteur.\n" +
       `Si le segment ne contient aucune anomalie, écris exactement : « Segment ${i + 1} : RAS ».`;
@@ -232,7 +266,7 @@ export async function runAnomalySweep(opts: {
     let done = false;
     for (let attempt = 0; attempt < 2 && !done; attempt++) {
       try {
-        const resp = await opts.client.messages.create({ model: opts.model, ...withThinking(opts.model, opts.maxTokens ?? 4000, SWEEP_THINK_BUDGET), system, messages: [{ role: "user", content: user }] });
+        const resp = await opts.client.messages.create({ model: opts.model, ...withThinking(opts.model, opts.maxTokens ?? 8000, SWEEP_THINK_BUDGET), system, messages: [{ role: "user", content: user }] });
         inTok += resp.usage?.input_tokens ?? 0;
         outTok += resp.usage?.output_tokens ?? 0;
         const txt = (resp.content as Array<{ type: string; text?: string }>).filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();

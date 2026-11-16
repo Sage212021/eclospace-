@@ -540,10 +540,15 @@ const NATURAL_WRITING_AND_AUTHENTICITY_RULES =
   + "Au fil de ton analyse, reste attentif aux signes d'une écriture STANDARDISÉE, impersonnelle ou produite de façon automatique, selon cinq axes : (1) style et langue — uniformité, lissage, formules stéréotypées, absence de voix personnelle ; (2) syntaxe et structure — phrases et paragraphes trop réguliers, transitions mécaniques, plan répétitif ; (3) profondeur et originalité — idées convenues, exemples génériques, peu d'aspérités ou de parti pris ; (4) cohérence narrative ou argumentative — ruptures de ton ou de niveau entre chapitres, dialogues artificiels, incohérences de détail ; (5) régularité des habitudes rédactionnelles — récurrences suspectes, lissage émotionnel.\n"
   + "RÈGLE DE PRUDENCE (impérative) : tu ne déclares JAMAIS catégoriquement qu'un texte « a été produit par une machine ». Tu produis un constat ARGUMENTÉ, tu LOCALISES les passages concernés (chapitre / extrait), tu indiques un DEGRÉ D'INCERTITUDE, et tu distingues trois situations possibles : texte entièrement artificiel ; texte humain fortement remanié ou assisté ; texte authentiquement humain présentant par coïncidence quelques traits standardisés. Beaucoup de textes humains, scolaires ou appliqués, présentent ces traits sans aucune assistance : le doute profite à l'auteur. Ce constat n'est JAMAIS, à lui seul, un motif de rejet ou de refus — c'est un point de vigilance éditoriale. Formule-le dans les rubriques de style/voix, d'originalité et de cohérence, en parlant d'écriture (standardisée, impersonnelle, uniforme), SANS employer les mots « IA » ni « intelligence artificielle » dans le rapport.";
 
+// Rédaction du rapport (évaluation ET correction). La réponse VISIBLE reste
+// bornée à 8192 (plafond universel de sécurité de l'API, cf. test), mais la
+// RÉFLEXION APPROFONDIE est élargie le 16/11/2026 (demande opérateur : rapprocher
+// la qualité de la lecture en conversation) — elle s'ajoute au max_tokens
+// uniquement pour les modèles qui la gèrent (Sonnet/Opus).
 const REPORT_MAX_TOKENS = 8000;
 // Budget de « réflexion approfondie » pour la rédaction du rapport (1er appel)
 // quand le modèle la gère (Sonnet/Opus). max_tokens est élargi en conséquence.
-const REPORT_THINK_BUDGET = 4000;
+const REPORT_THINK_BUDGET = 8000;
 
 // Rubriques du gabarit ABSENTES du texte produit. Une rubrique est « présente »
 // si son intitulé de section apparaît (ex. « ## A. … », « **A.** », « A. … » en
@@ -591,6 +596,13 @@ export function firstSectionHeadingIndex(text: string, keys: string[]): number {
 // qui laisse la place à la grille, aux consignes et à la rédaction. Au-delà, la
 // relecture BAT1/BAT2 lit par segments ordonnés ; seule une évaluation d'un
 // ouvrage hors-norme pourrait encore être écrêtée (traité côté technique).
+// Capacité de lecture en UNE SEULE passe (évaluation et rédaction du rapport).
+// Bornée à 300 000 caractères pour rester bien SOUS les 200 000 jetons de contexte
+// (la moitié, soit ~150 000 car. de tête, doit tenir avec la réflexion et la
+// réponse). La plupart des ouvrages (jusqu'à ~150 pages) sont donc lus EN ENTIER,
+// d'un seul tenant — comme en conversation. Au-delà, extrait représentatif
+// (tête/milieu/fin) ; pour la CORRECTION, la couverture intégrale reste assurée
+// par la lecture en gros blocs (SEGMENT_CHARS) qui alimente le relevé.
 export const MANUSCRIT_CHAR_BUDGET = 300_000;
 export function capManuscriptText(text: string): { text: string; truncated: boolean } {
   if (text.length <= MANUSCRIT_CHAR_BUDGET) return { text, truncated: false };

@@ -1569,6 +1569,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-lecture-gros-blocs-qualite-conversation",
+      version: "2026.11",
+      title: "Nouveauté — Relecture et évaluation : lecture « d'un seul tenant », au plus près de la conversation",
+      body: "On a rapproché la qualité des rapports (relecture BAT1/BAT2 ET évaluation) de ce qu'on obtient en discutant directement avec l'assistant. Avant, pour analyser un manuscrit, le logiciel le découpait en petites tranches d'environ 7 pages, relues SÉPARÉMENT : cette perte de vue d'ensemble affaiblissait le résultat. Désormais, le manuscrit est lu en GROS BLOCS COHÉRENTS — la plupart des ouvrages (jusqu'à ~150 pages) sont lus EN ENTIER, d'un seul tenant, comme en conversation ; seuls les manuscrits très volumineux sont couverts en 2-3 grands blocs, jamais en dizaines de tranches. Le moteur bénéficie aussi d'une « réflexion approfondie » plus large avant de rédiger. Le numéro de chapitre reste exact (les titres sont lus dans le texte) et la couverture reste intégrale. Résultat attendu : des rapports plus fins, plus cohérents et plus proches du meilleur résultat. (Le modèle reste réglable dans Réglages → IA ; « Haut de gamme » recommandé pour la correction et l'évaluation.)",
+      permissionModules: ["manuscripts", "bat", "comite_lecture"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-relecture-cesures-et-localisation",
       version: "2026.11",
       title: "Nouveauté — Relecture : fini les fausses « coupures de mot », et chaque correction indique la page et la phrase",

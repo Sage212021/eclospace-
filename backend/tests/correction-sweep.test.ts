@@ -47,7 +47,7 @@ describe("Lecture intégrale par segments (renforcement BAT1/BAT2)", () => {
 });
 
 describe("Découpage conscient des chapitres (correctif BAT2)", () => {
-  it("ne fait JAMAIS chevaucher deux chapitres et étiquette le chapitre réel", () => {
+  it("lit en gros blocs cohérents : des chapitres courts tiennent dans un seul bloc, titres conservés pour la localisation", () => {
     const text = [
       "Chapitre 11",
       "La plupart des tensions familiales se dénouèrent ce soir-là.",
@@ -57,15 +57,30 @@ describe("Découpage conscient des chapitres (correctif BAT2)", () => {
       "Le lendemain, tout avait changé.",
     ].join("\n");
     const segs = segmentForReview(text, SEGMENT_CHARS);
-    const ch11 = segs.find((s) => s.text.includes("tensions familiales"));
-    const ch12 = segs.find((s) => s.text.includes("tout avait changé"));
-    // La phrase du chapitre 11 est bien étiquetée chapitre 11 (pas 12).
-    expect(ch11?.chapter).toBe("Chapitre 11");
-    expect(ch12?.chapter).toBe("Chapitre 12");
-    // Aucun segment ne contient à la fois du chapitre 11 et du chapitre 12.
-    for (const s of segs) {
-      expect(s.text.includes("tensions familiales") && s.text.includes("tout avait changé")).toBe(false);
-    }
+    // Lecture d'un seul tenant : les deux chapitres courts tiennent dans UN bloc.
+    expect(segs.length).toBe(1);
+    const bloc = segs[0];
+    // Les TITRES DE CHAPITRE restent dans le texte → le relecteur localise d'après eux.
+    expect(bloc.text).toContain("Chapitre 11");
+    expect(bloc.text).toContain("Chapitre 12");
+    expect(bloc.text).toContain("tensions familiales");
+    expect(bloc.text).toContain("tout avait changé");
+    // Le libellé couvre la plage de chapitres.
+    expect(bloc.label).toContain("Chapitre 11");
+    expect(bloc.label).toContain("Chapitre 12");
+  });
+
+  it("un gros manuscrit est couvert en PLUSIEURS blocs sur des frontières de chapitre (pas un seul)", () => {
+    // Deux chapitres de taille moyenne dont la somme dépasse maxChars, chacun
+    // tenant seul sous maxChars → DEUX blocs distincts, coupés au changement de chapitre.
+    const chap = (n: number) => `Chapitre ${n}\n` + Array.from({ length: 40 }, (_, i) => `Phrase ${i} du chapitre ${n}.`).join(" ");
+    const text = `${chap(1)}\n\n${chap(2)}`;
+    const segs = segmentForReview(text, 1200);
+    expect(segs.length).toBe(2);
+    // Chaque bloc commence sur un titre de chapitre, et ne mélange pas les deux.
+    expect(segs[0].text.trim()).toMatch(/^Chapitre 1/);
+    expect(segs[1].text.trim()).toMatch(/^Chapitre 2/);
+    expect(segs[0].text).not.toContain("Chapitre 2");
   });
 
   it("un chapitre volumineux est découpé en portions PROPRES, étiquetées et marquées « continues »", () => {

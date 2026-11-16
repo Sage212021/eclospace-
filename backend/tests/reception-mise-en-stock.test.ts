@@ -188,4 +188,59 @@ describe("Réception et mise en stock (D-056)", () => {
     expect(validate.statusCode).toBe(200);
     expect(validate.json().status).toBe("COMMERCIALISATION");
   });
+
+  // Compte d'auteur (D-064) : pas d'entrée en stock — exemplaires REMIS À L'AUTEUR,
+  // puis saut de la commercialisation → archivage.
+  async function makeAuthorAccountBook() {
+    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CONTROLE_QUALITE_IMPRESSION" } });
+    const m = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-CA-${rnd()}`, title: `CA ${rnd()}`, statusId: status.id, ownerId: adminId, origin: "soumission", language: "fr", receivedAt: new Date(), economicModel: "compte_auteur" },
+    });
+    await prisma.manuscriptStep.create({ data: { manuscriptId: m.id, statusId: status.id, responsibleId: null, actualStart: new Date() } });
+    const isbn = await prisma.isbn.create({ data: { isbn13: nextIsbn13(), format: "print", status: "assigned", manuscriptId: m.id } });
+    return { manuscriptId: m.id, isbnId: isbn.id };
+  }
+
+  it("compte d'auteur : remise à l'auteur (pas de stock), puis saut de la commercialisation vers l'archivage (D-064)", async () => {
+    const { manuscriptId, isbnId } = await makeAuthorAccountBook();
+    const rec = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/goods-receipts`, headers: { cookie: adminCookie }, payload: { quantity_received: 200 } });
+    const receiptId = rec.json().id as string;
+    await qc(receiptId, "conform", 200);
+
+    // Avant remise : la clôture de l'étape est refusée (remise à l'auteur manquante).
+    const blocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/steps/CONTROLE_QUALITE_IMPRESSION/validate`, headers: { cookie: adminCookie }, payload: {} });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().code).toBe("no_author_handover");
+
+    // Remise des exemplaires à l'auteur (pas d'entrée en stock).
+    const handover = await app.inject({ method: "POST", url: `/api/v1/goods-receipts/${receiptId}/author-handover`, headers: { cookie: adminCookie }, payload: {} });
+    expect(handover.statusCode).toBe(201);
+    expect(handover.json().author_handover_quantity).toBe(200);
+    // Le stock commercial reste VIDE (rien n'entre en stock).
+    expect(await stockOf(isbnId)).toBe(0);
+
+    // Clôture → on SAUTE commercialisation/vente/suivi → Archivage.
+    const validate = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/steps/CONTROLE_QUALITE_IMPRESSION/validate`, headers: { cookie: adminCookie }, payload: {} });
+    expect(validate.statusCode).toBe(200);
+    expect(validate.json().status).toBe("ARCHIVAGE");
+  });
+
+  it("compte d'auteur → compte d'éditeur : avenant exigé si un contrat actif à compte d'auteur existe", async () => {
+    const { manuscriptId } = await makeAuthorAccountBook();
+    const partner = await prisma.partner.create({ data: { category: "auteur", firstName: "Aut", lastName: rnd() } });
+    // Contrat ACTIF à compte d'auteur → bascule directe refusée (avenant requis).
+    await prisma.contract.create({
+      data: { contractNumber: `CT-CA-${rnd()}`, type: "edition", economicModel: "compte_auteur", manuscriptId, partnerId: partner.id, status: "active", financialTerms: {} },
+    });
+    const refused = await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/economic-model`, headers: { cookie: adminCookie }, payload: { economic_model: "compte_editeur" } });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().code).toBe("amendment_required");
+  });
+
+  it("ouvrage rattrapé sans contrat : sélection du modèle économique autorisée", async () => {
+    const { manuscriptId } = await makeBookWithoutPo();
+    const set = await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/economic-model`, headers: { cookie: adminCookie }, payload: { economic_model: "compte_auteur" } });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().economic_model).toBe("compte_auteur");
+  });
 });

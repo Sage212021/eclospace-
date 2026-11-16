@@ -1317,6 +1317,99 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // REMISE DES EXEMPLAIRES À L'AUTEUR (compte d'auteur, D-064) : alternative à
+  // l'entrée en stock. Après un contrôle qualité accepté, les exemplaires
+  // conformes sont remis à l'auteur et N'ENTRENT PAS dans le stock commercial.
+  fastify.post(
+    "/api/v1/goods-receipts/:id/author-handover",
+    { preHandler: requireAnyPermission(RMS_SAISIE) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const receipt = await prisma.goodsReceipt.findUnique({ where: { id } });
+      if (!receipt) {
+        return reply.code(404).send({ code: "not_found", message: "Réception introuvable." });
+      }
+      if (receipt.authorHandoverAt) {
+        return reply.code(409).send({ code: "already_handed", message: "Ces exemplaires ont déjà été remis à l'auteur." });
+      }
+      if (receipt.stockEnteredAt) {
+        return reply.code(409).send({ code: "already_entered", message: "Ces exemplaires sont déjà entrés en stock : ils ne peuvent plus être remis à l'auteur." });
+      }
+      if (receipt.qcVerdict !== "conform" && receipt.qcVerdict !== "with_reserves") {
+        return reply.code(409).send({ code: "receipt_not_accepted", message: "Seuls les exemplaires acceptés par le contrôle qualité peuvent être remis à l'auteur." });
+      }
+      const conform = receipt.quantityConform ?? receipt.quantityReceived;
+      if (conform <= 0) {
+        return reply.code(409).send({ code: "no_conform", message: "Aucun exemplaire conforme sur cette réception : rien à remettre à l'auteur." });
+      }
+      const updated = await prisma.goodsReceipt.update({ where: { id }, data: { authorHandoverAt: new Date() } });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "goods_receipt",
+        entityId: id,
+        newValues: { authorHandover: true, quantity: conform },
+        ipAddress: request.ip,
+      });
+      return reply.code(201).send({ ...updated, author_handover_quantity: conform });
+    },
+  );
+
+  // Modèle économique EFFECTIF de l'ouvrage (D-064) : sélection à la réception
+  // (notamment pour un ouvrage « rattrapé », édité hors Eclospace, sans contrat).
+  // Le passage compte d'auteur → compte d'éditeur EXIGE un avenant validé quand un
+  // contrat actif à compte d'auteur existe (la bascule se fait alors via l'avenant,
+  // synchronisée à son activation) : la modification directe est refusée.
+  fastify.patch(
+    "/api/v1/manuscripts/:id/economic-model",
+    { preHandler: requireAnyPermission(RMS_SAISIE) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ economic_model: z.enum(["compte_editeur", "compte_auteur", "compte_demi", "autre"]) }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Modèle économique invalide.", details: parsed.error.issues });
+      }
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, economicModel: true } });
+      if (!manuscript) {
+        return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+      }
+      const target = parsed.data.economic_model;
+      const current = manuscript.economicModel ?? null;
+      if (current === target) {
+        return reply.send({ economic_model: target, changed: false });
+      }
+      if (current === "compte_auteur" && target === "compte_editeur") {
+        const activeAuthorContract = await prisma.contract.findFirst({
+          where: { manuscriptId: id, deletedAt: null, status: "active", economicModel: "compte_auteur" },
+          select: { id: true },
+        });
+        if (activeAuthorContract) {
+          const activeAmendment = await prisma.contract.findFirst({
+            where: { parentContractId: activeAuthorContract.id, deletedAt: null, status: "active", economicModel: "compte_editeur" },
+            select: { id: true },
+          });
+          if (!activeAmendment) {
+            return reply.code(409).send({
+              code: "amendment_required",
+              message: "Passage en compte d'éditeur refusé : un avenant au contrat (passant en compte d'éditeur) doit être établi, soumis et VALIDÉ. La bascule deviendra effective à l'activation de cet avenant.",
+            });
+          }
+        }
+      }
+      const updated = await prisma.manuscript.update({ where: { id }, data: { economicModel: target } });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "manuscript",
+        entityId: id,
+        oldValues: { economicModel: current },
+        newValues: { economicModel: target },
+        ipAddress: request.ip,
+      });
+      return reply.send({ economic_model: updated.economicModel, changed: true });
+    },
+  );
+
   // Ch. 16 §16.8 : campagne d'inventaire — comptage à l'aveugle par défaut,
   // quantités théoriques figées au lancement.
   // Liste des campagnes d'inventaire avec avancement (comptées / écarts / à

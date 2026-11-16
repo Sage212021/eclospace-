@@ -14,6 +14,8 @@ import {
   recordGoodsReceipt,
   listDirectGoodsReceipts,
   recordDirectGoodsReceipt,
+  recordAuthorHandover,
+  setManuscriptEconomicModel,
   recordPrintQuoteAmounts,
   requestPrintQuote,
   selectPrintQuote,
@@ -53,11 +55,17 @@ interface PrintingSectionProps {
   // Par défaut (rétro-compat) = canManage.
   canReceiveStock?: boolean;
   bonFunctions?: { value: string; label: string }[];
+  // Modèle économique effectif de l'ouvrage (D-064) : pilote la fin de production.
+  // compte_auteur → remise à l'auteur (pas de stock). Null = compte d'éditeur.
+  economicModel?: "compte_editeur" | "compte_auteur" | "compte_demi" | "autre" | null;
+  // Rafraîchit la fiche après un changement de modèle économique.
+  onEconomicModelChanged?: () => void;
 }
 
 // Impression et fabrication (Ch. 15) : devis comparés, bon de commande,
 // suivi de fabrication jusqu'à la réception.
-export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [] }: PrintingSectionProps) {
+export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [], economicModel = null, onEconomicModelChanged }: PrintingSectionProps) {
+  const authorAccount = economicModel === "compte_auteur";
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -272,9 +280,53 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   // paru / importé), on propose la réception DIRECTE.
   const hasReceivablePo = orders.some((po) => po.status !== "draft" && po.status !== "cancelled");
 
+  // Modèle économique (D-064) : sélection à la réception. Le passage compte
+  // d'auteur → compte d'éditeur peut exiger un avenant (message du serveur).
+  async function changeEconomicModel(model: "compte_editeur" | "compte_auteur" | "compte_demi" | "autre") {
+    try {
+      await setManuscriptEconomicModel(manuscriptId, model);
+      setError(null);
+      onEconomicModelChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Changement du modèle économique impossible.");
+    }
+  }
+  const ECO_LABELS: Record<string, string> = { compte_editeur: "Compte d'éditeur", compte_auteur: "Compte d'auteur", compte_demi: "Compte à demi", autre: "Autre" };
+
   return (
     <CollapsibleSection title="Impression et fabrication" storageKey="fiche:impression">
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
+
+      {/* Modèle économique (D-064) : pilote la fin de production. Compte d'auteur
+          → les exemplaires sont REMIS À L'AUTEUR (pas d'entrée en stock). */}
+      <div style={{ marginBottom: 12, padding: 10, border: "1px solid var(--line)", borderRadius: 8, background: authorAccount ? "#FBF6E9" : "transparent" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700 }}>Modèle économique :</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink)" }}>{ECO_LABELS[economicModel ?? "compte_editeur"]}{economicModel == null && " (par défaut)"}</span>
+          {canReceiveStock && (
+            <select
+              value={economicModel ?? "compte_editeur"}
+              onChange={(e) => changeEconomicModel(e.target.value as "compte_editeur" | "compte_auteur" | "compte_demi" | "autre")}
+              style={{ fontSize: 12.5 }}
+            >
+              <option value="compte_editeur">Compte d'éditeur</option>
+              <option value="compte_auteur">Compte d'auteur</option>
+              <option value="compte_demi">Compte à demi</option>
+              <option value="autre">Autre</option>
+            </select>
+          )}
+        </div>
+        {authorAccount ? (
+          <p style={{ fontSize: 12, color: "#8A6D00", margin: "6px 0 0" }}>
+            Compte d'auteur : après contrôle qualité, les exemplaires conformes sont <strong>remis à l'auteur</strong> (pas d'entrée en stock), puis l'ouvrage va à l'archivage.
+            Le passage en compte d'éditeur exige un <strong>avenant au contrat</strong> validé.
+          </p>
+        ) : (
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>
+            Compte d'éditeur / à demi : les exemplaires conformes <strong>entrent en stock</strong> puis sont commercialisés. (Sélectionnez « compte d'auteur » pour un ouvrage dont les exemplaires reviennent à l'auteur.)
+          </p>
+        )}
+      </div>
 
       {/* Fiche technique de l'ouvrage — RÉCUPÉRÉE automatiquement de la Maquette
           (lecture seule ici ; saisie à l'étape Maquette). Reprise au bon de commande. */}
@@ -441,6 +493,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
                   qcItems={qcItems}
                   canManage={canReceiveStock}
                   canValidate={canReceiveStock}
+                  authorAccount={authorAccount}
                   onDone={refresh}
                   onError={setError}
                 />
@@ -476,6 +529,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
                   qcItems={qcItems}
                   canManage={canReceiveStock}
                   canValidate={canReceiveStock}
+                  authorAccount={authorAccount}
                   onDone={refresh}
                   onError={setError}
                 />
@@ -975,11 +1029,14 @@ interface ReceiptCardProps {
   canValidate: boolean;
   onDone: () => Promise<void>;
   onError: (message: string) => void;
+  // Compte d'auteur (D-064) : les exemplaires conformes sont REMIS À L'AUTEUR
+  // (pas d'entrée en stock éditeur).
+  authorAccount?: boolean;
 }
 
 // Bloc « une réception » : quantité + verdict qualité (3 choix colorés) +
 // checklist des points vérifiés + commentaire + réclamation. Corrigible.
-function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError }: ReceiptCardProps) {
+function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError, authorAccount = false }: ReceiptCardProps) {
   const [open, setOpen] = useState(false);
   const [verdict, setVerdict] = useState<QcVerdict | null>(receipt.qcVerdict ?? null);
   const [checks, setChecks] = useState<Record<string, boolean>>(() => {
@@ -992,7 +1049,23 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
   const [saving, setSaving] = useState(false);
   const [entering, setEntering] = useState(false);
 
-  const stockLocked = receipt.stockEnteredAt != null;
+  const handedToAuthor = receipt.authorHandoverAt != null;
+  // « Verrouillée » = exemplaires déjà aiguillés (entrés en stock OU remis à l'auteur).
+  const stockLocked = receipt.stockEnteredAt != null || handedToAuthor;
+
+  // Remise des exemplaires conformes à l'auteur (compte d'auteur, D-064).
+  async function handToAuthor() {
+    setEntering(true);
+    try {
+      const r = await recordAuthorHandover(receipt.id);
+      await onDone();
+      onError(`${r.author_handover_quantity} exemplaire(s) conforme(s) remis à l'auteur.`);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de la remise à l'auteur.");
+    } finally {
+      setEntering(false);
+    }
+  }
 
   async function saveQc() {
     if (!verdict) {
@@ -1100,10 +1173,12 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
               )}
             </>
           )}
-          {stockLocked ? (
+          {handedToAuthor ? (
+            <span style={{ marginLeft: 8, color: "#2F7D4A", fontWeight: 600 }}>✓ remis à l'auteur</span>
+          ) : receipt.stockEnteredAt != null ? (
             <span style={{ marginLeft: 8, color: "#2F7D4A", fontWeight: 600 }}>✓ entré en stock</span>
           ) : (
-            <span style={{ marginLeft: 8 }}>— non encore mis en stock</span>
+            <span style={{ marginLeft: 8 }}>{authorAccount ? "— non encore remis à l'auteur" : "— non encore mis en stock"}</span>
           )}
         </div>
       )}
@@ -1115,13 +1190,23 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
           </button>
         )}
         {canManage && receipt.qcVerdict != null && !stockLocked && (receipt.quantityConform ?? 0) > 0 && (
-          <button
-            onClick={enterStock}
-            disabled={entering}
-            style={{ ...secondaryButtonStyle, marginTop: 0, background: "#2F7D4A", color: "#fff", border: "none", fontWeight: 600 }}
-          >
-            {entering ? "Entrée en stock…" : `Entrer ${receipt.quantityConform} conforme(s) en stock`}
-          </button>
+          authorAccount ? (
+            <button
+              onClick={handToAuthor}
+              disabled={entering}
+              style={{ ...secondaryButtonStyle, marginTop: 0, background: "#2F7D4A", color: "#fff", border: "none", fontWeight: 600 }}
+            >
+              {entering ? "Remise à l'auteur…" : `Remettre ${receipt.quantityConform} conforme(s) à l'auteur`}
+            </button>
+          ) : (
+            <button
+              onClick={enterStock}
+              disabled={entering}
+              style={{ ...secondaryButtonStyle, marginTop: 0, background: "#2F7D4A", color: "#fff", border: "none", fontWeight: 600 }}
+            >
+              {entering ? "Entrée en stock…" : `Entrer ${receipt.quantityConform} conforme(s) en stock`}
+            </button>
+          )
         )}
         {canManage && !stockLocked && (
           <button onClick={addClaim} style={{ ...secondaryButtonStyle, marginTop: 0 }}>

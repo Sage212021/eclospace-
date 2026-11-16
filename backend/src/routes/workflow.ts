@@ -118,11 +118,16 @@ import { myCorrectionIntegrations } from "../lib/correctionIntegrations.js";
 // est tracé sur l'étape (realizationMode / skipReason / realizationData). Les
 // anciens drapeaux requiresExpertise / requiresRewrite ne servent plus qu'à
 // pré-remplir la suggestion « à réaliser » à l'écran.
-function isStepRequired(statusCode: string, _manuscript: Manuscript): boolean {
+// Étapes de diffusion commerciale, SAUTÉES pour un ouvrage à compte d'auteur
+// (exemplaires remis à l'auteur, pas de vente par l'éditeur → archivage, D-064).
+const COMPTE_AUTEUR_SKIP = new Set(["COMMERCIALISATION", "VENTE_LIVRAISON", "SUIVI_POST_PUBLICATION"]);
+function isStepRequired(statusCode: string, manuscript: Manuscript): boolean {
   // D-056 : l'étape « Entrée en stock » est absorbée par « Réception et mise en
   // stock ». Elle est RETIRÉE du circuit actif (sautée par la navigation), mais
   // sa définition est conservée pour l'historique des ouvrages déjà passés.
   if (statusCode === "ENTREE_STOCK") return false;
+  // D-064 : compte d'auteur → on saute la commercialisation / vente / suivi.
+  if (manuscript?.economicModel === "compte_auteur" && COMPTE_AUTEUR_SKIP.has(statusCode)) return false;
   return true;
 }
 
@@ -660,13 +665,11 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       //       (mouvement production_in). Le non-conforme reste isolé, jamais en
       //       stock commercial.
       if (targetStatus.code === "CONTROLE_QUALITE_IMPRESSION") {
+        // Rattachement des réceptions : via le bon de commande OU directement à
+        // l'ouvrage (réception sans bon, D-061).
+        const receiptWhere = { OR: [{ po: { quote: { manuscriptId: id } } }, { manuscriptId: id }] };
         const acceptedReceipt = await prisma.goodsReceipt.findFirst({
-          where: {
-            qcVerdict: { in: ["conform", "with_reserves"] },
-            // Réception rattachée via le bon de commande OU directement à l'ouvrage
-            // (réception sans bon, D-061).
-            OR: [{ po: { quote: { manuscriptId: id } } }, { manuscriptId: id }],
-          },
+          where: { qcVerdict: { in: ["conform", "with_reserves"] }, ...receiptWhere },
         });
         if (!acceptedReceipt) {
           return reply.code(409).send({
@@ -674,15 +677,27 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             message: "Aucune réception d'exemplaires n'a reçu de verdict de contrôle qualité acceptable.",
           });
         }
-        const printIsbn = await prisma.isbn.findFirst({ where: { manuscriptId: id, format: "print" } });
-        const entryMovement = printIsbn
-          ? await prisma.stockMovement.findFirst({ where: { isbnId: printIsbn.id, type: "production_in" } })
-          : null;
-        if (!entryMovement) {
-          return reply.code(409).send({
-            code: "no_stock_entry",
-            message: "Les exemplaires conformes n'ont pas encore été entrés en stock.",
-          });
+        if (manuscript.economicModel === "compte_auteur") {
+          // Compte d'auteur (D-064) : pas d'entrée en stock — on exige la REMISE
+          // des exemplaires conformes à l'auteur.
+          const handed = await prisma.goodsReceipt.findFirst({ where: { authorHandoverAt: { not: null }, ...receiptWhere } });
+          if (!handed) {
+            return reply.code(409).send({
+              code: "no_author_handover",
+              message: "Compte d'auteur : les exemplaires conformes n'ont pas encore été remis à l'auteur.",
+            });
+          }
+        } else {
+          const printIsbn = await prisma.isbn.findFirst({ where: { manuscriptId: id, format: "print" } });
+          const entryMovement = printIsbn
+            ? await prisma.stockMovement.findFirst({ where: { isbnId: printIsbn.id, type: "production_in" } })
+            : null;
+          if (!entryMovement) {
+            return reply.code(409).send({
+              code: "no_stock_entry",
+              message: "Les exemplaires conformes n'ont pas encore été entrés en stock.",
+            });
+          }
         }
       }
 

@@ -1128,6 +1128,8 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             canManageBon={bonFunctions.length > 0}
             canReceiveStock={canReceiveStock}
             bonFunctions={bonFunctions}
+            economicModel={manuscript.economicModel ?? null}
+            onEconomicModelChanged={() => { void refresh(); }}
           />
         </>
       )}

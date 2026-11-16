@@ -497,6 +497,14 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         },
       });
 
+      // D-064 : à l'ACTIVATION d'un contrat (ou d'un avenant) portant un modèle
+      // économique, on synchronise le modèle économique EFFECTIF de l'ouvrage.
+      // C'est ce qui rend effectif le passage compte d'auteur → compte d'éditeur
+      // une fois l'avenant validé : l'ouvrage peut alors entrer en stock.
+      if (nextStatus === "active" && updated.economicModel && updated.manuscriptId) {
+        await prisma.manuscript.update({ where: { id: updated.manuscriptId }, data: { economicModel: updated.economicModel } }).catch(() => {});
+      }
+
       await writeAuditLog({
         userId: request.user!.id,
         action: "status_change",

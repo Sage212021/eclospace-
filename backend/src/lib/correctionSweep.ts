@@ -197,6 +197,8 @@ export async function runAnomalySweep(opts: {
     "Tu distingues l'ERREUR CERTAINE de la simple SUGGESTION de style : une préférence stylistique n'est jamais présentée comme une faute. " +
     "Tu ne réduis pas artificiellement le nombre d'anomalies : il correspond à ce que CE segment contient réellement. " +
     "Tu ne mentionnes JAMAIS une limite de lecture, d'extraction ou de traitement du fichier, et tu ne déclares pas le segment « coupé » ou « incomplet » pour une raison technique. Tu ne signales une rupture réelle (phrase inachevée, passage manifestement manquant) QUE si tu peux CITER le passage exact concerné de CE segment. " +
+    "INTERDICTION ABSOLUE (artefacts d'extraction, jamais des fautes de l'auteur) : tu ne signales JAMAIS un « mot coupé », une « coupure de mot injustifiée », une « césure » (ex. « his- toire », « négocia- tions ») ni des « éléments parasitaires » du type numéros isolés ou appels de note (ex. « 1 », « 2 ») — ce sont des résidus de mise en page ou de lecture du fichier, pas des erreurs du texte. Tu les IGNORES purement et simplement. " +
+    "LOCALISATION (OBLIGATOIRE) : pour CHAQUE anomalie, tu cites la PHRASE ENTIÈRE qui la contient (mot à mot), et non le seul mot, et tu indiques sa localisation (chapitre + numéro de page s'il est visible) — pour que l'intégrateur la retrouve sans effort. " +
     "Tu n'écris NI préambule NI conclusion : seulement la liste.\n\n" +
     opts.methodBlock;
 
@@ -221,7 +223,9 @@ export async function runAnomalySweep(opts: {
       `\n\n${seg.text}\n\n` +
       "=== CONSIGNE ===\n" +
       "Relève TOUTES les anomalies de CE segment, une par ligne, au format :\n" +
-      `- [catégorie · sévérité C1/C2/C3/S] « passage fautif cité exactement » (${seg.chapter}) → correction proposée (justification courte si utile)\n` +
+      `- [catégorie · sévérité C1/C2/C3/S] « PHRASE ENTIÈRE contenant l'anomalie, citée mot à mot » → correction proposée | Localisation : ${seg.chapter} (+ n° de page s'il est visible dans ce segment)\n` +
+      "RÈGLE DE LOCALISATION (OBLIGATOIRE, pour faciliter l'intégration) : tu cites la PHRASE COMPLÈTE où se trouve le mot fautif (pas seulement le mot isolé), afin que l'intégrateur la retrouve immédiatement ; tu indiques la localisation (chapitre, et le numéro de page s'il apparaît dans le texte de ce segment).\n" +
+      "Tu ne signales JAMAIS une « coupure de mot » ou un « mot coupé » : un mot coupé en fin de ligne (césure) n'est PAS une faute de l'auteur.\n" +
       `Si le segment ne contient aucune anomalie, écris exactement : « Segment ${i + 1} : RAS ».`;
     // Jusqu'à 2 tentatives : un incident ponctuel sur un segment ne doit pas
     // laisser un trou de couverture ni une mention technique dans le relevé.

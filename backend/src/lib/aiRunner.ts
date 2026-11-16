@@ -87,6 +87,19 @@ export function normalizeText(s: string): string {
     .trim();
 }
 
+// Recolle les mots COUPÉS EN FIN DE LIGNE d'un PDF (demande opérateur 15/11/2026).
+// La typographie d'un livre coupe un mot en bout de ligne avec un trait d'union
+// (« his-[saut]toire ») ; à l'extraction, cela devient « his- toire », que le
+// relecteur signalait à tort comme une « coupure de mot injustifiée » (fausse
+// faute d'auteur). On ne recolle QUE le motif « minuscule + trait d'union +
+// espace(s) + minuscule » : c'est la signature d'une césure. Un vrai mot composé
+// (« politico-diplomatique », « Green-tree ») n'a PAS d'espace autour du trait
+// d'union et n'est donc jamais touché. Cas rare accepté : un composé coupé
+// justement sur son trait d'union (ex. « inter-[saut]armisation ») serait recollé.
+export function dejoinHyphenation(s: string): string {
+  return s.replace(/(\p{Ll})-\s+(\p{Ll})/gu, "$1$2");
+}
+
 function docxToText(buffer: Buffer): string {
   // Un .docx est un ZIP ; on lit l'entrée word/document.xml sans dépendance ZIP
   // en cherchant l'en-tête local — mais plus simple et robuste : on tente une
@@ -238,8 +251,10 @@ export async function extractPdfText(buffer: Buffer, charBudget: number): Promis
     }
     await doc.cleanup?.();
     // Normalisation universelle (caractères invisibles/espaces) — sans retrait de
-    // « <…> » : dans un PDF, « < » et « > » peuvent être de vrais caractères.
-    const text = normalizeText(parts.join("\n\n"));
+    // « <…> » : dans un PDF, « < » et « > » peuvent être de vrais caractères. Puis
+    // recollage des mots coupés en fin de ligne (césures → fin des fausses
+    // « coupures de mot »).
+    const text = dejoinHyphenation(normalizeText(parts.join("\n\n")));
     return { text, pages: doc.numPages };
   } catch {
     return null;

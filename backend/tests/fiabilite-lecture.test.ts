@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Document, Packer, Paragraph, TextRun, Tab, Table, TableRow, TableCell } from "docx";
-import { isReadingCoverageComplete, prepareVisualOrText, decodeXmlEntities, normalizeText } from "../src/lib/aiRunner.js";
+import { isReadingCoverageComplete, prepareVisualOrText, decodeXmlEntities, normalizeText, dejoinHyphenation } from "../src/lib/aiRunner.js";
 import { segmentText } from "../src/lib/correctionSweep.js";
 import { extractUploadAttachment } from "../src/lib/aiAssistant.js";
 
@@ -88,6 +88,18 @@ describe("fiabilité de lecture des manuscrits", () => {
     expect(normalizeText("ex\u00ADem\u200Bple")).toBe("exemple");
     expect(normalizeText("mot\u00A0:\u00A0suite")).toBe("mot : suite");
     expect(normalizeText("trop    d'espaces")).toBe("trop d'espaces");
+  });
+
+  it("césures de fin de ligne (PDF) : les mots coupés sont recollés, les vrais composés préservés", () => {
+    // Césures d'un livre typographié → recollées (plus de fausses « coupures de mot »).
+    expect(dejoinHyphenation("son his- toire")).toBe("son histoire");
+    expect(dejoinHyphenation("les négocia- tions politiques")).toBe("les négociations politiques");
+    expect(dejoinHyphenation("perdue juridique- ment")).toBe("perdue juridiquement");
+    expect(dejoinHyphenation("globa-\n\nlement")).toBe("globalement"); // césure en bas de page
+    // Vrais mots composés (sans espace autour du trait d'union) : INTACTS.
+    expect(dejoinHyphenation("politico-diplomatique")).toBe("politico-diplomatique");
+    expect(dejoinHyphenation("l'accord de Green-tree")).toBe("l'accord de Green-tree");
+    expect(dejoinHyphenation("c'est-à-dire")).toBe("c'est-à-dire");
   });
 
   it("encodage défectueux / binaire : refusé proprement (jamais lu comme du texte)", async () => {

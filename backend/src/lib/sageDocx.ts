@@ -60,12 +60,22 @@ function inlineRuns(text: string, opts: { bold?: boolean; size?: number; color?:
   return runs.length ? runs : [new TextRun({ text: "", size, color, font: FONT })];
 }
 
+// Largeur utile en portrait (A4/Letter, moins les marges). Chaque colonne reçoit
+// une VRAIE largeur (DXA) : sans cela, certains lecteurs (mobiles, Google,
+// LibreOffice) affichent le tableau VIDE / masqué. On ne met jamais de largeur en
+// pourcentage « 100% » (valeur non numérique lue comme 0 par les lecteurs stricts).
+const SAGE_PAGE_W = 9026;
 function tableFrom(rows: string[][]): Table {
   const border = { style: BorderStyle.SINGLE, size: 2, color: LINE };
   const header = rows[0] ?? [];
+  const ncols = Math.max(1, header.length);
+  const colW = Math.floor(SAGE_PAGE_W / ncols);
+  const widths = header.map(() => colW);
+  const cellWidth = { size: colW, type: WidthType.DXA };
   const headRow = new TableRow({
     tableHeader: true,
     children: header.map((h) => new TableCell({
+      width: cellWidth,
       margins: { top: 60, bottom: 60, left: 90, right: 90 },
       shading: { fill: NOIR, color: "auto", type: "clear" as never },
       children: [new Paragraph({ children: inlineRuns(h, { color: "FFFFFF", size: 19, bold: true }) })],
@@ -73,14 +83,16 @@ function tableFrom(rows: string[][]): Table {
   });
   const bodyRows = rows.slice(1).map((r, i) => new TableRow({
     children: header.map((_, ci) => new TableCell({
+      width: cellWidth,
       margins: { top: 50, bottom: 50, left: 90, right: 90 },
       shading: i % 2 === 1 ? { fill: "FAF8F2", color: "auto", type: "clear" as never } : undefined,
       children: [new Paragraph({ children: inlineRuns((r[ci] ?? "").trim(), { size: 19 }) })],
     })),
   }));
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    layout: TableLayoutType.AUTOFIT,
+    width: { size: colW * ncols, type: WidthType.DXA },
+    columnWidths: widths,
+    layout: TableLayoutType.FIXED,
     borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
     rows: [headRow, ...bodyRows],
   });

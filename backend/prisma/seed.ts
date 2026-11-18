@@ -1572,6 +1572,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-rapport-word-tableau-lisible",
+      version: "2026.11",
+      title: "Nouveauté — Rapport Word : le tableau d'annotations s'affiche enfin partout",
+      body: "Correction d'un défaut d'affichage du rapport de relecture au format Word : le grand tableau des annotations (corrections) apparaissait VIDE ou masqué dans certaines visionneuses (téléphone, Google, LibreOffice), seul le lecteur Word complet y arrivait. En cause : le tableau n'avait pas de largeurs de colonnes « réelles » et sa largeur était écrite « 100 % », une valeur que ces lecteurs interprètent comme « zéro » — d'où le tableau invisible. C'est corrigé : chaque colonne reçoit désormais une vraie largeur (chiffrée), la mise en page est fixe, et la largeur du tableau est exprimée en unités valides. Le tableau d'annotations s'affiche maintenant rempli et lisible dans toutes les visionneuses, sur téléphone comme sur ordinateur, le texte revenant proprement à la ligne dans chaque case. Cette fiabilité s'applique à tous les tableaux des documents Word générés (rapports de relecture et d'évaluation, documents du Service éditorial).",
+      permissionModules: ["manuscripts", "bat"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-compte-auteur-remise-pas-de-stock",
       version: "2026.11",
       title: "Nouveauté — Compte d'auteur : les exemplaires sont remis à l'auteur (pas d'entrée en stock)",

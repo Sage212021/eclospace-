@@ -60,11 +60,13 @@ interface PrintingSectionProps {
   economicModel?: "compte_editeur" | "compte_auteur" | "compte_demi" | "autre" | null;
   // Rafraîchit la fiche après un changement de modèle économique.
   onEconomicModelChanged?: () => void;
+  // Ouvrir la rubrique d'emblée (étape réception / arrivée depuis l'espace Stock).
+  defaultOpen?: boolean;
 }
 
 // Impression et fabrication (Ch. 15) : devis comparés, bon de commande,
 // suivi de fabrication jusqu'à la réception.
-export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [], economicModel = null, onEconomicModelChanged }: PrintingSectionProps) {
+export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [], economicModel = null, onEconomicModelChanged, defaultOpen = false }: PrintingSectionProps) {
   const authorAccount = economicModel === "compte_auteur";
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
@@ -294,7 +296,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   const ECO_LABELS: Record<string, string> = { compte_editeur: "Compte d'éditeur", compte_auteur: "Compte d'auteur", compte_demi: "Compte à demi", autre: "Autre" };
 
   return (
-    <CollapsibleSection title="Impression et fabrication" storageKey="fiche:impression">
+    <CollapsibleSection title="Impression · réception · mise en stock" storageKey="fiche:impression" forceOpen={defaultOpen}>
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 
       {/* Modèle économique (D-064) : pilote la fin de production. Compte d'auteur

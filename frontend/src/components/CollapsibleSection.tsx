@@ -11,6 +11,7 @@ export function CollapsibleSection({
   subtitle,
   storageKey,
   defaultOpen = false,
+  forceOpen = false,
   accent = false,
   badge,
   id,
@@ -22,6 +23,10 @@ export function CollapsibleSection({
   // l'état n'est pas mémorisé (repli par défaut à chaque affichage).
   storageKey?: string;
   defaultOpen?: boolean;
+  // Ouvre la section d'emblée, en IGNORANT l'état mémorisé (ex. réception/stock à
+  // l'étape concernée : la rubrique doit être visible sans déplier). L'utilisateur
+  // peut toujours la replier dans la session.
+  forceOpen?: boolean;
   // Liseré or à gauche (rubrique « signature », ex. Planification).
   accent?: boolean;
   // Pastille optionnelle à droite du titre (ex. un compteur), visible même replié.
@@ -31,6 +36,7 @@ export function CollapsibleSection({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState<boolean>(() => {
+    if (forceOpen) return true; // visible d'emblée, quel que soit l'état mémorisé
     if (!storageKey) return defaultOpen;
     try {
       const v = localStorage.getItem(`collapse:${storageKey}`);

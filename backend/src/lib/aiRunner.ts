@@ -126,7 +126,7 @@ function docxToText(buffer: Buffer): string {
 }
 
 // Extraction de word/document.xml d'un ZIP .docx (entrées DEFLATE ou STORE).
-function extractDocxXml(buffer: Buffer): string | null {
+export function extractDocxXml(buffer: Buffer): string | null {
   let offset = 0;
   while (offset + 30 <= buffer.length) {
     if (buffer.readUInt32LE(offset) !== 0x04034b50) break; // signature d'entrée locale
@@ -716,6 +716,11 @@ function keyValueBlock(rows: string[][]): Paragraph[] {
 
 // Largeur utile d'une page A4 portrait (marges 1440 twips de chaque côté).
 const PAGE_W = 9026;
+// Largeur utile en PAYSAGE (tableau d'annotations large) — calée pour tenir aussi
+// bien en A4 qu'en Letter paysage, moins les marges. Sert à donner aux colonnes du
+// tableau large de VRAIES largeurs (sans quoi certains lecteurs — mobiles, Google,
+// LibreOffice — affichaient le tableau VIDE / masqué).
+const PAGE_W_LANDSCAPE = 12800;
 
 // Largeurs de colonnes (DXA), calées sur le MODÈLE de rapport apprécié (BAT1) :
 // N° et Sévérité très étroits ; colonnes de texte (Élément, Constat, Correction)
@@ -724,7 +729,7 @@ const PAGE_W = 9026;
 // son type. Si la somme dépasse la largeur de page (tableau d'annotations à 8
 // colonnes), le tableau s'étend au-delà (comme le modèle BAT1), plutôt que de
 // comprimer les cases à la largeur de la page.
-function columnWidths(header: string[]): number[] {
+function columnWidths(header: string[], pageW: number): number[] {
   const spec = header.map((h) => {
     const t = h.toLowerCase().trim();
     if (/^n°|^n$/.test(t)) return { min: 480, weight: 0.4 }; // numéro : juste quelques chiffres
@@ -737,7 +742,7 @@ function columnWidths(header: string[]): number[] {
     return { min: 1500, weight: 1.5 };
   });
   const sumW = spec.reduce((a, b) => a + b.weight, 0) || 1;
-  return spec.map((s) => Math.max(s.min, Math.round((PAGE_W * s.weight) / sumW)));
+  return spec.map((s) => Math.max(s.min, Math.round((pageW * s.weight) / sumW)));
 }
 
 // Tableau (ex. grille d'évaluation) : en-tête noir/texte blanc, zébrure ivoire,
@@ -778,10 +783,14 @@ function buildTable(rows: string[][]): Table {
   const borders = { top: b, bottom: b, left: b, right: b };
   const header = rows[0] ?? [];
   const wide = tableIsWide(rows);
-  // Tableau large : AUCUNE largeur fixe (Word ajuste au contenu). Étroit :
-  // largeurs proportionnées pour occuper la page.
-  const widths = wide ? [] : columnWidths(header);
-  const cellWidth = (ci: number) => (wide ? undefined : { size: widths[ci] ?? 1500, type: WidthType.DXA });
+  // FIABILITÉ D'AFFICHAGE (demande opérateur 18/11/2026) : CHAQUE tableau reçoit de
+  // VRAIES largeurs de colonnes + une mise en page FIXE. Un tableau LARGE
+  // (annotations) part en paysage et occupe la largeur paysage ; un tableau étroit
+  // occupe la largeur portrait. Sans largeurs explicites, certains lecteurs
+  // (mobiles, Google, LibreOffice) affichaient le tableau VIDE / masqué. Le texte
+  // revient à la ligne dans chaque case (jamais coupé).
+  const widths = columnWidths(header, wide ? PAGE_W_LANDSCAPE : PAGE_W);
+  const cellWidth = (ci: number) => ({ size: widths[ci] ?? 1500, type: WidthType.DXA });
   const numericCol = (ci: number) => /coef|^note|^\/1|^\/2/.test((header[ci] || "").toLowerCase().trim());
   const headRow = new TableRow({
     tableHeader: true,
@@ -811,21 +820,12 @@ function buildTable(rows: string[][]): Table {
       });
     }),
   }));
-  if (wide) {
-    // Ajustement automatique au contenu : ni largeur de table ni grille imposée →
-    // chaque colonne s'adapte à la longueur réelle de son texte (comme le modèle
-    // BAT1). En paysage, la table dispose de toute la largeur pour s'étaler.
-    return new Table({ layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
-  }
-  // Tableau étroit (grille d'évaluation, notation…) : largeurs proportionnées,
-  // PLEINE PAGE. On force une mise en page FIXE (et non « AUTOFIT au contenu », qui
-  // faisait rétrécir le tableau sur la moitié gauche quand les cellules étaient
-  // courtes) : Word respecte alors les largeurs de colonnes et le tableau occupe
-  // toute la largeur utile — les colonnes de texte « respirent » au lieu d'être
-  // comprimées.
+  // Largeur de table = somme des colonnes, en DXA (valeur numérique VALIDE, lue
+  // par tous les lecteurs). On n'utilise JAMAIS une largeur en pourcentage « 100% »
+  // (valeur non numérique que les lecteurs stricts interprètent comme 0 → tableau
+  // vide). Mise en page FIXE : les largeurs de colonnes sont respectées partout.
   const total = widths.reduce((a, w) => a + w, 0);
-  const tableWidth = total > PAGE_W ? { size: total, type: WidthType.DXA } : { size: 100, type: WidthType.PERCENTAGE };
-  return new Table({ width: tableWidth, columnWidths: widths, layout: TableLayoutType.FIXED, rows: [headRow, ...dataRows] });
+  return new Table({ width: { size: total, type: WidthType.DXA }, columnWidths: widths, layout: TableLayoutType.FIXED, rows: [headRow, ...dataRows] });
 }
 
 // Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit

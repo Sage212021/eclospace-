@@ -1572,6 +1572,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-ouvrir-depuis-mon-espace-stock",
+      version: "2026.11",
+      title: "Nouveauté — « Mon espace Stock & magasin » : « Ouvrir » affiche enfin la réception / mise en stock",
+      body: "Quand vous cliquez sur « Ouvrir » depuis « Mon espace Stock & magasin », la fiche de l'ouvrage s'ouvre désormais CENTRÉE sur votre travail : la rubrique « Impression · réception · mise en stock » est affichée d'emblée (plus besoin de la déplier, et elle était avant masquée dans une section repliée mal nommée). Vous y voyez directement le modèle économique de l'ouvrage, la réception des exemplaires, le contrôle qualité, puis — selon le cas — l'entrée en stock (compte d'éditeur ou à demi) OU la remise à l'auteur (compte d'auteur, pas d'entrée en stock). La vue centrée garde aussi l'échange de fichiers avec l'auteur et les documents de l'étape (dépôt de scans). Les autres rubriques (correction, contrats…) restent masquées pour alléger l'écran ; un bouton « Voir toute la fiche » les réaffiche à tout moment. Réservé au pôle Stock & magasin (DAF et Direction générale également).",
+      permissionModules: ["stock"],
+      departmentCodes: ["STOCK", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-rapport-word-tableau-lisible",
       version: "2026.11",
       title: "Nouveauté — Rapport Word : le tableau d'annotations s'affiche enfin partout",

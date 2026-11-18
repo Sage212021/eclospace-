@@ -122,9 +122,11 @@ const FOCUS_BY_ORIGIN: Record<string, string> = {
   "pr-isbn": "isbn",
   "pr-bat": "bat",
   "pr-impression": "printing",
+  "st-mes-taches": "stock",
   "cm-messages-auteurs": "authors",
 };
 const FOCUS_LABELS: Record<string, string> = {
+  stock: "Réception & stock",
   committee: "Comité de lecture",
   decision: "Direction éditoriale",
   correction: "Correction éditoriale",
@@ -186,7 +188,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
   }, [evalStatusCode, evalManuscriptId]);
   const focus = originKey ? FOCUS_BY_ORIGIN[originKey] ?? null : null;
   const activeFocus = showAll ? null : focus;
-  const show = (mod: string) => activeFocus === null || activeFocus === mod;
+  // La vue « Réception & stock » (arrivée depuis « Mon espace Stock & magasin »)
+  // regroupe les rubriques utiles à cette étape : réception/mise en stock, stock,
+  // et l'échange de fichiers avec l'auteur (dépôt de scans / remise au compte
+  // d'auteur). Les autres rubriques restent masquées (vue centrée).
+  const STOCK_FOCUS_SHOW = new Set(["printing", "stock", "authors"]);
+  const show = (mod: string) =>
+    activeFocus === null || activeFocus === mod || (activeFocus === "stock" && STOCK_FOCUS_SHOW.has(mod));
 
   // Amène à une section (ancre) de façon FIABLE : on révèle toute la fiche (au
   // cas où la section est masquée par la vue centrée), puis on ATTEND que la
@@ -1130,6 +1138,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             bonFunctions={bonFunctions}
             economicModel={manuscript.economicModel ?? null}
             onEconomicModelChanged={() => { void refresh(); }}
+            // Ouvert d'emblée à l'étape « Réception et mise en stock » (ou quand on
+            // arrive depuis « Mon espace Stock & magasin ») : la réception /
+            // contrôle qualité / entrée en stock (ou remise à l'auteur) est visible
+            // sans avoir à déplier (D-066).
+            defaultOpen={activeFocus === "stock" || manuscript.status.code === "CONTROLE_QUALITE_IMPRESSION"}
           />
         </>
       )}

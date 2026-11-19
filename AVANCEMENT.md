@@ -624,7 +624,8 @@
 - Vérifs : nouveau test `catalogue-legend` (6/6) ; catalogue/officiel/général/marketing (15/15) ; tsc back+front + build front au vert ; suite complète relancée.
 - Note « Nouveauté » (slug `2026-11-catalogue-legende-bilingue-partage`, MKT/COM/DG). Décision **D-068**.
 - **À signaler à l'opérateur** : la **légende FRANÇAISE de « Victimes »** n'a pas été transmise (seul l'anglais l'était) — à envoyer pour compléter.
-- **Prochaine étape** : commit, PR, fusion, redéploiement ; recueillir les légendes manquantes des autres ouvrages.
+- **Correctifs (même jour)** : (1) **partage** = couverture en image + légende en **texte libre** sélectionnable (pas un bloc-image) ; (2) **Victimes** : résumé français créé par traduction ; (3) **rattachement robuste** des légendes par **ISBN** + numéro (la fiche affichée en production, qui porte l'ISBN, peut différer de la fiche « fonds » du seed) ; (4) **auteur d'affichage** `legendAuthor` = nom de couverture / de plume (ex. « Tchebal Dafrik »), sans effacer l'auteur réel conservé pour contrats/droits (migration `20261119130000`).
+- **Prochaine étape** : confirmer avec l'opérateur l'éventuel **doublon** de « L'enfant bâtard » (fiche en double à fusionner) ; recueillir les légendes manquantes des autres ouvrages.
 
 ### 19/11/2026 — Impression et Réception / mise en stock enfin séparées + « Ouvrir » atterrit sur la réception (D-067)
 - **Problème opérateur** : à l'étape réception, la rubrique affichait encore les sous-sections d'Impression (« Devis reçus — aucun devis demandé », « Bons de commande — aucun bon de commande »), vides et incohérentes à cet endroit ; et « Ouvrir » depuis « Mon espace Stock & magasin » laissait l'utilisateur en haut de la fiche.

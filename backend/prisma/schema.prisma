@@ -1958,6 +1958,11 @@ model Manuscript {
   // ISBN tel qu'affiché sur la fiche (hyphénation officielle de la maison,
   // ex. « 978-9956-0-7767-0 »). À défaut, la fiche montre l'ISBN brut (isbns).
   legendIsbn          String? @map("legend_isbn")
+  // Auteur d'AFFICHAGE de la fiche catalogue (nom de plume imprimé sur la
+  // couverture, ex. « Tchebal Dafrik »). N'EFFACE PAS l'auteur réel (contributeur,
+  // utilisé pour contrats/droits) : sert uniquement à afficher le nom de couverture
+  // sur la fiche et le partage. À défaut, on affiche les auteurs réels.
+  legendAuthor        String? @map("legend_author")
   legendCollectionFr  String? @map("legend_collection_fr")
   legendCollectionEn  String? @map("legend_collection_en")
   legendGenreFr       String? @map("legend_genre_fr")

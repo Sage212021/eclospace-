@@ -35,6 +35,7 @@ type Row = {
   title: string;
   subtitle: string | null;
   authors: string[];
+  authorDisplay: string | null; // auteur d'affichage (nom de couverture) si défini
   collection: { id: string; label: string } | null;
   genre: { id: string; label: string } | null;
   publicationDate: string | null;
@@ -91,6 +92,7 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
         legendGenreFr: true,
         legendGenreEn: true,
         legendIsbn: true,
+        legendAuthor: true,
         collection: { select: { id: true, label: true } },
         genre: { select: { id: true, label: true } },
         productionSpecs: { select: { finalPages: true } },
@@ -147,6 +149,7 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
         title: w.title,
         subtitle: w.subtitle,
         authors,
+        authorDisplay: w.legendAuthor ?? null,
         collection: w.collection ? { id: w.collection.id, label: w.collection.label } : null,
         genre: w.genre ? { id: w.genre.id, label: w.genre.label } : null,
         publicationDate: w.publicationDate ? w.publicationDate.toISOString() : null,

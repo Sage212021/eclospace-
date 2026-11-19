@@ -7817,6 +7817,7 @@ export interface CatalogueItem {
   title: string;
   subtitle: string | null;
   authors: string[];
+  authorDisplay: string | null;
   collection: { id: string; label: string } | null;
   genre: { id: string; label: string } | null;
   publicationDate: string | null;

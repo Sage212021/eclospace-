@@ -55,9 +55,11 @@ export function cardFields(item: CatalogueItem, lang: ShareLang) {
   const collection = lang === "fr" ? item.collectionLabel : item.collectionLabelEn;
   const genre = lang === "fr" ? item.genreLabel : item.genreLabelEn;
   const synopsis = (lang === "fr" ? item.summary : item.summaryEn) || (lang === "fr" ? item.summaryEn : item.summary) || "";
+  // Auteur d'affichage (nom de couverture) s'il est défini ; sinon les auteurs réels.
+  const authors = item.authorDisplay ? [item.authorDisplay] : item.authors;
   return {
     title: item.title,
-    authors: item.authors,
+    authors,
     collection: collection ?? null,
     genre: genre ?? null,
     pages: item.pages ?? null,

@@ -45,6 +45,17 @@ type Row = {
   isBackCatalogue: boolean;
   summary: string | null;
   hasCover: boolean;
+  // Légende bilingue (fiche partageable) — demande opérateur 19/11/2026.
+  summaryEn: string | null;           // synopsis anglais
+  isbn: string | null;                // ISBN imprimé (fiche)
+  pages: number | null;               // nombre de pages affiché sur la fiche
+  // Libellés d'affichage de la fiche, en FR et EN : la « légende » de la maison
+  // (ex. « Canari », « Roman / Novel ») prime sur le référentiel interne ; à
+  // défaut on retombe sur le référentiel (et l'anglais retombe sur le français).
+  collectionLabel: string | null;
+  collectionLabelEn: string | null;
+  genreLabel: string | null;
+  genreLabelEn: string | null;
 };
 
 function contains(haystack: string, needle: string): boolean {
@@ -72,8 +83,23 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
         publicationDate: true,
         isBackCatalogue: true,
         summary: true,
+        summaryEn: true,
+        estimatedPages: true,
+        legendPages: true,
+        legendCollectionFr: true,
+        legendCollectionEn: true,
+        legendGenreFr: true,
+        legendGenreEn: true,
+        legendIsbn: true,
         collection: { select: { id: true, label: true } },
         genre: { select: { id: true, label: true } },
+        productionSpecs: { select: { finalPages: true } },
+        isbns: {
+          where: { format: "print" },
+          orderBy: { assignedAt: "desc" },
+          take: 1,
+          select: { isbn13: true },
+        },
         workContributors: {
           where: { role: "author" },
           orderBy: { displayOrder: "asc" },
@@ -107,6 +133,14 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
         .map((c) => `${c.partner.firstName} ${c.partner.lastName}`.trim())
         .filter(Boolean);
       const code = w.workMetadata?.commercializationStatus ?? null;
+      // Libellés d'affichage de la fiche : la « légende » de la maison prime ;
+      // l'anglais retombe sur le français, puis sur le référentiel interne.
+      const collectionLabel = w.legendCollectionFr ?? w.collection?.label ?? null;
+      const collectionLabelEn = w.legendCollectionEn ?? w.legendCollectionFr ?? w.collection?.label ?? null;
+      const genreLabel = w.legendGenreFr ?? w.genre?.label ?? null;
+      const genreLabelEn = w.legendGenreEn ?? w.legendGenreFr ?? w.genre?.label ?? null;
+      const pages = w.legendPages ?? w.productionSpecs?.finalPages ?? w.estimatedPages ?? null;
+      const isbn = w.legendIsbn ?? w.isbns[0]?.isbn13 ?? null;
       return {
         id: w.id,
         reference: w.manuscriptNumber,
@@ -123,6 +157,13 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
         isBackCatalogue: w.isBackCatalogue,
         summary: w.summary,
         hasCover: withCover.has(w.id),
+        summaryEn: w.summaryEn,
+        isbn,
+        pages,
+        collectionLabel,
+        collectionLabelEn,
+        genreLabel,
+        genreLabelEn,
       };
     });
 
@@ -226,13 +267,23 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
   // Alimente `manuscript.summary`, affiché en dépliable dans le catalogue.
   fastify.patch("/api/v1/catalogue/:id/summary", { preHandler: requirePermission("communication", "administration") }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const parsed = z.object({ summary: z.string().max(8000) }).safeParse(request.body ?? {});
-    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Résumé invalide (8000 caractères max)." });
+    // Légende bilingue : on accepte le résumé FRANÇAIS (`summary`) et/ou ANGLAIS
+    // (`summaryEn`). Chaque champ fourni est mis à jour ; un champ absent est
+    // laissé inchangé (on peut donc enregistrer une langue sans toucher l'autre).
+    const parsed = z
+      .object({ summary: z.string().max(8000).optional(), summaryEn: z.string().max(8000).optional() })
+      .safeParse(request.body ?? {});
+    if (!parsed.success || (parsed.data.summary === undefined && parsed.data.summaryEn === undefined)) {
+      return reply.code(400).send({ code: "validation_error", message: "Résumé invalide (8000 caractères max, au moins une langue)." });
+    }
     const ms = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
     if (!ms) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
-    await prisma.manuscript.update({ where: { id }, data: { summary: parsed.data.summary.trim() || null } });
-    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "catalogue_summary", entityId: id, newValues: { length: parsed.data.summary.trim().length }, ipAddress: request.ip });
-    return reply.send({ ok: true, summary: parsed.data.summary.trim() || null });
+    const data: { summary?: string | null; summaryEn?: string | null } = {};
+    if (parsed.data.summary !== undefined) data.summary = parsed.data.summary.trim() || null;
+    if (parsed.data.summaryEn !== undefined) data.summaryEn = parsed.data.summaryEn.trim() || null;
+    const updated = await prisma.manuscript.update({ where: { id }, data, select: { summary: true, summaryEn: true } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "catalogue_summary", entityId: id, newValues: { frLength: updated.summary?.length ?? 0, enLength: updated.summaryEn?.length ?? 0 }, ipAddress: request.ip });
+    return reply.send({ ok: true, summary: updated.summary, summaryEn: updated.summaryEn });
   });
 
   // Corrige le domaine (genre) d'un ouvrage directement depuis la fiche du

@@ -615,6 +615,17 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 19/11/2026 (suite) — Catalogue : légende bilingue FR/EN + fiche partageable (D-068)
+- **Demande** : légendes des ouvrages en français ET anglais (sélecteur de langue), et un partage « couverture + légende » dans le modèle de la maison, avec paramétrage pour que les légendes à venir s'inscrivent.
+- **Modèle de données** : `Manuscript.summaryEn` + libellés d'affichage de fiche FR/EN (`legendCollectionFr/En`, `legendGenreFr/En`, `legendPages`, `legendIsbn`). Migration `20261119120000`. 2 genres ajoutés (Nouvelle & récit, Ouvrage de sensibilisation).
+- **Seed** : installation idempotente des **5 légendes** transmises (clé = numéro d'ouvrage) ; synopsis posé seulement s'il est vide (pas d'écrasement des saisies écran) ; ISBN officiel de Félonica (remplace le provisoire). **Victimes** : français non fourni → laissé vide (non inventé).
+- **Backend** : catalogue expose la légende bilingue (collection/genre/pages/ISBN/résumé FR+EN, légende prioritaire sur le référentiel) ; enregistrement du résumé par langue (`summary` et/ou `summaryEn`).
+- **Frontend** : fiche catalogue avec sélecteur Français/English, pages + ISBN, édition des deux résumés ; **partage** = image PNG (couverture + légende dessinées sur un canvas, charte or/noir/blanc) + PDF + impression + WhatsApp. Aucune mention « IA » dans la fiche livrée.
+- Vérifs : nouveau test `catalogue-legend` (6/6) ; catalogue/officiel/général/marketing (15/15) ; tsc back+front + build front au vert ; suite complète relancée.
+- Note « Nouveauté » (slug `2026-11-catalogue-legende-bilingue-partage`, MKT/COM/DG). Décision **D-068**.
+- **À signaler à l'opérateur** : la **légende FRANÇAISE de « Victimes »** n'a pas été transmise (seul l'anglais l'était) — à envoyer pour compléter.
+- **Prochaine étape** : commit, PR, fusion, redéploiement ; recueillir les légendes manquantes des autres ouvrages.
+
 ### 19/11/2026 — Impression et Réception / mise en stock enfin séparées + « Ouvrir » atterrit sur la réception (D-067)
 - **Problème opérateur** : à l'étape réception, la rubrique affichait encore les sous-sections d'Impression (« Devis reçus — aucun devis demandé », « Bons de commande — aucun bon de commande »), vides et incohérentes à cet endroit ; et « Ouvrir » depuis « Mon espace Stock & magasin » laissait l'utilisateur en haut de la fiche.
 - **Correctif** : `PrintingSection` reçoit un mode `receptionOnly`. En ce mode (rendu dès `CONTROLE_QUALITE_IMPRESSION`), on masque fiche technique, imprimeurs, devis, en-tête des bons de commande, édition/transfert/avancer-reculer du bon ; on ne garde que **modèle économique + réception · contrôle qualité · entrée en stock** (ou **remise à l'auteur** si compte d'auteur), plus la réception directe (D-061) à défaut de bon. Chaque bon se résume à un libellé compact + « Enregistrer une réception ». Rubrique renommée « Réception · contrôle qualité · mise en stock » (ancre `#fiche-reception`).

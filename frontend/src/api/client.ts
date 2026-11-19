@@ -7827,6 +7827,14 @@ export interface CatalogueItem {
   isBackCatalogue: boolean;
   summary: string | null;
   hasCover: boolean;
+  // Légende bilingue (fiche partageable) — demande opérateur 19/11/2026.
+  summaryEn: string | null;
+  isbn: string | null;
+  pages: number | null;
+  collectionLabel: string | null;
+  collectionLabelEn: string | null;
+  genreLabel: string | null;
+  genreLabelEn: string | null;
 }
 export interface CatalogueResponse {
   items: CatalogueItem[];
@@ -7851,8 +7859,8 @@ export function catalogueCoverUrl(id: string): string {
 }
 // Résumé (« légende ») d'un ouvrage du catalogue — réservé au pôle Marketing
 // (communication:administration). Alimente le résumé dépliable du catalogue.
-export function setCatalogueSummary(id: string, summary: string) {
-  return request<{ ok: true; summary: string | null }>(`/api/v1/catalogue/${id}/summary`, { method: "PATCH", body: JSON.stringify({ summary }) });
+export function setCatalogueSummary(id: string, body: { summary?: string; summaryEn?: string }) {
+  return request<{ ok: true; summary: string | null; summaryEn: string | null }>(`/api/v1/catalogue/${id}/summary`, { method: "PATCH", body: JSON.stringify(body) });
 }
 export function setCatalogueGenre(id: string, genreId: string) {
   return request<{ ok: true; genre: { id: string; label: string } }>(`/api/v1/catalogue/${id}/genre`, { method: "PATCH", body: JSON.stringify({ genre_id: genreId }) });

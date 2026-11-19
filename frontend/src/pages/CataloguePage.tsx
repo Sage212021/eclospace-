@@ -14,6 +14,8 @@ import {
 } from "../api/client";
 import { BulkCoverUpload } from "../components/BulkCoverUpload";
 import { MissingCoversWorklist } from "../components/MissingCoversWorklist";
+import { ShareCatalogueDialog } from "../components/ShareCatalogueDialog";
+import type { ShareLang } from "../lib/catalogueShareCard";
 
 // Pôle Marketing & Distribution — CATALOGUE des ouvrages.
 // Grille visuelle des couvertures, alimentée automatiquement par les ouvrages
@@ -233,14 +235,22 @@ function Cover({ item, version = 0 }: { item: CatalogueItem; version?: number })
 }
 
 function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { item: CatalogueItem; onClose: () => void; onOpenManuscript?: (id: string) => void; canAdmin?: boolean; onSaved?: () => void }) {
+  // Langue de la LÉGENDE (fiche partageable) : français / anglais. Pilote le
+  // résumé affiché, les libellés collection/genre et la fiche partagée (D-068).
+  const [lang, setLang] = useState<ShareLang>("fr");
+  const [sharing, setSharing] = useState(false);
   // Résumé masqué par défaut : on le déroule au clic sur l'en-tête (demande 10/10).
   const [showSummary, setShowSummary] = useState(false);
-  // Résumé local (se met à jour après enregistrement, sans recharger la page).
-  const [summary, setSummary] = useState<string | null>(item.summary);
+  // Résumés locaux FR + EN (se mettent à jour après enregistrement, sans recharger).
+  const [summaryFr, setSummaryFr] = useState<string | null>(item.summary);
+  const [summaryEn, setSummaryEn] = useState<string | null>(item.summaryEn);
+  const summary = lang === "fr" ? summaryFr : summaryEn;
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(item.summary ?? "");
+  const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  // Libellés d'affichage selon la langue (repli sur le référentiel interne).
+  const collectionLabel = (lang === "fr" ? item.collectionLabel : item.collectionLabelEn) ?? item.collection?.label ?? undefined;
   // Genre (domaine) corrigeable par l'administration — utile après un import de
   // fonds où le genre était approximatif.
   const [genreLabel, setGenreLabel] = useState<string | null>(item.genre?.label ?? null);
@@ -270,8 +280,10 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
     setSaving(true);
     setSaveErr(null);
     try {
-      const r = await setCatalogueSummary(item.id, draft);
-      setSummary(r.summary);
+      // On enregistre UNIQUEMENT la langue en cours (l'autre reste intacte).
+      const r = await setCatalogueSummary(item.id, lang === "fr" ? { summary: draft } : { summaryEn: draft });
+      setSummaryFr(r.summary);
+      setSummaryEn(r.summaryEn);
       setEditing(false);
       setShowSummary(true);
       onSaved?.();
@@ -292,8 +304,20 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
             <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontSize: 20, color: "var(--ink)" }}>{item.title}</div>
             {item.subtitle && <div style={{ fontSize: 13.5, color: "var(--muted)", marginTop: 2 }}>{item.subtitle}</div>}
             <div style={{ fontSize: 13, marginTop: 8 }}>{item.authors.join(", ") || "Auteur non renseigné"}</div>
+            {/* Sélecteur de langue de la LÉGENDE (fiche partageable). */}
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+              <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>Légende</span>
+              <span style={{ display: "inline-flex", border: "1px solid var(--line)", borderRadius: 999, overflow: "hidden" }}>
+                {(["fr", "en"] as ShareLang[]).map((l) => (
+                  <button key={l} type="button" onClick={() => { setLang(l); setEditing(false); setSaveErr(null); }}
+                    style={{ border: "none", padding: "4px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", background: lang === l ? "var(--eclosion, #D9B21A)" : "#fff", color: lang === l ? "#0B0B0C" : "var(--muted)" }}>
+                    {l === "fr" ? "Français" : "English"}
+                  </button>
+                ))}
+              </span>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 12.5, marginTop: 12 }}>
-              <Meta k="Collection" v={item.collection?.label} />
+              <Meta k="Collection" v={collectionLabel} />
               {canAdmin ? (
                 <>
                   <span style={{ color: "var(--muted)" }}>Genre</span>
@@ -311,7 +335,7 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
                       </span>
                     ) : (
                       <span style={{ display: "inline-flex", gap: 7, alignItems: "center" }}>
-                        <span style={{ fontWeight: 600, color: "var(--ink)" }}>{genreLabel ?? "—"}</span>
+                        <span style={{ fontWeight: 600, color: "var(--ink)" }}>{(lang === "fr" ? item.genreLabel : item.genreLabelEn) ?? genreLabel ?? "—"}</span>
                         <button type="button" onClick={() => setEditingGenre(true)} title="Corriger le genre (domaine)"
                           style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 6, padding: "2px 7px", fontSize: 11, cursor: "pointer" }}>✏️</button>
                       </span>
@@ -320,8 +344,10 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
                   </span>
                 </>
               ) : (
-                <Meta k="Genre" v={item.genre?.label} />
+                <Meta k="Genre" v={(lang === "fr" ? item.genreLabel : item.genreLabelEn) ?? item.genre?.label ?? undefined} />
               )}
+              <Meta k="Pages" v={item.pages != null ? String(item.pages) : undefined} mono />
+              <Meta k="ISBN" v={item.isbn ?? undefined} mono />
               <Meta k="Parution" v={item.year ? String(item.year) : undefined} />
               <Meta k="Prix public" v={price(item.pricePublic)} />
               <Meta k="Disponibilité" v={item.availability} color={AVAIL_COLOR[item.availabilityCode ?? ""]} />
@@ -337,11 +363,11 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
                 <button type="button" onClick={() => setShowSummary((v) => !v)} aria-expanded={showSummary}
                   style={{ display: "flex", alignItems: "center", gap: 7, flex: 1, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
                   <span aria-hidden style={{ color: "var(--eclosion-dark, #9a7a12)", fontSize: 12 }}>{showSummary ? "▾" : "▸"}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)" }}>Résumé</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)" }}>{lang === "fr" ? "Résumé" : "Synopsis (EN)"}</span>
                   {!showSummary && <span style={{ fontSize: 11.5, color: "var(--muted)", fontStyle: "italic", marginLeft: "auto" }}>cliquer pour afficher</span>}
                 </button>
               ) : (
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", flex: 1 }}>Résumé {canAdmin && <em style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— aucun pour l'instant</em>}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", flex: 1 }}>{lang === "fr" ? "Résumé" : "Synopsis (EN)"} {canAdmin && <em style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— {lang === "fr" ? "aucun pour l'instant" : "pas encore traduit"}</em>}</span>
               )}
               {canAdmin && !editing && (
                 <button type="button" onClick={() => { setDraft(summary ?? ""); setEditing(true); }}
@@ -353,7 +379,7 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
             {showSummary && summary && !editing && <p style={{ fontSize: 13, lineHeight: 1.6, margin: "8px 0 0", whiteSpace: "pre-wrap" }}>{summary}</p>}
             {editing && (
               <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} placeholder="Collez ici le résumé (la « légende ») de l'ouvrage…"
+                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} placeholder={lang === "fr" ? "Collez ici le résumé (la « légende ») de l'ouvrage…" : "Paste the English synopsis here…"}
                   style={{ width: "100%", boxSizing: "border-box", padding: 10, border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, lineHeight: 1.5, fontFamily: "inherit", resize: "vertical" }} />
                 {saveErr && <div style={{ fontSize: 12.5, color: "var(--alert, #B23A2E)" }}>{saveErr}</div>}
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -364,15 +390,19 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
             )}
           </div>
         )}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16, flexWrap: "wrap" }}>
+          <button onClick={() => setSharing(true)} style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 8, padding: "8px 15px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            📤 Partager
+          </button>
           {onOpenManuscript && (
-            <button onClick={() => { onOpenManuscript(item.id); onClose(); }} style={{ background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 8, padding: "8px 15px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            <button onClick={() => { onOpenManuscript(item.id); onClose(); }} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 15px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               Ouvrir la fiche complète
             </button>
           )}
           <button onClick={onClose} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer" }}>Fermer</button>
         </div>
       </div>
+      {sharing && <ShareCatalogueDialog item={item} lang={lang} onClose={() => setSharing(false)} />}
     </div>
   );
 }

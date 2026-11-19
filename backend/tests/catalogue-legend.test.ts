@@ -60,13 +60,12 @@ describe("catalogue — légendes bilingues (D-068)", () => {
     expect(m!.legendIsbn).toBe("978-9956-0-7856-1");
   });
 
-  it("n'invente pas le résumé français manquant de Victimes (EN seul)", async () => {
+  it("installe Victimes en FR (traduction) + EN", async () => {
     const m = await byNum("LG-CAT-0051");
     expect(m).toBeTruthy();
     expect(m!.title).toBe("Victimes");
     expect(m!.summaryEn).toMatch(/today's victims became tomorrow's perpetrators/);
-    // Le français n'a pas été transmis : il ne doit pas être fabriqué.
-    expect(m!.summary ?? "").toBe("");
+    expect(m!.summary).toMatch(/victimes d'aujourd'hui devenaient les bourreaux de demain/);
     expect(m!.genre?.code).toBe("NOUVELLE");
   });
 

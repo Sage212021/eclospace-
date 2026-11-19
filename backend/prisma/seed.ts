@@ -4591,8 +4591,14 @@ async function main() {
         collectionFr: "Canari", collectionEn: "Canari",
         genreFr: "Recueil de nouvelles", genreEn: "Short Story Collection", genreCode: "NOUVELLE",
         pages: 134,
-        // Résumé FRANÇAIS non encore transmis par la maison : laissé vide (il
-        // s'inscrira dès réception). Seule la version anglaise est disponible.
+        // Résumé FRANÇAIS : traduction fidèle de la version anglaise (demande
+        // opérateur 19/11/2026, l'original français n'ayant pas été transmis).
+        summaryFr:
+          "Et si les victimes d'aujourd'hui devenaient les bourreaux de demain ?\n\n" +
+          "Dans ce recueil de nouvelles bouleversant, Irène Maben explore les multiples visages de la souffrance humaine et les conséquences parfois dévastatrices des injustices de la vie. À travers des personnages confrontés à des situations difficiles, l'autrice met en lumière les blessures psychologiques, émotionnelles et relationnelles que peuvent engendrer les épreuves, la violence et l'abandon.\n\n" +
+          "Fragilisées par leur situation, certaines victimes sombrent dans le désespoir et risquent de reproduire les comportements mêmes qui les ont fait souffrir.\n\n" +
+          "Avec sensibilité et profondeur, l'autrice invite le lecteur à réfléchir à notre responsabilité collective envers ceux qui souffrent. Elle nous encourage à dépasser l'indifférence, à tendre la main à ceux que la vie a blessés et à contribuer à leur reconstruction.\n\n" +
+          "Un recueil poignant et profondément humain qui rappelle que, derrière chaque victime, se cachent une histoire, une blessure et un profond besoin d'humanité.",
         summaryEn:
           "What if today's victims became tomorrow's perpetrators?\n\n" +
           "In this moving collection of short stories, Irène Maben explores the many faces of human suffering and the sometimes devastating consequences of life's injustices. Through characters facing difficult circumstances, the author highlights the psychological, emotional and relational wounds that can result from hardship, violence and abandonment.\n\n" +

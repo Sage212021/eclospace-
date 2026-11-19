@@ -4542,6 +4542,7 @@ async function main() {
       title?: string;        // titre canonique (corrige casse/accents/pluriel)
       isbn?: string;         // ISBN officiel (corrige un ISBN provisoire)
       isbnText?: string;     // ISBN hyphéné affiché sur la fiche
+      matchIsbns?: string[]; // ISBN (chiffres) supplémentaires pour RETROUVER la fiche (ex. ancien provisoire)
       collectionFr: string; collectionEn: string;
       genreFr: string; genreEn: string; genreCode?: string;
       pages?: number;
@@ -4611,6 +4612,7 @@ async function main() {
         title: "Félonica, la femme de chez nous",
         isbn: "9789956078561", // ISBN officiel (remplace l'ISBN provisoire)
         isbnText: "978-9956-0-7856-1",
+        matchIsbns: ["9782001900176"], // ancien ISBN provisoire (pour retrouver la fiche)
         collectionFr: "Canari", collectionEn: "Canari",
         genreFr: "Roman", genreEn: "Novel", genreCode: "ROMAN",
         pages: 164,
@@ -4646,39 +4648,65 @@ async function main() {
     ];
 
     let legendsInstalled = 0;
+    let legendRecords = 0;
     for (const lg of catalogueLegends) {
-      const ms = await prisma.manuscript.findFirst({ where: { manuscriptNumber: lg.num }, select: { id: true, summary: true, summaryEn: true } });
-      if (!ms) continue;
+      // RETROUVER toutes les fiches de l'ouvrage. En production, une fiche saisie
+      // dans le circuit peut coexister avec la fiche « fonds » du seed (même livre,
+      // numéros différents) : la fiche AFFICHÉE au catalogue est celle qui porte
+      // l'ISBN. On rattache donc la légende à TOUTE fiche correspondante, repérée
+      // par son ISBN (officiel + ancien provisoire) OU par le numéro du seed.
+      const isbnDigits = Array.from(
+        new Set(
+          [lg.isbn, lg.isbnText, ...(lg.matchIsbns ?? [])]
+            .filter(Boolean)
+            .map((s) => String(s).replace(/\D/g, ""))
+            .filter((s) => s.length >= 10),
+        ),
+      );
+      const targets = await prisma.manuscript.findMany({
+        where: {
+          deletedAt: null,
+          OR: [
+            { manuscriptNumber: lg.num },
+            ...(isbnDigits.length ? [{ isbns: { some: { isbn13: { in: isbnDigits } } } }] : []),
+          ],
+        },
+        select: { id: true, summary: true, summaryEn: true },
+      });
+      if (targets.length === 0) continue;
       const genreId = lg.genreCode ? genresByCode.get(lg.genreCode) ?? null : null;
-      const data: Record<string, unknown> = {
-        legendCollectionFr: lg.collectionFr,
-        legendCollectionEn: lg.collectionEn,
-        legendGenreFr: lg.genreFr,
-        legendGenreEn: lg.genreEn,
-        legendPages: lg.pages ?? null,
-        legendIsbn: lg.isbnText ?? null,
-      };
-      if (lg.title) data.title = lg.title;
-      if (genreId) data.genreId = genreId;
-      // Synopsis : ne jamais recouvrir une saisie existante (fill-if-empty).
-      if (lg.summaryFr && !(ms.summary && ms.summary.trim())) data.summary = lg.summaryFr;
-      if (lg.summaryEn && !(ms.summaryEn && ms.summaryEn.trim())) data.summaryEn = lg.summaryEn;
-      await prisma.manuscript.update({ where: { id: ms.id }, data });
-      // ISBN officiel (corrige un provisoire), en respectant « ISBN jamais réutilisé ».
-      if (lg.isbn) {
-        const clash = await prisma.isbn.findFirst({ where: { isbn13: lg.isbn, manuscriptId: { not: ms.id } } });
-        if (!clash) {
-          const existing = await prisma.isbn.findFirst({ where: { manuscriptId: ms.id, format: "print" } });
-          if (!existing) {
-            await prisma.isbn.create({ data: { isbn13: lg.isbn, format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() } });
-          } else if (existing.isbn13 !== lg.isbn) {
-            await prisma.isbn.update({ where: { id: existing.id }, data: { isbn13: lg.isbn } });
+      for (const ms of targets) {
+        const data: Record<string, unknown> = {
+          legendCollectionFr: lg.collectionFr,
+          legendCollectionEn: lg.collectionEn,
+          legendGenreFr: lg.genreFr,
+          legendGenreEn: lg.genreEn,
+          legendPages: lg.pages ?? null,
+          legendIsbn: lg.isbnText ?? null,
+        };
+        if (lg.title) data.title = lg.title;
+        if (genreId) data.genreId = genreId;
+        // Synopsis : ne jamais recouvrir une saisie existante (fill-if-empty).
+        if (lg.summaryFr && !(ms.summary && ms.summary.trim())) data.summary = lg.summaryFr;
+        if (lg.summaryEn && !(ms.summaryEn && ms.summaryEn.trim())) data.summaryEn = lg.summaryEn;
+        await prisma.manuscript.update({ where: { id: ms.id }, data });
+        // ISBN officiel (corrige un provisoire), en respectant « ISBN jamais réutilisé ».
+        if (lg.isbn) {
+          const clash = await prisma.isbn.findFirst({ where: { isbn13: lg.isbn, manuscriptId: { not: ms.id } } });
+          if (!clash) {
+            const existing = await prisma.isbn.findFirst({ where: { manuscriptId: ms.id, format: "print" } });
+            if (!existing) {
+              await prisma.isbn.create({ data: { isbn13: lg.isbn, format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() } });
+            } else if (existing.isbn13 !== lg.isbn) {
+              await prisma.isbn.update({ where: { id: existing.id }, data: { isbn13: lg.isbn } });
+            }
           }
         }
+        legendRecords++;
       }
       legendsInstalled++;
     }
-    console.log(`Légendes catalogue : ${legendsInstalled}/${catalogueLegends.length} ouvrages dotés d'une légende bilingue.`);
+    console.log(`Légendes catalogue : ${legendsInstalled}/${catalogueLegends.length} ouvrages (${legendRecords} fiche(s) rattachée(s)).`);
   }
 
   // Pièces du pôle Stock & magasin déjà émises par la maison (revue opérateur

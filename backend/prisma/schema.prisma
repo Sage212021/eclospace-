@@ -1945,6 +1945,23 @@ model Manuscript {
   // Null = non classé (compté en « général » en attendant le classement).
   editorialSegment  EditorialSegment? @map("editorial_segment")
   summary           String?
+  // Légende bilingue du CATALOGUE (fiche partageable, demande opérateur du
+  // 19/11/2026). `summary` = synopsis FRANÇAIS (inchangé) ; `summaryEn` =
+  // synopsis ANGLAIS. Les champs `legend*` sont les libellés EXACTS que la
+  // maison veut voir sur la fiche partagée (ex. « Collection : Canari »,
+  // « Genre : Roman / Novel », nombre de pages), indépendants des référentiels
+  // internes (collection/genre) qui restent utilisés pour le filtrage. Nuls =
+  // on retombe sur le référentiel (collection.label / genre.label) et sur les
+  // pages de la fiche technique (production_specs.final_pages / estimated_pages).
+  summaryEn           String? @map("summary_en")
+  legendPages         Int?    @map("legend_pages")
+  // ISBN tel qu'affiché sur la fiche (hyphénation officielle de la maison,
+  // ex. « 978-9956-0-7767-0 »). À défaut, la fiche montre l'ISBN brut (isbns).
+  legendIsbn          String? @map("legend_isbn")
+  legendCollectionFr  String? @map("legend_collection_fr")
+  legendCollectionEn  String? @map("legend_collection_en")
+  legendGenreFr       String? @map("legend_genre_fr")
+  legendGenreEn       String? @map("legend_genre_en")
   keywords          String[]          @default([])
   origin            ManuscriptOrigin  @default(soumission)
   // Prise en charge & jalon devis (non bloquant) — reconfiguration Finance.

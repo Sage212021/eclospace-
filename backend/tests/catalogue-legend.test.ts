@@ -47,6 +47,7 @@ describe("catalogue — légendes bilingues (D-068)", () => {
     expect(m!.legendGenreFr).toBe("Ouvrage de sensibilisation sociale");
     expect(m!.legendGenreEn).toBe("Social Awareness Book");
     expect(m!.legendIsbn).toBe("978-9956-0-7767-0");
+    expect(m!.legendAuthor).toBe("Tchebal Dafrik");
     expect(m!.genre?.code).toBe("SENSIBILISATION");
   });
 
@@ -81,6 +82,7 @@ describe("catalogue — légendes bilingues (D-068)", () => {
     expect(row.genreLabel).toBe("Ouvrage de sensibilisation sociale");
     expect(row.genreLabelEn).toBe("Social Awareness Book");
     expect(row.isbn).toBe("978-9956-0-7767-0");
+    expect(row.authorDisplay).toBe("Tchebal Dafrik");
   });
 
   it("enregistre le synopsis anglais sans toucher au résumé français", async () => {

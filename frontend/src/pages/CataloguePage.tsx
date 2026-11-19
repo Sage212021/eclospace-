@@ -186,7 +186,7 @@ export function CataloguePage({ onOpenManuscript, canAdmin, canUploadCovers }: {
             <Cover item={it} version={reloadTick} />
             <div style={{ padding: "10px 11px 12px", textAlign: "left" }}>
               <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.28, color: "var(--ink)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{it.title}</div>
-              <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontStyle: "italic", fontSize: 12.5, color: "var(--muted)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.authors.join(", ") || "—"}</div>
+              <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontStyle: "italic", fontSize: 12.5, color: "var(--muted)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.authorDisplay ?? (it.authors.join(", ") || "—")}</div>
               {/* Genre (ou collection) en chip OR, SOUS la vignette : visible mais
                   ne recouvre plus jamais la couverture ni le logo Éclosion. */}
               {(it.genre?.label || it.collection?.label) && (
@@ -303,7 +303,7 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontSize: 20, color: "var(--ink)" }}>{item.title}</div>
             {item.subtitle && <div style={{ fontSize: 13.5, color: "var(--muted)", marginTop: 2 }}>{item.subtitle}</div>}
-            <div style={{ fontSize: 13, marginTop: 8 }}>{item.authors.join(", ") || "Auteur non renseigné"}</div>
+            <div style={{ fontSize: 13, marginTop: 8 }}>{item.authorDisplay ?? (item.authors.join(", ") || "Auteur non renseigné")}</div>
             {/* Sélecteur de langue de la LÉGENDE (fiche partageable). */}
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10 }}>
               <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>Légende</span>

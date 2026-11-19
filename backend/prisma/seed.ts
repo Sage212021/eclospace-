@@ -1576,6 +1576,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-catalogue-fiche-auteur-couverture",
+      version: "2026.11",
+      title: "Nouveauté — Catalogue : la fiche affiche le nom de l'auteur tel qu'il est sur la couverture",
+      body: "Petit ajustement de la fiche catalogue : l'auteur affiché (et partagé) est désormais le nom imprimé sur la COUVERTURE — le nom de plume quand il y en a un (par exemple « Tchebal Dafrik »). Le vrai nom éventuel reste enregistré dans le système pour les contrats et les droits d'auteur ; il n'est pas effacé, il n'apparaît simplement pas sur la fiche publique. Au passage, les légendes se rattachent maintenant à la bonne fiche même lorsqu'un ouvrage a été saisi deux fois (on repère l'ouvrage par son ISBN), pour que la collection « Canari », l'ISBN et le résumé s'affichent bien.",
+      permissionModules: ["communication"],
+      departmentCodes: ["MKT", "COM", "DG"],
+    },
+    {
       slug: "2026-11-catalogue-legende-bilingue-partage",
       version: "2026.11",
       title: "Nouveauté — Catalogue : partage bilingue (français / English) couverture + légende en texte libre",
@@ -4540,6 +4548,7 @@ async function main() {
     const catalogueLegends: {
       num: string;
       title?: string;        // titre canonique (corrige casse/accents/pluriel)
+      author?: string;       // auteur d'AFFICHAGE (nom de couverture / de plume) — n'efface pas l'auteur réel
       isbn?: string;         // ISBN officiel (corrige un ISBN provisoire)
       isbnText?: string;     // ISBN hyphéné affiché sur la fiche
       matchIsbns?: string[]; // ISBN (chiffres) supplémentaires pour RETROUVER la fiche (ex. ancien provisoire)
@@ -4551,6 +4560,7 @@ async function main() {
       {
         num: "LG-CAT-0045",
         title: "L'enfant bâtard",
+        author: "Tchebal Dafrik", // nom de couverture (nom de plume)
         isbnText: "978-9956-0-7767-0",
         collectionFr: "Canari", collectionEn: "Canari",
         genreFr: "Ouvrage de sensibilisation sociale", genreEn: "Social Awareness Book", genreCode: "SENSIBILISATION",
@@ -4568,6 +4578,7 @@ async function main() {
       {
         num: "LG-CAT-0072",
         title: "Ces vies que j'aurais vécues",
+        author: "Irène Maben",
         isbnText: "978-9956-36-285-1",
         collectionFr: "Canari", collectionEn: "Canari",
         genreFr: "Roman", genreEn: "Novel", genreCode: "ROMAN",
@@ -4588,6 +4599,7 @@ async function main() {
       {
         num: "LG-CAT-0051",
         title: "Victimes",
+        author: "Irène Maben",
         isbnText: "978-9956-36-278-3",
         collectionFr: "Canari", collectionEn: "Canari",
         genreFr: "Recueil de nouvelles", genreEn: "Short Story Collection", genreCode: "NOUVELLE",
@@ -4610,6 +4622,7 @@ async function main() {
       {
         num: "LG-CAT-0075",
         title: "Félonica, la femme de chez nous",
+        author: "Solange Nsomo",
         isbn: "9789956078561", // ISBN officiel (remplace l'ISBN provisoire)
         isbnText: "978-9956-0-7856-1",
         matchIsbns: ["9782001900176"], // ancien ISBN provisoire (pour retrouver la fiche)
@@ -4630,6 +4643,7 @@ async function main() {
       {
         num: "LG-CAT-0048",
         title: "J'étais une femme riche",
+        author: "Irène Maben",
         isbnText: "978-9956-0-7836-3",
         collectionFr: "Canari", collectionEn: "Canari",
         genreFr: "Roman", genreEn: "Novel", genreCode: "ROMAN",
@@ -4683,6 +4697,7 @@ async function main() {
           legendGenreEn: lg.genreEn,
           legendPages: lg.pages ?? null,
           legendIsbn: lg.isbnText ?? null,
+          legendAuthor: lg.author ?? null,
         };
         if (lg.title) data.title = lg.title;
         if (genreId) data.genreId = genreId;

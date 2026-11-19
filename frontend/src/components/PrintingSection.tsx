@@ -62,11 +62,18 @@ interface PrintingSectionProps {
   onEconomicModelChanged?: () => void;
   // Ouvrir la rubrique d'emblée (étape réception / arrivée depuis l'espace Stock).
   defaultOpen?: boolean;
+  // Mode « RÉCEPTION SEULE » (D-067) : à l'étape « Réception et mise en stock », on
+  // n'affiche QUE la réception / contrôle qualité / entrée en stock (ou remise à
+  // l'auteur) + le modèle économique. Les devis, bons de commande et la fiche
+  // technique relèvent de l'étape IMPRESSION et sont masqués ici.
+  receptionOnly?: boolean;
+  // Ancre DOM (pour « atterrir » directement sur la rubrique depuis l'espace Stock).
+  anchorId?: string;
 }
 
 // Impression et fabrication (Ch. 15) : devis comparés, bon de commande,
 // suivi de fabrication jusqu'à la réception.
-export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [], economicModel = null, onEconomicModelChanged, defaultOpen = false }: PrintingSectionProps) {
+export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [], economicModel = null, onEconomicModelChanged, defaultOpen = false, receptionOnly = false, anchorId }: PrintingSectionProps) {
   const authorAccount = economicModel === "compte_auteur";
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
@@ -296,7 +303,12 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   const ECO_LABELS: Record<string, string> = { compte_editeur: "Compte d'éditeur", compte_auteur: "Compte d'auteur", compte_demi: "Compte à demi", autre: "Autre" };
 
   return (
-    <CollapsibleSection title="Impression · réception · mise en stock" storageKey="fiche:impression" forceOpen={defaultOpen}>
+    <CollapsibleSection
+      title={receptionOnly ? "Réception · contrôle qualité · mise en stock" : "Impression et fabrication"}
+      storageKey={receptionOnly ? "fiche:reception" : "fiche:impression"}
+      forceOpen={defaultOpen}
+      id={anchorId}
+    >
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 
       {/* Modèle économique (D-064) : pilote la fin de production. Compte d'auteur
@@ -330,6 +342,10 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
         )}
       </div>
 
+      {/* IMPRESSION uniquement (fiche technique, imprimeurs, devis, bons de commande) —
+          MASQUÉ en mode « réception seule » (D-067) : à l'étape réception, on ne
+          montre que la réception / contrôle qualité / entrée en stock. */}
+      {!receptionOnly && (<>
       {/* Fiche technique de l'ouvrage — RÉCUPÉRÉE automatiquement de la Maquette
           (lecture seule ici ; saisie à l'étape Maquette). Reprise au bon de commande. */}
       <div style={{ marginBottom: 12, padding: 10, border: "1px solid var(--line)", borderRadius: 8 }}>
@@ -427,8 +443,17 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
           {!canManageBon && <> (l'établissement est réservé aux fonctions Impression, Stock, DAF et Direction générale).</>}
         </p>
       )}
-      {orders.map((po) => (
+      </>)}
+
+      {/* Réceptions sur bon de commande : en mode réception, on ne garde que le
+          strict nécessaire (réception + contrôle qualité + entrée en stock). */}
+      {orders.filter((po) => !receptionOnly || po.status !== "draft").map((po) => (
         <div key={po.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0", fontSize: 13 }}>
+          {receptionOnly ? (
+            <div style={{ fontSize: 12.5 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{po.poNumber}</span> · {po.orderedQuantity} ex. commandés
+            </div>
+          ) : (<>
           <div style={{ fontFamily: "var(--font-mono)" }}>{po.poNumber}</div>
           <div>
             {po.status} — {po.orderedQuantity} ex. — {po.amount}
@@ -455,13 +480,14 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
               </button>
             )}
           </div>
+          </>)}
           {canReceiveStock && po.status !== "draft" && (
             <button onClick={() => handleReceipt(po)} style={secondaryButtonStyle}>
               Enregistrer une réception
             </button>
           )}
 
-          <PoEditPanel po={po} canManage={canManageBon} locations={locations} printers={printers} sign={sign} onSaved={refresh} onError={setError} />
+          {!receptionOnly && <PoEditPanel po={po} canManage={canManageBon} locations={locations} printers={printers} sign={sign} onSaved={refresh} onError={setError} />}
 
           {(po.goodsReceipts ?? []).length > 0 && (
             <div style={{ marginTop: 8 }}>

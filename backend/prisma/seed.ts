@@ -1572,6 +1572,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-reception-separee-de-impression",
+      version: "2026.11",
+      title: "Nouveauté — Réception / mise en stock : une rubrique à part, enfin claire (plus de « devis / bons de commande » vides)",
+      body: "On a remis de l'ordre à l'étape « Réception · contrôle qualité · mise en stock ». Avant, cette étape était collée à l'Impression : en l'ouvrant, vous tombiez sur « Devis reçus — aucun devis demandé » et « Bons de commande — aucun bon de commande », des blocs vides qui n'avaient rien à faire là et qui prêtaient à confusion. C'est corrigé : l'Impression (fiche technique, imprimeurs, devis, bons de commande) reste à SON étape, en amont ; la rubrique de réception ne montre plus que l'essentiel de VOTRE travail — le modèle économique de l'ouvrage, puis la réception des exemplaires, le contrôle qualité, et enfin l'entrée en stock (compte d'éditeur ou à demi) OU la remise à l'auteur (compte d'auteur, sans entrée en stock). Et quand vous cliquez sur « Ouvrir » depuis « Mon espace Stock & magasin », la fiche vous amène DIRECTEMENT sur cette rubrique (elle défile toute seule et s'entoure d'un liseré doré), sans avoir à chercher. Réservé au pôle Stock & magasin (DAF et Direction générale également).",
+      permissionModules: ["stock"],
+      departmentCodes: ["STOCK", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-ouvrir-depuis-mon-espace-stock",
       version: "2026.11",
       title: "Nouveauté — « Mon espace Stock & magasin » : « Ouvrir » affiche enfin la réception / mise en stock",

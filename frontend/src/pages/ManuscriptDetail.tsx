@@ -216,6 +216,32 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
     refresh().catch((e) => setError(e.message));
   }, [manuscriptId]);
 
+  // D-067 : arrivée depuis « Mon espace Stock & magasin » (focus « stock ») →
+  // on amène DIRECTEMENT l'utilisateur sur la rubrique « Réception · contrôle
+  // qualité · mise en stock » (ancre #fiche-reception), sans qu'il ait à faire
+  // défiler la fiche. La rubrique se monte après le chargement du manuscrit, et
+  // parfois un instant après le premier rendu : on réessaie quelques fois, puis
+  // on défile en douceur et on fait clignoter un contour doré pour la repérer.
+  useEffect(() => {
+    if (activeFocus !== "stock" || !manuscript) return;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tryScroll = () => {
+      const el = document.getElementById("fiche-reception");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        const prev = el.style.boxShadow;
+        el.style.boxShadow = "0 0 0 2px #D9B21A";
+        setTimeout(() => { el.style.boxShadow = prev; }, 1400);
+        return;
+      }
+      if (tries++ < 25) timer = setTimeout(tryScroll, 120);
+    };
+    timer = setTimeout(tryScroll, 120);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFocus, manuscript?.id]);
+
   if (!manuscript) return <div style={{ padding: "clamp(16px, 4vw, 32px)" }}>Chargement…</div>;
 
   const canValidate = permissions.has("manuscripts:validation");
@@ -1138,6 +1164,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             bonFunctions={bonFunctions}
             economicModel={manuscript.economicModel ?? null}
             onEconomicModelChanged={() => { void refresh(); }}
+            // D-067 : à l'étape « Réception · contrôle qualité · mise en stock »,
+            // l'Impression est une étape SÉPARÉE, déjà faite plus haut. Cette
+            // rubrique ne montre donc QUE le modèle économique + la réception /
+            // contrôle qualité / entrée en stock (ou remise à l'auteur) : pas de
+            // devis ni de bons de commande (ils appartiennent à l'Impression).
+            receptionOnly
+            anchorId="fiche-reception"
             // Ouvert d'emblée à l'étape « Réception et mise en stock » (ou quand on
             // arrive depuis « Mon espace Stock & magasin ») : la réception /
             // contrôle qualité / entrée en stock (ou remise à l'auteur) est visible

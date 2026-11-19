@@ -615,6 +615,14 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 19/11/2026 — Impression et Réception / mise en stock enfin séparées + « Ouvrir » atterrit sur la réception (D-067)
+- **Problème opérateur** : à l'étape réception, la rubrique affichait encore les sous-sections d'Impression (« Devis reçus — aucun devis demandé », « Bons de commande — aucun bon de commande »), vides et incohérentes à cet endroit ; et « Ouvrir » depuis « Mon espace Stock & magasin » laissait l'utilisateur en haut de la fiche.
+- **Correctif** : `PrintingSection` reçoit un mode `receptionOnly`. En ce mode (rendu dès `CONTROLE_QUALITE_IMPRESSION`), on masque fiche technique, imprimeurs, devis, en-tête des bons de commande, édition/transfert/avancer-reculer du bon ; on ne garde que **modèle économique + réception · contrôle qualité · entrée en stock** (ou **remise à l'auteur** si compte d'auteur), plus la réception directe (D-061) à défaut de bon. Chaque bon se résume à un libellé compact + « Enregistrer une réception ». Rubrique renommée « Réception · contrôle qualité · mise en stock » (ancre `#fiche-reception`).
+- **Navigation** : à l'arrivée en vue « stock », la fiche **défile automatiquement** vers `#fiche-reception` (liseré doré). L'étape IMPRESSION (panneau d'étape, en amont) reste la vue complète inchangée.
+- Vérifs : `tsc --noEmit` front au vert ; `npm run build` front au vert.
+- Note « Nouveauté » ajoutée (slug `2026-11-reception-separee-de-impression`, cible stock ; STOCK/FIN/DG). Décision **D-067** consignée.
+- **Prochaine étape** : commit sur la branche, PR, fusion, puis redéploiement production pour que l'opérateur le voie.
+
 ### 22/08/2026 — Caractéristiques d'écriture (typographie) sur la fiche technique (étape 9)
 
 **Vérification demandée :** où sont enregistrées, dans le workflow, les caractéristiques de fabrication (papier, écriture…) ?

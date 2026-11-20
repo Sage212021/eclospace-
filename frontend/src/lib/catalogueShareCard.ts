@@ -93,7 +93,19 @@ export function cardFields(item: CatalogueItem, lang: ShareLang) {
 
 // Texte LIBRE de la légende (sélectionnable / copiable). Aucun marqueur « ## » :
 // du texte propre, prêt à coller dans WhatsApp, un email, un document, etc.
-export function catalogueLegendText(item: CatalogueItem, lang: ShareLang): string {
+// Signature de l'origine du partage. « signature » choisit le rendu :
+//  • "none"     : aucune signature (ex. impression/PDF qui la posent eux-mêmes
+//                 en petit et en gris, un vrai style à part) ;
+//  • "plain"    : texte simple (copier-coller propre, sans aucun marqueur) ;
+//  • "whatsapp" : en ITALIQUE via la mise en forme WhatsApp (`_texte_`), pour un
+//                 rendu plus léger et discret, « un autre style » que le corps.
+// (En message texte, la TAILLE de police est imposée par l'app ; l'italique est
+// le seul moyen de distinguer la signature sans transformer le texte en image.)
+export function catalogueLegendText(
+  item: CatalogueItem,
+  lang: ShareLang,
+  opts: { signature?: "none" | "plain" | "whatsapp" } = {},
+): string {
   const S = STRINGS[lang];
   const f = cardFields(item, lang);
   const lines: string[] = [];
@@ -119,9 +131,11 @@ export function catalogueLegendText(item: CatalogueItem, lang: ShareLang): strin
   lines.push("");
   lines.push("ÉDITIONS ÉCLOSION");
   lines.push(S.tagline);
-  // Signature discrète d'origine du partage.
-  lines.push("");
-  lines.push(S.sharedVia);
+  const signature = opts.signature ?? "plain";
+  if (signature !== "none") {
+    lines.push("");
+    lines.push(signature === "whatsapp" ? `_${S.sharedVia}_` : S.sharedVia);
+  }
   return lines.join("\n");
 }
 
@@ -189,7 +203,7 @@ export async function copyLegendText(item: CatalogueItem, lang: ShareLang): Prom
 export async function shareCatalogueNative(item: CatalogueItem, lang: ShareLang): Promise<boolean> {
   const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean; share?: (d: ShareData) => Promise<void> };
   if (!nav.share) return false;
-  const text = catalogueLegendText(item, lang);
+  const text = catalogueLegendText(item, lang, { signature: "whatsapp" });
   const cover = await catalogueCoverFile(item);
   const withFile: ShareData & { files?: File[] } = { title: item.title, text, ...(cover ? { files: [cover] } : {}) };
   const data: ShareData = cover && nav.canShare && nav.canShare(withFile) ? withFile : { title: item.title, text };
@@ -344,15 +358,18 @@ export async function catalogueCardPdfFile(item: CatalogueItem, lang: ShareLang)
 // Impression : couverture (image) + légende en TEXTE réel (sélectionnable).
 export async function printCatalogueCard(item: CatalogueItem, lang: ShareLang): Promise<void> {
   const coverUrl = await loadCoverDataUrl(item);
-  const text = catalogueLegendText(item, lang);
+  // Corps sans la signature : on la pose à part, petite et grise (style discret).
+  const text = catalogueLegendText(item, lang, { signature: "none" });
+  const signature = STRINGS[lang].sharedVia;
   const w = window.open("", "_blank", "noopener,width=820,height=1000");
   if (!w) throw new Error("Impossible d'ouvrir la fenêtre d'impression (fenêtres bloquées ?).");
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   w.document.write(
     `<!doctype html><html><head><meta charset="utf-8"><title>${esc(safeName(item))}</title>` +
       `<style>@page{margin:14mm}body{font-family:Arial,Helvetica,sans-serif;color:#0B0B0C;margin:0;line-height:1.5}` +
-      `img{max-width:70%;max-height:95mm;display:block;margin:0 auto 14px}pre{white-space:pre-wrap;font-family:inherit;font-size:13px;margin:0}</style></head>` +
-      `<body>${coverUrl ? `<img src="${coverUrl}">` : ""}<pre>${esc(text)}</pre>` +
+      `img{max-width:70%;max-height:95mm;display:block;margin:0 auto 14px}pre{white-space:pre-wrap;font-family:inherit;font-size:13px;margin:0}` +
+      `.sig{margin-top:10px;font-size:9px;font-style:italic;color:#9A9A9A}</style></head>` +
+      `<body>${coverUrl ? `<img src="${coverUrl}">` : ""}<pre>${esc(text)}</pre><div class="sig">${esc(signature)}</div>` +
       `<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},200)}</script></body></html>`,
   );
   w.document.close();

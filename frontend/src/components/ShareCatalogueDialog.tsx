@@ -55,7 +55,9 @@ export function ShareCatalogueDialog({ item, lang: initialLang, onClose }: { ite
       // d'image via un lien). Sur mobile, préférez « Partager ».
       const cover = await catalogueCoverFile(item);
       if (cover) downloadFile(cover);
-      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+      // Vers WhatsApp : signature en italique (discrète) via la mise en forme WhatsApp.
+      const waText = catalogueLegendText(item, lang, { signature: "whatsapp" });
+      window.open(`https://wa.me/?text=${encodeURIComponent(waText)}`, "_blank", "noopener");
       if (cover) setInfo("Couverture téléchargée : joignez-la à votre message WhatsApp (le texte est déjà pré-rempli).");
     });
   }

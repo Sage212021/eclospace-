@@ -16,7 +16,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
     "seed": "node --env-file=.env node_modules/.bin/tsx prisma/seed.ts",
-    "seed:deploy": "tsx prisma/seed.ts"
+    "seed:deploy": "tsx prisma/seed.ts",
+    "seed:legends": "tsx prisma/seedLegends.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0",

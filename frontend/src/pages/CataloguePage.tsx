@@ -41,7 +41,10 @@ const AVAIL_COLOR: Record<string, string> = {
 };
 
 function price(n: number | null): string {
-  return n == null ? "—" : `${n.toLocaleString("fr-FR")} FCFA`;
+  if (n == null) return "—";
+  // FCFA à parité fixe avec l'euro (655,957 FCFA = 1 €).
+  const eur = (n / 655.957).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${n.toLocaleString("fr-FR")} FCFA · ${eur} €`;
 }
 
 export function CataloguePage({ onOpenManuscript, canAdmin, canUploadCovers }: { onOpenManuscript?: (id: string) => void; canAdmin?: boolean; canUploadCovers?: boolean }) {

@@ -1577,6 +1577,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-catalogue-partage-signature-eclospace",
+      version: "2026.11",
+      title: "Nouveauté — Partage catalogue : petite signature « Partagé depuis Eclospace »",
+      body: "Quand vous partagez un ouvrage (couverture + légende), une mention discrète « Partagé depuis Eclospace » (ou « Shared from Eclospace » en anglais) apparaît tout en bas du texte, sous « L'Avenir du livre. ». Elle indique l'origine du partage sans alourdir la fiche. Elle figure dans le texte partagé, le PDF et l'impression ; elle n'apparaît pas dans l'affichage du catalogue.",
+      permissionModules: ["communication"],
+      departmentCodes: ["MKT", "COM", "DG"],
+    },
+    {
       slug: "2026-11-catalogue-prix-et-legendes-fiables",
       version: "2026.11",
       title: "Nouveauté — Catalogue : prix (FCFA + €) sur la fiche, et légendes qui s'installent à coup sûr",

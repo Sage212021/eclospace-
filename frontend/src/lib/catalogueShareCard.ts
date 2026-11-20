@@ -25,6 +25,7 @@ type Strings = {
   price: string;
   synopsis: string;
   tagline: string;
+  sharedVia: string;
 };
 
 const STRINGS: Record<ShareLang, Strings> = {
@@ -38,6 +39,7 @@ const STRINGS: Record<ShareLang, Strings> = {
     price: "Prix",
     synopsis: "RÉSUMÉ",
     tagline: "L'Avenir du livre.",
+    sharedVia: "Partagé depuis Eclospace",
   },
   en: {
     country: "Cameroon",
@@ -49,6 +51,7 @@ const STRINGS: Record<ShareLang, Strings> = {
     price: "Price",
     synopsis: "SYNOPSIS",
     tagline: "The Future of Books.",
+    sharedVia: "Shared from Eclospace",
   },
 };
 
@@ -116,6 +119,9 @@ export function catalogueLegendText(item: CatalogueItem, lang: ShareLang): strin
   lines.push("");
   lines.push("ÉDITIONS ÉCLOSION");
   lines.push(S.tagline);
+  // Signature discrète d'origine du partage.
+  lines.push("");
+  lines.push(S.sharedVia);
   return lines.join("\n");
 }
 
@@ -323,6 +329,13 @@ export async function catalogueCardPdfFile(item: CatalogueItem, lang: ShareLang)
   doc.setFontSize(10);
   doc.setTextColor(90, 90, 90);
   doc.text(S.tagline, M, y + 4);
+  y += 7;
+  // Signature discrète d'origine du partage.
+  ensure(6);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text(S.sharedVia, M, y + 3);
 
   const blob = doc.output("blob");
   return new File([blob], `${safeName(item)}-${lang}.pdf`, { type: "application/pdf" });

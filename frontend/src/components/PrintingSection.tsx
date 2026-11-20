@@ -247,49 +247,9 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
     }
   }
 
-  async function handleReceipt(po: PurchaseOrder) {
-    const alreadyReceived = (po.goodsReceipts ?? []).reduce((s, r) => s + r.quantityReceived, 0);
-    const remaining = Math.max(0, po.orderedQuantity - alreadyReceived);
-    const quantity = Number(window.prompt(`Quantité livrée (réception).\nCommandé : ${po.orderedQuantity} · déjà reçu : ${alreadyReceived} · reste : ${remaining}`, String(remaining || po.orderedQuantity)) ?? "0");
-    if (!quantity || quantity <= 0) return;
-    try {
-      const result = await recordGoodsReceipt(po.id, quantity);
-      if (!result.within_tolerance) {
-        setError(`Cumul reçu ${result.cumulative_received} pour ${po.orderedQuantity} commandés — hors tolérance.`);
-      }
-      await refresh();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Échec de l'enregistrement de la réception.";
-      // Sur-réception : proposer une régularisation (dépassement autorisé et tracé).
-      if (/over_reception|dépasser|reste/i.test(msg) && window.confirm(`${msg}\n\nEnregistrer quand même en RÉGULARISATION (dépassement tracé) ?`)) {
-        try {
-          await recordGoodsReceipt(po.id, quantity, true);
-          await refresh();
-          setError(null);
-          return;
-        } catch (err2) {
-          setError(err2 instanceof Error ? err2.message : msg);
-          return;
-        }
-      }
-      setError(msg);
-    }
-  }
-
-  // Réception DIRECTE (sans bon de commande, D-061) : ouvrage déjà paru / importé
-  // sans passer par l'impression. On saisit la quantité reçue, puis le contrôle
-  // qualité et l'entrée en stock suivent la même voie que pour un bon de commande.
-  async function handleDirectReceipt() {
-    const quantity = Number(window.prompt("Quantité reçue (réception directe, sans bon de commande).\nIndiquez le nombre d'exemplaires effectivement reçus :", "") ?? "0");
-    if (!quantity || quantity <= 0) return;
-    try {
-      await recordDirectGoodsReceipt(manuscriptId, quantity);
-      await refresh();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'enregistrement de la réception.");
-    }
-  }
+  // La saisie de la quantité reçue (réception sur bon OU réception directe) est
+  // faite EN PAGE par le composant <ReceptionEntry> (étape 1), plus de fenêtre
+  // « prompt » du navigateur.
 
   // Y a-t-il un bon de commande sur lequel réceptionner ? Sinon (ouvrage déjà
   // paru / importé), on propose la réception DIRECTE.
@@ -503,11 +463,25 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             )}
           </div>
           </>)}
-          {canReceiveStock && po.status !== "draft" && (
-            <button onClick={() => handleReceipt(po)} style={secondaryButtonStyle}>
-              Enregistrer une réception
-            </button>
-          )}
+          {(() => {
+            if (!canReceiveStock || po.status === "draft") return null;
+            const received = (po.goodsReceipts ?? []).reduce((s, r) => s + r.quantityReceived, 0);
+            const remaining = po.orderedQuantity - received;
+            // On ne propose la saisie (étape 1) que s'il reste des exemplaires à
+            // recevoir, ou qu'aucune réception n'a encore été enregistrée.
+            if ((po.goodsReceipts ?? []).length > 0 && remaining <= 0) return null;
+            return (
+              <div style={{ marginTop: 8 }}>
+                <ReceptionEntry
+                  ordered={po.orderedQuantity}
+                  alreadyReceived={received}
+                  onSubmit={(q, force) => recordGoodsReceipt(po.id, q, force)}
+                  onDone={refresh}
+                  onError={setError}
+                />
+              </div>
+            );
+          })()}
 
           {!receptionOnly && <PoEditPanel po={po} canManage={canManageBon} locations={locations} printers={printers} sign={sign} onSaved={refresh} onError={setError} />}
 
@@ -564,9 +538,13 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             Cet ouvrage n'a pas de bon de commande (livre déjà paru ou importé sans passer par l'impression).
             Enregistrez la réception des exemplaires, puis le contrôle qualité, puis l'entrée en stock — comme pour une fabrication normale.
           </p>
-          <button onClick={handleDirectReceipt} style={secondaryButtonStyle}>
-            Enregistrer une réception
-          </button>
+          <ReceptionEntry
+            ordered={null}
+            alreadyReceived={0}
+            onSubmit={(q) => recordDirectGoodsReceipt(manuscriptId, q).then(() => undefined)}
+            onDone={refresh}
+            onError={setError}
+          />
           {directReceipts.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
@@ -1103,6 +1081,67 @@ function StepHead({ n, title, done, active }: { n: number; title: string; done?:
       <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 19, height: 19, borderRadius: 999, fontSize: 11, fontWeight: 800, background: done ? "#2F7D4A" : active ? "var(--eclosion, #D9B21A)" : "var(--line)", color: done ? "#fff" : active ? "#0B0B0C" : "var(--muted)" }}>{done ? "✓" : n}</span>
       <span style={{ fontSize: 12.5, fontWeight: 700 }}>{title}</span>
       {active && <span style={{ fontSize: 10, fontWeight: 800, color: "#9a7a12", background: "#F6EFD6", borderRadius: 999, padding: "1px 7px", textTransform: "uppercase", letterSpacing: 0.4 }}>à faire</span>}
+    </div>
+  );
+}
+
+// Saisie EN PAGE de la quantité reçue — c'est l'ÉTAPE 1 de la réception (remplace
+// l'ancienne fenêtre du navigateur, peu claire et peu fiable). Gère les livraisons
+// partielles cumulées et la régularisation d'un dépassement.
+function ReceptionEntry({ ordered, alreadyReceived, onSubmit, onDone, onError }: {
+  ordered: number | null;
+  alreadyReceived: number;
+  onSubmit: (qty: number, force?: boolean) => Promise<{ within_tolerance?: boolean } | void>;
+  onDone: () => Promise<void>;
+  onError: (m: string | null) => void;
+}) {
+  const remaining = ordered != null ? Math.max(0, ordered - alreadyReceived) : null;
+  const [qty, setQty] = useState<string>(remaining && remaining > 0 ? String(remaining) : "");
+  const [busy, setBusy] = useState(false);
+  async function submit(force = false) {
+    const n = Number(qty);
+    if (!Number.isFinite(n) || n <= 0) {
+      onError("Indiquez le nombre d'exemplaires reçus (un nombre supérieur à 0).");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await onSubmit(n, force);
+      onError(r && (r as { within_tolerance?: boolean }).within_tolerance === false ? "Réception enregistrée, mais le cumul dépasse la quantité commandée — à vérifier." : null);
+      setQty("");
+      await onDone();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Échec de l'enregistrement de la réception.";
+      if (!force && /over_reception|dépasser|reste|tolérance/i.test(msg) && window.confirm(`${msg}\n\nEnregistrer quand même en régularisation (dépassement tracé) ?`)) {
+        await submit(true);
+        return;
+      }
+      onError(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div style={activeStepStyle}>
+      <StepHead n={1} title="Enregistrer la réception" active />
+      <div style={{ fontSize: 12, color: "var(--muted)", margin: "2px 0 7px" }}>
+        {ordered != null ? (
+          <>Commandé <b>{ordered}</b> · déjà reçu <b>{alreadyReceived}</b>{remaining != null && <> · reste <b>{remaining}</b></>}. Indiquez le nombre d'exemplaires réellement reçus.</>
+        ) : (
+          <>Indiquez le nombre d'exemplaires effectivement reçus.</>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <label style={{ fontSize: 11.5, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 3 }}>
+          Quantité reçue
+          <input type="number" min={1} inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)}
+            style={{ width: 130, fontSize: 15, fontFamily: "var(--font-mono)", borderRadius: 6, border: "1px solid var(--line)", padding: "7px 9px" }} />
+        </label>
+        <button onClick={() => submit()} disabled={busy}
+          style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", fontWeight: 700, padding: "8px 14px" }}>
+          {busy ? "Enregistrement…" : "Enregistrer la réception"}
+        </button>
+      </div>
     </div>
   );
 }

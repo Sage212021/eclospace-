@@ -272,9 +272,10 @@ export async function buildApp() {
         // raisonne sur le fichier d'origine.
         const original = filePath.replace(/\.(br|gz)$/, "");
         res.setHeader("Vary", "Accept-Encoding");
-        if (original.endsWith(".html")) {
-          // index.html référence les fichiers hachés : ne jamais le figer en
-          // cache, sinon une nouvelle version ne serait pas prise en compte.
+        if (original.endsWith(".html") || original.endsWith("version.json")) {
+          // index.html référence les fichiers hachés, et version.json indique la
+          // version en ligne : ne jamais les figer en cache, sinon une nouvelle
+          // version ne serait pas prise en compte.
           res.setHeader("Cache-Control", "no-cache");
         } else if (original.includes(`${path.sep}assets${path.sep}`)) {
           // Fichiers au nom haché par Vite (leur contenu ne change jamais pour

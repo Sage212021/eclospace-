@@ -1579,8 +1579,8 @@ async function main() {
     {
       slug: "2026-11-catalogue-partage-signature-eclospace",
       version: "2026.11",
-      title: "Nouveauté — Partage catalogue : petite signature « Partagé depuis Eclospace »",
-      body: "Quand vous partagez un ouvrage (couverture + légende), une mention discrète « Partagé depuis Eclospace » (ou « Shared from Eclospace » en anglais) apparaît tout en bas du texte, sous « L'Avenir du livre. ». Elle indique l'origine du partage sans alourdir la fiche. Elle figure dans le texte partagé, le PDF et l'impression ; elle n'apparaît pas dans l'affichage du catalogue.",
+      title: "Nouveauté — Partage catalogue : petite signature discrète « Partagé depuis Eclospace »",
+      body: "Quand vous partagez un ouvrage (couverture + légende), une mention discrète « Partagé depuis Eclospace » (ou « Shared from Eclospace » en anglais) apparaît tout en bas, sous « L'Avenir du livre. ». Elle est volontairement effacée : en italique sur WhatsApp (un style plus léger que le texte), et en tout petit gris sur le PDF et l'impression. À noter : dans un message texte, la TAILLE de la police est imposée par l'application — l'italique est donc le moyen de la rendre plus discrète sans transformer la légende en image (le texte doit rester copiable). Elle n'apparaît pas dans l'affichage du catalogue.",
       permissionModules: ["communication"],
       departmentCodes: ["MKT", "COM", "DG"],
     },

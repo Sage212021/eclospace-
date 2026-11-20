@@ -39,7 +39,7 @@ const STRINGS: Record<ShareLang, Strings> = {
     price: "Prix",
     synopsis: "RÉSUMÉ",
     tagline: "L'Avenir du livre.",
-    sharedVia: "Partagé depuis Eclospace",
+    sharedVia: "Partagé depuis le catalogue Eclospace",
   },
   en: {
     country: "Cameroon",
@@ -51,7 +51,7 @@ const STRINGS: Record<ShareLang, Strings> = {
     price: "Price",
     synopsis: "SYNOPSIS",
     tagline: "The Future of Books.",
-    sharedVia: "Shared from Eclospace",
+    sharedVia: "Shared from the Eclospace catalogue",
   },
 };
 

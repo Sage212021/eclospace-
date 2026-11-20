@@ -1577,6 +1577,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-reception-circuit-guide-3-etapes",
+      version: "2026.11",
+      title: "Nouveauté — Réception : un circuit guidé en 3 étapes (réception → contrôle qualité → stock/auteur)",
+      body: "La carte de réception est désormais claire et guidée, étape par étape. 1) RÉCEPTION ENREGISTRÉE : le nombre d'exemplaires reçus (corrigeable). 2) CONTRÔLE QUALITÉ : un bouton « Saisir le contrôle qualité » où vous indiquez le verdict (conforme / avec réserves / non conforme), cochez les points vérifiés, et surtout saisissez COMBIEN d'exemplaires sont conformes et combien ne le sont pas (ces derniers restent isolés, non vendables). 3) Selon le modèle économique de l'ouvrage : « ENTRÉE EN STOCK » (compte d'éditeur / à demi) pour faire entrer les exemplaires conformes en stock, OU « REMISE À L'AUTEUR » (compte d'auteur, pas d'entrée en stock) — l'ouvrage part ensuite à l'archivage. L'étape « à faire » est mise en avant (pastille dorée) pour que vous sachiez toujours quoi faire ensuite, et chaque étape terminée passe au vert avec une coche. On peut aussi ouvrir une réclamation à l'imprimeur en cas de défaut.",
+      permissionModules: ["stock", "printing"],
+      departmentCodes: ["STOCK", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-reception-bon-de-commande-reparait-replie",
       version: "2026.11",
       title: "Nouveauté — Réception & stock : le bon de commande réapparaît (replié, jamais perdu)",

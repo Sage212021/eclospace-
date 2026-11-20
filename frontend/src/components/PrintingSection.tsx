@@ -1086,6 +1086,27 @@ interface ReceiptCardProps {
 
 // Bloc « une réception » : quantité + verdict qualité (3 choix colorés) +
 // checklist des points vérifiés + commentaire + réclamation. Corrigible.
+// Encadré doré léger qui met en avant l'ÉTAPE À FAIRE dans la carte de réception.
+const activeStepStyle: React.CSSProperties = {
+  background: "var(--paper, #FAF8F2)",
+  border: "1px solid var(--eclosion, #D9B21A)",
+  borderRadius: 8,
+  padding: "8px 10px",
+};
+
+// En-tête d'étape numérotée (Réception / Contrôle qualité / Entrée en stock ou
+// Remise à l'auteur) : pastille n° — ✓ verte si faite, dorée si c'est l'étape à
+// faire, grise sinon — + titre + repère « à faire ».
+function StepHead({ n, title, done, active }: { n: number; title: string; done?: boolean; active?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 19, height: 19, borderRadius: 999, fontSize: 11, fontWeight: 800, background: done ? "#2F7D4A" : active ? "var(--eclosion, #D9B21A)" : "var(--line)", color: done ? "#fff" : active ? "#0B0B0C" : "var(--muted)" }}>{done ? "✓" : n}</span>
+      <span style={{ fontSize: 12.5, fontWeight: 700 }}>{title}</span>
+      {active && <span style={{ fontSize: 10, fontWeight: 800, color: "#9a7a12", background: "#F6EFD6", borderRadius: 999, padding: "1px 7px", textTransform: "uppercase", letterSpacing: 0.4 }}>à faire</span>}
+    </div>
+  );
+}
+
 function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError, authorAccount = false }: ReceiptCardProps) {
   const [open, setOpen] = useState(false);
   const [verdict, setVerdict] = useState<QcVerdict | null>(receipt.qcVerdict ?? null);
@@ -1177,93 +1198,103 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
 
   return (
     <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, marginTop: 8, background: "var(--card)" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 12 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{receipt.quantityReceived}</span> ex. reçus
-          {receipt.variance !== 0 && (
-            <span style={{ marginLeft: 6, color: receipt.variance < 0 ? "#C24B3A" : "#C4661F", fontFamily: "var(--font-mono)" }}>
-              (écart {receipt.variance > 0 ? "+" : ""}
-              {receipt.variance})
-            </span>
-          )}
-          {canManage && (
-            <button onClick={correctQuantity} style={{ ...secondaryButtonStyle, marginTop: 0, marginLeft: 8, padding: "2px 8px" }}>
-              Corriger
-            </button>
-          )}
-        </div>
-        <VerdictBadge verdict={receipt.qcVerdict} />
-      </div>
-
-      {(receipt.qcChecklist ?? []).length > 0 && (
-        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
-          Points vérifiés : {(receipt.qcChecklist ?? []).filter((c) => c.ok).length}/{(receipt.qcChecklist ?? []).length}
-        </div>
-      )}
-      {receipt.qcComment && <div style={{ fontSize: 12, marginTop: 4, fontStyle: "italic" }}>« {receipt.qcComment} »</div>}
-
-      {(receipt.claims ?? []).length > 0 && (
-        <div style={{ marginTop: 6 }}>
-          {(receipt.claims ?? []).map((c) => (
-            <div key={c.id} style={{ fontSize: 11, color: "#C24B3A" }}>
-              ⚠ Réclamation : {c.description}
+      {/* Circuit GUIDÉ en 3 étapes : Réception → Contrôle qualité → Entrée en
+          stock (ou Remise à l'auteur). L'étape à faire est mise en avant pour
+          qu'on sache toujours quoi faire ensuite. */}
+      {(() => {
+        const qcDone = receipt.qcVerdict != null;
+        const conformQty = receipt.quantityConform ?? 0;
+        const nonConform = receipt.quantityReceived - (receipt.quantityConform ?? 0);
+        const step2Active = canValidate && !qcDone && !stockLocked;
+        const step3Active = canManage && qcDone && !stockLocked;
+        return (
+          <div style={{ display: "grid", gap: 9 }}>
+            {/* Étape 1 — Réception enregistrée */}
+            <div>
+              <StepHead n={1} title="Réception enregistrée" done />
+              <div style={{ fontSize: 12.5, marginTop: 2 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{receipt.quantityReceived}</span> exemplaire(s) reçu(s)
+                {receipt.variance !== 0 && (
+                  <span style={{ marginLeft: 6, color: receipt.variance < 0 ? "#C24B3A" : "#C4661F", fontFamily: "var(--font-mono)" }}>
+                    (écart {receipt.variance > 0 ? "+" : ""}{receipt.variance} vs commande)
+                  </span>
+                )}
+                {canManage && !stockLocked && (
+                  <button onClick={correctQuantity} style={{ ...secondaryButtonStyle, marginTop: 0, marginLeft: 8, padding: "2px 8px" }}>Corriger</button>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* Statut qualité & stock de la réception (D-056). */}
-      {receipt.qcVerdict != null && (
-        <div style={{ fontSize: 11.5, marginTop: 6, color: "var(--muted)" }}>
-          {receipt.quantityConform != null && (
-            <>
-              <b style={{ color: "#2F7D4A" }}>{receipt.quantityConform} conforme(s)</b>
-              {receipt.quantityReceived - receipt.quantityConform > 0 && (
-                <> · <b style={{ color: "#C24B3A" }}>{receipt.quantityReceived - receipt.quantityConform} non conforme(s)</b></>
+            {/* Étape 2 — Contrôle qualité */}
+            <div style={step2Active ? activeStepStyle : undefined}>
+              <StepHead n={2} title="Contrôle qualité" done={qcDone} active={step2Active} />
+              <div style={{ fontSize: 12, color: "var(--muted)", margin: "2px 0 6px" }}>
+                Vérifiez les exemplaires et indiquez combien sont <b style={{ color: "#2F7D4A" }}>conformes</b> (bon état, vendables) et combien ne le sont pas.
+              </div>
+              {qcDone && (
+                <div style={{ fontSize: 12.5, marginBottom: 6 }}>
+                  <VerdictBadge verdict={receipt.qcVerdict} />
+                  {receipt.quantityConform != null && (
+                    <span style={{ marginLeft: 8 }}>
+                      <b style={{ color: "#2F7D4A" }}>{receipt.quantityConform} conforme(s)</b>
+                      {nonConform > 0 && <> · <b style={{ color: "#C24B3A" }}>{nonConform} non conforme(s)</b></>}
+                    </span>
+                  )}
+                  {(receipt.qcChecklist ?? []).length > 0 && (
+                    <span style={{ color: "var(--muted)", marginLeft: 8 }}>· {(receipt.qcChecklist ?? []).filter((c) => c.ok).length}/{(receipt.qcChecklist ?? []).length} points vérifiés</span>
+                  )}
+                </div>
               )}
-            </>
-          )}
-          {handedToAuthor ? (
-            <span style={{ marginLeft: 8, color: "#2F7D4A", fontWeight: 600 }}>✓ remis à l'auteur</span>
-          ) : receipt.stockEnteredAt != null ? (
-            <span style={{ marginLeft: 8, color: "#2F7D4A", fontWeight: 600 }}>✓ entré en stock</span>
-          ) : (
-            <span style={{ marginLeft: 8 }}>{authorAccount ? "— non encore remis à l'auteur" : "— non encore mis en stock"}</span>
-          )}
-        </div>
-      )}
+              {receipt.qcComment && <div style={{ fontSize: 12, marginBottom: 6, fontStyle: "italic" }}>« {receipt.qcComment} »</div>}
+              {(receipt.claims ?? []).map((c) => (
+                <div key={c.id} style={{ fontSize: 11, color: "#C24B3A" }}>⚠ Réclamation : {c.description}</div>
+              ))}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
+                {canValidate && !stockLocked && (
+                  <button onClick={() => setOpen((o) => !o)}
+                    style={{ ...secondaryButtonStyle, marginTop: 0, ...(step2Active ? { background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", fontWeight: 700 } : {}) }}>
+                    {open ? "Fermer" : qcDone ? "Modifier le contrôle qualité" : "Saisir le contrôle qualité"}
+                  </button>
+                )}
+                {canManage && !stockLocked && (
+                  <button onClick={addClaim} style={{ ...secondaryButtonStyle, marginTop: 0 }}>Ouvrir une réclamation</button>
+                )}
+              </div>
+            </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-        {canValidate && !stockLocked && (
-          <button onClick={() => setOpen((o) => !o)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>
-            {open ? "Fermer" : receipt.qcVerdict ? "Modifier le contrôle qualité" : "Saisir le contrôle qualité"}
-          </button>
-        )}
-        {canManage && receipt.qcVerdict != null && !stockLocked && (receipt.quantityConform ?? 0) > 0 && (
-          authorAccount ? (
-            <button
-              onClick={handToAuthor}
-              disabled={entering}
-              style={{ ...secondaryButtonStyle, marginTop: 0, background: "#2F7D4A", color: "#fff", border: "none", fontWeight: 600 }}
-            >
-              {entering ? "Remise à l'auteur…" : `Remettre ${receipt.quantityConform} conforme(s) à l'auteur`}
-            </button>
-          ) : (
-            <button
-              onClick={enterStock}
-              disabled={entering}
-              style={{ ...secondaryButtonStyle, marginTop: 0, background: "#2F7D4A", color: "#fff", border: "none", fontWeight: 600 }}
-            >
-              {entering ? "Entrée en stock…" : `Entrer ${receipt.quantityConform} conforme(s) en stock`}
-            </button>
-          )
-        )}
-        {canManage && !stockLocked && (
-          <button onClick={addClaim} style={{ ...secondaryButtonStyle, marginTop: 0 }}>
-            Ouvrir une réclamation
-          </button>
-        )}
-      </div>
+            {/* Étape 3 — Entrée en stock OU Remise à l'auteur (selon le modèle) */}
+            <div style={step3Active && conformQty > 0 ? activeStepStyle : undefined}>
+              <StepHead n={3} title={authorAccount ? "Remise à l'auteur" : "Entrée en stock"} done={stockLocked} active={step3Active && conformQty > 0} />
+              <div style={{ fontSize: 12, color: "var(--muted)", margin: "2px 0 6px" }}>
+                {authorAccount
+                  ? "Compte d'auteur : les exemplaires conformes sont remis à l'auteur (pas d'entrée en stock), puis l'ouvrage part à l'archivage."
+                  : "Compte d'éditeur / à demi : les exemplaires conformes entrent en stock (vendables). Les non conformes restent isolés."}
+              </div>
+              {handedToAuthor ? (
+                <div style={{ fontSize: 12.5, color: "#2F7D4A", fontWeight: 700 }}>✓ {receipt.quantityConform ?? 0} exemplaire(s) remis à l'auteur</div>
+              ) : receipt.stockEnteredAt != null ? (
+                <div style={{ fontSize: 12.5, color: "#2F7D4A", fontWeight: 700 }}>✓ {receipt.quantityConform ?? 0} exemplaire(s) entré(s) en stock</div>
+              ) : !qcDone ? (
+                <div style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>Terminez d'abord le contrôle qualité (étape 2).</div>
+              ) : conformQty <= 0 ? (
+                <div style={{ fontSize: 12, color: "#C24B3A" }}>Aucun exemplaire conforme : rien à {authorAccount ? "remettre à l'auteur" : "mettre en stock"} pour l'instant.</div>
+              ) : canManage ? (
+                authorAccount ? (
+                  <button onClick={handToAuthor} disabled={entering}
+                    style={{ ...secondaryButtonStyle, marginTop: 0, background: "#2F7D4A", color: "#fff", border: "none", fontWeight: 700 }}>
+                    {entering ? "Remise à l'auteur…" : `Remettre ${conformQty} conforme(s) à l'auteur`}
+                  </button>
+                ) : (
+                  <button onClick={enterStock} disabled={entering}
+                    style={{ ...secondaryButtonStyle, marginTop: 0, background: "#2F7D4A", color: "#fff", border: "none", fontWeight: 700 }}>
+                    {entering ? "Entrée en stock…" : `Entrer ${conformQty} conforme(s) en stock`}
+                  </button>
+                )
+              ) : null}
+            </div>
+          </div>
+        );
+      })()}
 
       {open && canValidate && (
         <div style={{ marginTop: 10, borderTop: "1px dashed var(--line)", paddingTop: 10 }}>

@@ -615,6 +615,13 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 20/11/2026 — Fin des « modifications pas prises en compte » : détecteur de nouvelle version (D-069)
+- **Constat** : après déploiement, l'app (PWA installée) garde l'ancienne version en mémoire (ex. signature de partage inchangée) malgré les rechargements. Cache HTTP correct ; le souci est l'absence de vraie navigation.
+- **Correctif** : `vite.config.ts` injecte un `__BUILD_ID__` unique et écrit `dist/version.json` ; `src/lib/versionCheck.ts` compare la version en cours à `/version.json` (au démarrage, toutes les 60 s, au focus) → **bandeau doré « Nouvelle version — toucher pour mettre à jour »** (un appui recharge). `app.ts` sert `version.json` en `no-cache`.
+- **Effet** : visible après un dernier passage manuel sur cette version, puis **automatique** ensuite. Résout aussi la série de retours « signature pas mise à jour ».
+- Vérifs : tsc back+front + build front au vert ; `version.json` produit et `__BUILD_ID__` injecté dans le bundle. Note « Nouveauté » (tous).
+- **Prochaine étape** : faire charger une fois la nouvelle version à l'opérateur (hard refresh), puis les mises à jour suivantes s'afficheront d'elles-mêmes.
+
 ### 19/11/2026 (suite) — Catalogue : légende bilingue FR/EN + fiche partageable (D-068)
 - **Demande** : légendes des ouvrages en français ET anglais (sélecteur de langue), et un partage « couverture + légende » dans le modèle de la maison, avec paramétrage pour que les légendes à venir s'inscrivent.
 - **Modèle de données** : `Manuscript.summaryEn` + libellés d'affichage de fiche FR/EN (`legendCollectionFr/En`, `legendGenreFr/En`, `legendPages`, `legendIsbn`). Migration `20261119120000`. 2 genres ajoutés (Nouvelle & récit, Ouvrage de sensibilisation).

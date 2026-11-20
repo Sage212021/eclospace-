@@ -4,6 +4,7 @@ import { App } from "./App";
 import { I18nProvider } from "./i18n";
 import { ConfirmProvider } from "./components/ConfirmProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { startVersionCheck } from "./lib/versionCheck";
 import "./styles/tokens.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -30,3 +31,7 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
     });
   });
 }
+
+// Surveille les mises en ligne : propose un rechargement dès qu'une nouvelle
+// version est déployée (une PWA restée ouverte ne se recharge jamais seule).
+startVersionCheck();

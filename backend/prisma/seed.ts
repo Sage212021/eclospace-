@@ -1577,6 +1577,13 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-maj-prises-en-compte-bandeau-nouvelle-version",
+      version: "2026.11",
+      title: "Nouveauté — Les mises à jour sont prises en compte tout de suite",
+      body: "Fini « la modification ne s'affiche pas » : l'application détecte désormais automatiquement quand une nouvelle version est en ligne. Dès qu'une mise à jour est déployée, un petit bandeau doré « Nouvelle version disponible — toucher pour mettre à jour » apparaît en haut de l'écran ; un seul appui recharge l'application avec la dernière version. Avant, l'application installée sur l'écran d'accueil pouvait garder une ancienne version en mémoire et il fallait la fermer complètement — ce n'est plus nécessaire. (Cette amélioration ne sera visible qu'après être passé une dernière fois sur la nouvelle version.)",
+      audienceAll: true,
+    },
+    {
       slug: "2026-11-catalogue-partage-signature-eclospace",
       version: "2026.11",
       title: "Nouveauté — Partage catalogue : petite signature discrète « Partagé depuis Eclospace »",

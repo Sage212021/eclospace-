@@ -1577,10 +1577,10 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
-      slug: "2026-11-reception-circuit-guide-3-etapes",
+      slug: "2026-11-reception-saisie-en-page-3-etapes",
       version: "2026.11",
-      title: "Nouveauté — Réception : un circuit guidé en 3 étapes (réception → contrôle qualité → stock/auteur)",
-      body: "La carte de réception est désormais claire et guidée, étape par étape. 1) RÉCEPTION ENREGISTRÉE : le nombre d'exemplaires reçus (corrigeable). 2) CONTRÔLE QUALITÉ : un bouton « Saisir le contrôle qualité » où vous indiquez le verdict (conforme / avec réserves / non conforme), cochez les points vérifiés, et surtout saisissez COMBIEN d'exemplaires sont conformes et combien ne le sont pas (ces derniers restent isolés, non vendables). 3) Selon le modèle économique de l'ouvrage : « ENTRÉE EN STOCK » (compte d'éditeur / à demi) pour faire entrer les exemplaires conformes en stock, OU « REMISE À L'AUTEUR » (compte d'auteur, pas d'entrée en stock) — l'ouvrage part ensuite à l'archivage. L'étape « à faire » est mise en avant (pastille dorée) pour que vous sachiez toujours quoi faire ensuite, et chaque étape terminée passe au vert avec une coche. On peut aussi ouvrir une réclamation à l'imprimeur en cas de défaut.",
+      title: "Nouveauté — Réception : saisie directement dans la page, en 3 étapes claires",
+      body: "La réception est maintenant simple et guidée, sans fenêtre surgissante. 1) ENREGISTRER LA RÉCEPTION : un champ « Quantité reçue » DANS la page (plus la petite fenêtre du navigateur qui, parfois, n'enregistrait rien) ; il rappelle « commandé / déjà reçu / reste » et gère les livraisons en plusieurs fois. 2) CONTRÔLE QUALITÉ : le bouton « Saisir le contrôle qualité » apparaît juste en dessous — verdict (conforme / avec réserves / non conforme), points vérifiés, et COMBIEN d'exemplaires sont conformes vs non conformes (les non conformes restent isolés, non vendables). 3) Selon le modèle de l'ouvrage : « ENTRER en stock » (compte d'éditeur / à demi) OU « REMETTRE à l'auteur » (compte d'auteur, pas de stock → archivage). L'étape à faire est encadrée en doré ; une étape terminée passe au vert avec une coche. Vous savez toujours quoi faire ensuite.",
       permissionModules: ["stock", "printing"],
       departmentCodes: ["STOCK", "FIN", "DG"],
     },

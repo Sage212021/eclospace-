@@ -618,6 +618,7 @@
 ### 20/11/2026 (suite) — Réception : circuit guidé en 3 étapes (D-071)
 - **Constat opérateur** : « tout est flou » — après « Enregistrer une réception » on ne voyait que la quantité ; le contrôle qualité et l'aiguillage (stock / remise à l'auteur) étaient présents mais à plat.
 - **Correctif (présentation seule, aucune logique changée)** : `ReceiptCard` restructurée en **3 étapes numérotées** (`StepHead`) : (1) Réception enregistrée ; (2) Contrôle qualité (verdict + nombre conforme/non conforme) ; (3) Entrée en stock (éditeur/demi) OU Remise à l'auteur (compte d'auteur). Étape à faire encadrée en doré + « à faire » ; étape faite au vert avec ✓ ; textes d'aide et garde-fous.
+- **Complément (retour « ça n'a rien enregistré / tout reste flou »)** : la saisie de la quantité reçue passe d'une **fenêtre `window.prompt`** (peu fiable sur mobile) à un **formulaire EN PAGE** (`ReceptionEntry`, étape 1) ; suppression de `handleReceipt`/`handleDirectReceipt`. Le flux complet se lit alors 1 (saisir quantité) → 2 (contrôle qualité) → 3 (stock / remise à l'auteur), chaque étape guidée.
 - Vérifs : tsc front + build front au vert. Note « Nouveauté » (STOCK/FIN/DG).
 - **Prochaine étape** : recueillir le retour opérateur sur la clarté ; poursuivre (prix/légendes des autres ouvrages).
 

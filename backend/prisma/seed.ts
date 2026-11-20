@@ -1577,6 +1577,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-reception-bon-de-commande-reparait-replie",
+      version: "2026.11",
+      title: "Nouveauté — Réception & stock : le bon de commande réapparaît (replié, jamais perdu)",
+      body: "Correction à l'étape « Réception · contrôle qualité · mise en stock ». Pour un poste Stock & magasin, le bon de commande (avec ses prix) pouvait sembler avoir disparu — l'écran affichait « sans bon de commande » et un message rouge « printing:consultation requis ». En cause : le poste Stock n'avait pas le droit de LIRE le carnet d'imprimeurs et les devis, et ce refus faisait échouer tout le chargement, y compris le bon pourtant autorisé. C'est réparé : les postes Stock & magasin et DAF peuvent désormais consulter l'imprimeur, les devis et le bon à l'étape réception. Le bon de commande s'affiche à nouveau — présenté REPLIÉ (numéro, quantité, montant) et dépliable d'un toucher pour voir qui l'a établi et l'imprimer. Les données sont repliées pour alléger l'écran, mais ne disparaissent jamais.",
+      permissionModules: ["stock", "printing"],
+      departmentCodes: ["STOCK", "FIN", "DG"],
+    },
+    {
       slug: "2026-11-maj-prises-en-compte-bandeau-nouvelle-version",
       version: "2026.11",
       title: "Nouveauté — Les mises à jour sont prises en compte tout de suite",

@@ -5,4 +5,4 @@ web: node backend/dist/server.js
 # dépasse le temps/mémoire du hook en production, le déploiement est tout de même
 # conservé et la nouvelle version passe en ligne (le seed, idempotent, peut être
 # relancé à la main : `scalingo run npm --prefix backend run seed:deploy`).
-postdeploy: npm --prefix backend run prisma:deploy && { npm --prefix backend run seed:deploy || echo "[postdeploy] Seed en echec — deploiement conserve ; relancer seed:deploy manuellement si besoin."; }
+postdeploy: npm --prefix backend run prisma:deploy && { npm --prefix backend run seed:deploy || echo "[postdeploy] Seed en echec — deploiement conserve ; relancer seed:deploy manuellement si besoin."; } && { npm --prefix backend run seed:legends || echo "[postdeploy] Installation des legendes catalogue en echec — relancer seed:legends manuellement si besoin."; }

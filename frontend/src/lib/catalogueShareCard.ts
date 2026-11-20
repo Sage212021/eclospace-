@@ -22,6 +22,7 @@ type Strings = {
   genre: string;
   pages: string;
   isbn: string;
+  price: string;
   synopsis: string;
   tagline: string;
 };
@@ -34,6 +35,7 @@ const STRINGS: Record<ShareLang, Strings> = {
     genre: "Genre",
     pages: "Nombre de pages",
     isbn: "ISBN",
+    price: "Prix",
     synopsis: "RÉSUMÉ",
     tagline: "L'Avenir du livre.",
   },
@@ -44,10 +46,27 @@ const STRINGS: Record<ShareLang, Strings> = {
     genre: "Genre",
     pages: "Number of pages",
     isbn: "ISBN",
+    price: "Price",
     synopsis: "SYNOPSIS",
     tagline: "The Future of Books.",
   },
 };
+
+// Le franc CFA (XAF) est à PARITÉ FIXE avec l'euro : 655,957 FCFA = 1 €.
+const FCFA_PER_EUR = 655.957;
+
+// Prix affiché : FCFA + équivalent en euros (ex. « 2 500 FCFA · 3,81 € »).
+export function formatPrice(fcfa: number, lang: ShareLang): string {
+  const eur = fcfa / FCFA_PER_EUR;
+  if (lang === "fr") {
+    const f = fcfa.toLocaleString("fr-FR");
+    const e = eur.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${f} FCFA · ${e} €`;
+  }
+  const f = fcfa.toLocaleString("en-US");
+  const e = eur.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${f} FCFA · €${e}`;
+}
 
 // Valeurs d'affichage selon la langue, avec repli sur l'autre langue pour ne
 // jamais produire une fiche vide (ex. résumé français pas encore transmis).
@@ -64,6 +83,7 @@ export function cardFields(item: CatalogueItem, lang: ShareLang) {
     genre: genre ?? null,
     pages: item.pages ?? null,
     isbn: item.isbn ?? null,
+    price: item.pricePublic ?? null,
     synopsis,
   };
 }
@@ -86,6 +106,7 @@ export function catalogueLegendText(item: CatalogueItem, lang: ShareLang): strin
   if (f.genre) lines.push(`${S.genre} : ${f.genre}`);
   if (f.pages != null) lines.push(`${S.pages} : ${f.pages}`);
   if (f.isbn) lines.push(`${S.isbn} : ${f.isbn}`);
+  if (f.price != null) lines.push(`${S.price} : ${formatPrice(f.price, lang)}`);
   if (f.synopsis) {
     lines.push("");
     lines.push(S.synopsis);
@@ -243,6 +264,7 @@ export async function catalogueCardPdfFile(item: CatalogueItem, lang: ShareLang)
   if (f.genre) meta.push([`${S.genre} :`, f.genre]);
   if (f.pages != null) meta.push([`${S.pages} :`, String(f.pages)]);
   if (f.isbn) meta.push([`${S.isbn} :`, f.isbn]);
+  if (f.price != null) meta.push([`${S.price} :`, formatPrice(f.price, lang)]);
   doc.setFontSize(11);
   for (const [label, value] of meta) {
     ensure(6);

@@ -83,6 +83,7 @@ describe("catalogue — légendes bilingues (D-068)", () => {
     expect(row.genreLabelEn).toBe("Social Awareness Book");
     expect(row.isbn).toBe("978-9956-0-7767-0");
     expect(row.authorDisplay).toBe("Tchebal Dafrik");
+    expect(row.pricePublic).toBe(2500);
   });
 
   it("enregistre le synopsis anglais sans toucher au résumé français", async () => {

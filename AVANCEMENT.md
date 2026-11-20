@@ -615,6 +615,12 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 20/11/2026 (suite) — Réception : circuit guidé en 3 étapes (D-071)
+- **Constat opérateur** : « tout est flou » — après « Enregistrer une réception » on ne voyait que la quantité ; le contrôle qualité et l'aiguillage (stock / remise à l'auteur) étaient présents mais à plat.
+- **Correctif (présentation seule, aucune logique changée)** : `ReceiptCard` restructurée en **3 étapes numérotées** (`StepHead`) : (1) Réception enregistrée ; (2) Contrôle qualité (verdict + nombre conforme/non conforme) ; (3) Entrée en stock (éditeur/demi) OU Remise à l'auteur (compte d'auteur). Étape à faire encadrée en doré + « à faire » ; étape faite au vert avec ✓ ; textes d'aide et garde-fous.
+- Vérifs : tsc front + build front au vert. Note « Nouveauté » (STOCK/FIN/DG).
+- **Prochaine étape** : recueillir le retour opérateur sur la clarté ; poursuivre (prix/légendes des autres ouvrages).
+
 ### 20/11/2026 (suite) — Réception : le bon de commande réapparaît (replié, jamais perdu) (D-070)
 - **Constat** (« Rêver en Afrique ») : à l'étape réception, le bon établi (avec prix) semblait disparu — « sans bon de commande » + rouge « printing:consultation requis ».
 - **Cause** : `GET /printers` et `/print-quotes` exigeaient `printing:consultation` (absent d'un poste Stock) ; le chargement groupé échouait en bloc → le bon (pourtant lisible par Stock via BON_CONSULT) n'était jamais affiché. De plus `receptionOnly` masquait les bons en brouillon.

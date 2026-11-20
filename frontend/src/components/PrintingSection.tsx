@@ -95,8 +95,14 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
   const [qtys, setQtys] = useState("500, 1000");
 
   const refresh = async () => {
+    // Chaque lecture est protégée individuellement : si l'une est refusée pour le
+    // profil courant (ex. un poste Stock sans accès au carnet d'imprimeurs), les
+    // AUTRES données — en particulier le BON DE COMMANDE et ses prix — s'affichent
+    // quand même. Une donnée repliée ne doit jamais faire disparaître le reste.
     const [printerList, quoteData, orderList, specsData, directList] = await Promise.all([
-      listPrinters(), listPrintQuotes(manuscriptId), listPurchaseOrders(manuscriptId),
+      listPrinters().catch(() => [] as Printer[]),
+      listPrintQuotes(manuscriptId).catch(() => ({ quotes: [] as PrintQuote[] })),
+      listPurchaseOrders(manuscriptId).catch(() => [] as PurchaseOrder[]),
       getProductionSpecs(manuscriptId).catch(() => null),
       listDirectGoodsReceipts(manuscriptId).catch(() => [] as GoodsReceipt[]),
     ]);
@@ -447,12 +453,28 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
 
       {/* Réceptions sur bon de commande : en mode réception, on ne garde que le
           strict nécessaire (réception + contrôle qualité + entrée en stock). */}
-      {orders.filter((po) => !receptionOnly || po.status !== "draft").map((po) => (
+      {orders.map((po) => (
         <div key={po.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0", fontSize: 13 }}>
           {receptionOnly ? (
-            <div style={{ fontSize: 12.5 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{po.poNumber}</span> · {po.orderedQuantity} ex. commandés
-            </div>
+            // À l'étape réception : le bon de commande reste PRÉSENT mais REPLIÉ
+            // (résumé n° + quantité + montant) — on peut le dérouler pour voir qui
+            // l'a établi et l'imprimer. Les données ne disparaissent jamais.
+            <details>
+              <summary style={{ cursor: "pointer", fontSize: 12.5 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{po.poNumber}</span>
+                {" · "}{po.orderedQuantity} ex.{po.amount != null && po.amount !== "" ? <> · {po.amount}</> : null}
+              </summary>
+              <div style={{ fontSize: 12, color: "var(--muted)", margin: "5px 0 0", paddingLeft: 16 }}>
+                {po.establishedByName && (
+                  <div>Bon établi par <strong style={{ color: "var(--ink)" }}>{po.establishedByName}</strong>
+                    {po.establishedByFunction && <> ({BON_FUNCTION_LABELS[po.establishedByFunction] ?? po.establishedByFunction})</>}
+                  </div>
+                )}
+                <div style={{ marginTop: 5 }}>
+                  <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o, sign)} onDownloadPdf={() => downloadPurchaseOrderPdf(po, sign)} />
+                </div>
+              </div>
+            </details>
           ) : (<>
           <div style={{ fontFamily: "var(--font-mono)" }}>{po.poNumber}</div>
           <div>

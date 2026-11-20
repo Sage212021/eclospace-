@@ -615,6 +615,12 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 20/11/2026 (suite) — Réception : le bon de commande réapparaît (replié, jamais perdu) (D-070)
+- **Constat** (« Rêver en Afrique ») : à l'étape réception, le bon établi (avec prix) semblait disparu — « sans bon de commande » + rouge « printing:consultation requis ».
+- **Cause** : `GET /printers` et `/print-quotes` exigeaient `printing:consultation` (absent d'un poste Stock) ; le chargement groupé échouait en bloc → le bon (pourtant lisible par Stock via BON_CONSULT) n'était jamais affiché. De plus `receptionOnly` masquait les bons en brouillon.
+- **Correctif** : backend — ces deux lectures passent à `BON_CONSULT` (printing/stock/finance). Frontend — chaque lecture a son `.catch` (une lecture refusée n'efface plus le reste) ; en mode réception, tous les bons s'affichent, **repliés** (`<details>` : n° · quantité · montant), dépliables pour voir l'auteur du bon et l'imprimer. Règle respectée : repliées mais jamais disparues.
+- Vérifs : `lot3-printing` + `lot4-stock` 25/25 ; tsc back+front + build front au vert. Note « Nouveauté » (STOCK/FIN/DG).
+
 ### 20/11/2026 — Fin des « modifications pas prises en compte » : détecteur de nouvelle version (D-069)
 - **Constat** : après déploiement, l'app (PWA installée) garde l'ancienne version en mémoire (ex. signature de partage inchangée) malgré les rechargements. Cache HTTP correct ; le souci est l'absence de vraie navigation.
 - **Correctif** : `vite.config.ts` injecte un `__BUILD_ID__` unique et écrit `dist/version.json` ; `src/lib/versionCheck.ts` compare la version en cours à `/version.json` (au démarrage, toutes les 60 s, au focus) → **bandeau doré « Nouvelle version — toucher pour mettre à jour »** (un appui recharge). `app.ts` sert `version.json` en `no-cache`.

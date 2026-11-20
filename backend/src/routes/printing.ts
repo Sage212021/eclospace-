@@ -143,7 +143,12 @@ const reprintSchema = z.object({
 // jusqu'à la réception — reçoit le dossier verrouillé transmis après
 // signature du BAT (Ch. 14 §14.6), livre les exemplaires contrôlés au stock (Ch. 16).
 export default async function printingRoutes(fastify: FastifyInstance) {
-  fastify.get("/api/v1/printers", { preHandler: requirePermission("printing", "consultation") }, async (request, reply) => {
+  // Lecture ouverte aux fonctions qui pilotent la RÉCEPTION (Stock, DAF) en plus
+  // d'Impression : à l'étape « Réception · contrôle qualité · mise en stock »,
+  // elles doivent pouvoir afficher le bon de commande et son contexte (imprimeur,
+  // devis) sans erreur « printing:consultation requis ». Même périmètre de lecture
+  // que le bon de commande (BON_CONSULT).
+  fastify.get("/api/v1/printers", { preHandler: requireAnyPermission(BON_CONSULT) }, async (request, reply) => {
     const printers = await prisma.printer.findMany({ include: { partner: true } });
     return reply.send(printers);
   });
@@ -292,7 +297,8 @@ export default async function printingRoutes(fastify: FastifyInstance) {
 
   fastify.get(
     "/api/v1/manuscripts/:id/print-quotes",
-    { preHandler: requirePermission("printing", "consultation") },
+    // Lecture ouverte à Stock/DAF comme le bon de commande (réception).
+    { preHandler: requireAnyPermission(BON_CONSULT) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const quotes = await prisma.printQuote.findMany({

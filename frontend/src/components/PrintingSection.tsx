@@ -483,6 +483,11 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             );
           })()}
 
+          {/* Aperçu des étapes 2 & 3 tant qu'aucune réception n'est enregistrée. */}
+          {receptionOnly && canReceiveStock && po.status !== "draft" && (po.goodsReceipts ?? []).length === 0 && (
+            <UpcomingSteps authorAccount={authorAccount} />
+          )}
+
           {!receptionOnly && <PoEditPanel po={po} canManage={canManageBon} locations={locations} printers={printers} sign={sign} onSaved={refresh} onError={setError} />}
 
           {(po.goodsReceipts ?? []).length > 0 && (
@@ -545,6 +550,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             onDone={refresh}
             onError={setError}
           />
+          {directReceipts.length === 0 && <UpcomingSteps authorAccount={authorAccount} />}
           {directReceipts.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
@@ -1141,6 +1147,31 @@ function ReceptionEntry({ ordered, alreadyReceived, onSubmit, onDone, onError }:
           style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", fontWeight: 700, padding: "8px 14px" }}>
           {busy ? "Enregistrement…" : "Enregistrer la réception"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Aperçu grisé des étapes 2 et 3 AVANT qu'une réception soit enregistrée : on
+// montre tout le chemin (contrôle qualité → stock / remise à l'auteur) pour qu'on
+// sache d'emblée ce qui vient ensuite. Les saisies réelles apparaissent sous
+// chaque réception enregistrée (composant ReceiptCard).
+function UpcomingSteps({ authorAccount }: { authorAccount: boolean }) {
+  return (
+    <div style={{ marginTop: 8, opacity: 0.6 }}>
+      <div style={{ marginBottom: 7 }}>
+        <StepHead n={2} title="Contrôle qualité" />
+        <div style={{ fontSize: 12, color: "var(--muted)", marginLeft: 26 }}>
+          Dès que la réception est enregistrée, un bouton « Saisir le contrôle qualité » apparaît ici : verdict + nombre d'exemplaires conformes / non conformes.
+        </div>
+      </div>
+      <div>
+        <StepHead n={3} title={authorAccount ? "Remise à l'auteur" : "Entrée en stock"} />
+        <div style={{ fontSize: 12, color: "var(--muted)", marginLeft: 26 }}>
+          {authorAccount
+            ? "Après le contrôle qualité : bouton « Remettre les conformes à l'auteur »."
+            : "Après le contrôle qualité : bouton « Entrer les conformes en stock »."}
+        </div>
       </div>
     </div>
   );

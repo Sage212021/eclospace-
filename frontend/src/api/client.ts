@@ -297,6 +297,9 @@ export interface TimelineStep {
   label: string;
   step_order: number;
   is_conditional: boolean;
+  // Étape applicable à CET ouvrage (D-064) : une étape conditionnelle non requise
+  // (ex. commercialisation/vente/suivi pour un compte d'auteur) n'est pas affichée.
+  applicable?: boolean;
   state?: "done" | "current" | "todo";
   department?: string | null;
   assignee?: string | null;

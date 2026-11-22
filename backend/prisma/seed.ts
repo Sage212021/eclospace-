@@ -1577,6 +1577,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-parcours-compte-auteur-vers-archivage",
+      version: "2026.11",
+      title: "Nouveauté — Compte d'auteur : le parcours va directement à l'archivage (plus de commercialisation)",
+      body: "Pour un ouvrage à COMPTE D'AUTEUR, le parcours affiché est désormais cohérent avec sa logique : après la réception, le contrôle qualité et la remise à l'auteur, l'ouvrage passe DIRECTEMENT à l'archivage. Les voyants « Commercialisation », « Vente et livraison » et « Suivi post-publication » n'apparaissent plus (ils ne concernent que les ouvrages à compte d'éditeur ou à demi, que la maison commercialise). Le voyant « Entrée en stock » hérité (déjà fusionné dans « Réception et mise en stock ») n'apparaît plus non plus. Pour un compte d'éditeur ou à demi, rien ne change : tous les voyants restent affichés. Une étape réellement franchie dans le passé reste visible dans l'historique.",
+      permissionModules: ["manuscripts", "stock"],
+      departmentCodes: ["STOCK", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-reception-saisie-en-page-3-etapes",
       version: "2026.11",
       title: "Nouveauté — Réception : saisie directement dans la page, en 3 étapes claires",

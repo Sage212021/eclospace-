@@ -225,6 +225,22 @@ describe("Réception et mise en stock (D-056)", () => {
     expect(validate.json().status).toBe("ARCHIVAGE");
   });
 
+  it("timeline : pour un compte d'auteur, commercialisation / vente / suivi sont NON applicables (→ archivage)", async () => {
+    const { manuscriptId } = await makeAuthorAccountBook();
+    const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/timeline`, headers: { cookie: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const byCode = new Map((res.json() as { status_code: string; applicable?: boolean }[]).map((s) => [s.status_code, s]));
+    // Étapes de diffusion commerciale : masquées pour un compte d'auteur.
+    for (const code of ["COMMERCIALISATION", "VENTE_LIVRAISON", "SUIVI_POST_PUBLICATION"]) {
+      expect(byCode.get(code)?.applicable).toBe(false);
+    }
+    // L'« Entrée en stock » héritée (absorbée, D-056) est non applicable aussi.
+    expect(byCode.get("ENTREE_STOCK")?.applicable).toBe(false);
+    // Les étapes du parcours et l'archivage restent applicables.
+    expect(byCode.get("CONTROLE_QUALITE_IMPRESSION")?.applicable).toBe(true);
+    expect(byCode.get("ARCHIVAGE")?.applicable).toBe(true);
+  });
+
   it("compte d'auteur → compte d'éditeur : avenant exigé si un contrat actif à compte d'auteur existe", async () => {
     const { manuscriptId } = await makeAuthorAccountBook();
     const partner = await prisma.partner.create({ data: { category: "auteur", firstName: "Aut", lastName: rnd() } });

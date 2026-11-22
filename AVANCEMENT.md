@@ -615,6 +615,11 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 22/11/2026 — Compte d'auteur : parcours/voyants vers l'archivage (D-072)
+- **Constat opérateur** : pour un compte d'auteur, les voyants affichaient encore Commercialisation / Vente / Suivi, alors que l'ouvrage (remis à l'auteur) va réception → archivage. Le moteur sautait déjà ces étapes (D-064) ; seul l'affichage ne suivait pas.
+- **Correctif** : timeline backend expose `applicable` par étape (= non conditionnelle OU requise selon `isStepRequired`) ; `Spine` masque les étapes `applicable === false`. Masque aussi l'« Entrée en stock » héritée (absorbée). Compte d'éditeur/à demi inchangé. Historique préservé.
+- Vérifs : nouveau test timeline compte d'auteur (reception-mise-en-stock 10/10) ; workflow/manuscrits 23/23 ; tsc back+front + build front au vert. Note « Nouveauté » (STOCK/DIRED/DG).
+
 ### 20/11/2026 (suite) — Réception : circuit guidé en 3 étapes (D-071)
 - **Constat opérateur** : « tout est flou » — après « Enregistrer une réception » on ne voyait que la quantité ; le contrôle qualité et l'aiguillage (stock / remise à l'auteur) étaient présents mais à plat.
 - **Correctif (présentation seule, aucune logique changée)** : `ReceiptCard` restructurée en **3 étapes numérotées** (`StepHead`) : (1) Réception enregistrée ; (2) Contrôle qualité (verdict + nombre conforme/non conforme) ; (3) Entrée en stock (éditeur/demi) OU Remise à l'auteur (compte d'auteur). Étape à faire encadrée en doré + « à faire » ; étape faite au vert avec ✓ ; textes d'aide et garde-fous.

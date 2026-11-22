@@ -615,6 +615,13 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 22/11/2026 (suite) — « Archivage » → « Clôture de production » (D-076, renommage)
+- **Demande opérateur** : « Renomme Archivage en Clôture de production ». Périmètre = **renommage du libellé seul** (pas de repositionnement de l'étape, qui resterait un chantier structurant).
+- **Ce qui change** : le libellé affiché de l'étape (`stepOrder` 20). **Inchangés** : code technique `ARCHIVAGE`, position, département `ARCH`, droits, scellé du dossier.
+- **Comment** : seed `workflowStatuses` (upsert met à jour l'existant) + **migration dédiée** `20261122130000_archivage_cloture_production` (`UPDATE … WHERE code='ARCHIVAGE'`) pour garantir la prod même si le seed expire. Le libellé venant de la base, il se propage au fil des étapes, aux tableaux de bord et écrans.
+- Phrases en dur alignées : message du scellé (`manuscripts.ts`), parcours compte d'auteur (`PrintingSection`), aide (`helpContent`), bucket diffusion (`ManuscriptsDashboard`). Laissés : idiomatismes « du dépôt à l'archivage », filtre « Archivés / refusés », concepts distincts (scellé, archivage de documents, suppression logique).
+- Vérifs : `manuscript-seal` + `reception-mise-en-stock` **19/19** ; tsc back+front + build front au vert. Note « Nouveauté » (tous).
+
 ### 22/11/2026 (suite) — Étapes « non applicables » pilotables par ouvrage (D-075)
 - **Besoin (architecture de référence)** : tous les ouvrages ne passent pas par toutes les étapes (numérique sans stock, titre déjà paru sans fabrication, pas de commercialisation physique…). Un responsable doit pouvoir déclarer une étape **à venir** « non applicable » à CET ouvrage, sans bloquer le parcours.
 - **Schéma** : `ManuscriptStep` + `not_applicable_at/by/reason` ; migration séparée `20261122120000_step_not_applicable`.

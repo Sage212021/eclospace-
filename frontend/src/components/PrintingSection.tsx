@@ -298,7 +298,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
         </div>
         {authorAccount ? (
           <p style={{ fontSize: 12, color: "#8A6D00", margin: "6px 0 0" }}>
-            Compte d'auteur : après contrôle qualité, les exemplaires conformes sont <strong>remis à l'auteur</strong> (pas d'entrée en stock), puis l'ouvrage va à l'archivage.
+            Compte d'auteur : après contrôle qualité, les exemplaires conformes sont <strong>remis à l'auteur</strong> (pas d'entrée en stock), puis l'ouvrage va à la clôture de production.
             Le passage en compte d'éditeur exige un <strong>avenant au contrat</strong> validé.
           </p>
         ) : (
@@ -1337,7 +1337,7 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
               <StepHead n={3} title={authorAccount ? "Remise à l'auteur" : "Entrée en stock"} done={stockLocked} active={step3Active && conformQty > 0} />
               <div style={{ fontSize: 12, color: "var(--muted)", margin: "2px 0 6px" }}>
                 {authorAccount
-                  ? "Compte d'auteur : les exemplaires conformes sont remis à l'auteur (pas d'entrée en stock), puis l'ouvrage part à l'archivage."
+                  ? "Compte d'auteur : les exemplaires conformes sont remis à l'auteur (pas d'entrée en stock), puis l'ouvrage part à la clôture de production."
                   : "Compte d'éditeur / à demi : les exemplaires conformes entrent en stock (vendables). Les non conformes restent isolés."}
               </div>
               {handedToAuthor ? (

@@ -967,7 +967,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     const m = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, include: { status: { select: { code: true } } } });
     if (!m) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
     if (m.sealedAt) return reply.code(409).send({ code: "already_sealed", message: "Ce dossier est déjà scellé." });
-    if (m.status.code !== "ARCHIVAGE") return reply.code(409).send({ code: "not_archived", message: "Seul un dossier arrivé à l'Archivage peut être scellé. Terminez d'abord le parcours jusqu'à l'archivage réel." });
+    if (m.status.code !== "ARCHIVAGE") return reply.code(409).send({ code: "not_archived", message: "Seul un dossier arrivé à la Clôture de production peut être scellé. Terminez d'abord le parcours jusqu'à cette étape." });
     await prisma.manuscript.update({ where: { id }, data: { sealedAt: new Date(), sealedBy: request.user!.id } });
     await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "manuscript", entityId: id, newValues: { sealed: true }, ipAddress: request.ip });
     return reply.send({ id, sealed: true });

@@ -88,6 +88,7 @@ import { DuplicateTitleBanner } from "../components/DuplicateTitleBanner";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
 import { BookLifeSection } from "../components/BookLifeSection";
+import { NotApplicableSteps } from "../components/NotApplicableSteps";
 import { ProjectPlanSection } from "../components/ProjectPlanSection";
 import { SectionErrorBoundary } from "../components/SectionErrorBoundary";
 import { StartingProofPanel } from "../components/StartingProofPanel";
@@ -604,6 +605,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
           affichée dès que l'ouvrage est entré en production. */}
       {reachedSteps.has("MISE_EN_PAGE") && (
         <ProductionParcours timeline={timeline} currentStatusCode={manuscript.status.code} />
+      )}
+
+      {/* Étapes non applicables (D-075) : cas particuliers (numérique, déjà paru…).
+          Réservé aux profils qui valident les étapes. */}
+      {canValidate && (
+        <NotApplicableSteps manuscriptId={manuscript.id} timeline={timeline} onChanged={() => { void refresh(); }} />
       )}
 
       {/* Retours de correction (lecture seule) : consultables sur la fiche

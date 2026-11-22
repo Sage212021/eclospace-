@@ -279,4 +279,67 @@ describe("Réception et mise en stock (D-056)", () => {
     expect(set.statusCode).toBe(200);
     expect(set.json().economic_model).toBe("compte_auteur");
   });
+
+  // « Étapes non applicables » pilotables (D-075) : un responsable déclare une
+  // étape À VENIR non applicable (numérique, déjà paru, sans stock…). La navigation
+  // la saute sans bloquer la suite ; motif obligatoire ; réversible ; étape à venir
+  // uniquement.
+  const markNA = (manuscriptId: string, code: string, notApplicable: boolean, reason?: string) =>
+    app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/steps/${code}/not-applicable`, headers: { cookie: adminCookie }, payload: { not_applicable: notApplicable, reason } });
+  const applicableOf = async (manuscriptId: string, code: string) => {
+    const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/timeline`, headers: { cookie: adminCookie } });
+    const row = (res.json() as { status_code: string; applicable?: boolean; not_applicable?: boolean; not_applicable_reason?: string | null }[]).find((s) => s.status_code === code);
+    return row;
+  };
+
+  it("déclarer une étape à venir non applicable : la timeline la marque, puis la navigation la saute (D-075)", async () => {
+    const { manuscriptId, isbnId } = await makeBookWithoutPo();
+
+    // COMMERCIALISATION (à venir) déclarée non applicable, avec motif.
+    const na = await markNA(manuscriptId, "COMMERCIALISATION", true, "Ouvrage numérique, pas de vente physique");
+    expect(na.statusCode).toBe(200);
+    expect(na.json().not_applicable).toBe(true);
+
+    const row = await applicableOf(manuscriptId, "COMMERCIALISATION");
+    expect(row?.applicable).toBe(false);
+    expect(row?.not_applicable).toBe(true);
+    expect(row?.not_applicable_reason).toBe("Ouvrage numérique, pas de vente physique");
+
+    // Réception → contrôle → stock → clôture CQI : on saute COMMERCIALISATION
+    // (non applicable) pour atteindre directement VENTE ET LIVRAISON.
+    const rec = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/goods-receipts`, headers: { cookie: adminCookie }, payload: { quantity_received: 100 } });
+    await qc(rec.json().id, "conform", 100);
+    await enterStock(rec.json().id);
+    await app.inject({ method: "POST", url: `/api/v1/isbn/${isbnId}/prices`, headers: { cookie: adminCookie }, payload: { country: "Cameroun", currency: "XAF", price: 5000, effective_from: "2026-11-01T00:00:00.000Z" } });
+
+    const validate = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/steps/CONTROLE_QUALITE_IMPRESSION/validate`, headers: { cookie: adminCookie }, payload: {} });
+    expect(validate.statusCode).toBe(200);
+    expect(validate.json().status).toBe("VENTE_LIVRAISON");
+  });
+
+  it("rétablir une étape non applicable la rend de nouveau applicable (D-075)", async () => {
+    const { manuscriptId } = await makeBookWithoutPo();
+    await markNA(manuscriptId, "SUIVI_POST_PUBLICATION", true, "Non concerné");
+    expect((await applicableOf(manuscriptId, "SUIVI_POST_PUBLICATION"))?.applicable).toBe(false);
+
+    const back = await markNA(manuscriptId, "SUIVI_POST_PUBLICATION", false);
+    expect(back.statusCode).toBe(200);
+    expect(back.json().not_applicable).toBe(false);
+    expect((await applicableOf(manuscriptId, "SUIVI_POST_PUBLICATION"))?.applicable).toBe(true);
+  });
+
+  it("motif obligatoire pour déclarer une étape non applicable (D-075)", async () => {
+    const { manuscriptId } = await makeBookWithoutPo();
+    const noReason = await markNA(manuscriptId, "COMMERCIALISATION", true);
+    expect(noReason.statusCode).toBe(400);
+    expect(noReason.json().code).toBe("reason_required");
+  });
+
+  it("seule une étape à venir peut être déclarée non applicable (D-075)", async () => {
+    const { manuscriptId } = await makeBookWithoutPo();
+    // L'étape COURANTE (CONTROLE_QUALITE_IMPRESSION) n'est pas « à venir ».
+    const current = await markNA(manuscriptId, "CONTROLE_QUALITE_IMPRESSION", true, "test");
+    expect(current.statusCode).toBe(409);
+    expect(current.json().code).toBe("not_future_step");
+  });
 });

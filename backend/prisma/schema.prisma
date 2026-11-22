@@ -2205,6 +2205,15 @@ model ManuscriptStep {
   skipReason      String? @map("skip_reason")
   realizationData Json?   @map("realization_data")
 
+  // « Non applicable » (D-075) : une étape peut être déclarée NON APPLICABLE à cet
+  // ouvrage (ex. impression / mise en stock pour un ouvrage NUMÉRIQUE ou DÉJÀ PARU)
+  // — la navigation la saute alors, sans bloquer le passage à la suivante. Motif
+  // obligatoire, tracé. Distinct de `skipReason` (étapes « à option » décidées à la
+  // validation) : ici c'est une déclaration en amont, réversible.
+  notApplicableAt     DateTime? @map("not_applicable_at")
+  notApplicableBy     String?   @map("not_applicable_by")
+  notApplicableReason String?   @map("not_applicable_reason")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   tasks Task[]

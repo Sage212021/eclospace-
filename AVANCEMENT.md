@@ -615,6 +615,14 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 22/11/2026 (suite) — Étapes « non applicables » pilotables par ouvrage (D-075)
+- **Besoin (architecture de référence)** : tous les ouvrages ne passent pas par toutes les étapes (numérique sans stock, titre déjà paru sans fabrication, pas de commercialisation physique…). Un responsable doit pouvoir déclarer une étape **à venir** « non applicable » à CET ouvrage, sans bloquer le parcours.
+- **Schéma** : `ManuscriptStep` + `not_applicable_at/by/reason` ; migration séparée `20261122120000_step_not_applicable`.
+- **Backend** `POST /manuscripts/:id/steps/:code/not-applicable` (`manuscripts:validation`) : garde-fous = étape à venir uniquement (`not_future_step`), non validée (`step_done`), motif obligatoire (`reason_required`) ; tracé en `audit_log`. La navigation (`findNextApplicableStatus`/`findPreviousApplicableStatus`) **saute** les étapes N/A ; la timeline expose `not_applicable` + `not_applicable_reason`.
+- **Frontend** `NotApplicableSteps` (rubrique repliable, liste des étapes à venir, saisie du motif en page, boutons Déclarer / Rétablir), visible si `canValidate`.
+- Vérifs : `reception-mise-en-stock` **15/15** (déclarer → timeline marquée → clôture CQI saute COMMERCIALISATION vers VENTE_LIVRAISON ; rétablir ; motif obligatoire ; étape à venir uniquement) ; tsc back+front + build front au vert. Note « Nouveauté » (STOCK/DIRED/DG).
+- **Suite** convenue : repositionner/renommer « Archivage » → « Clôture de production » ; enrichir « Vie du livre » (réimpressions, droits d'auteur, historique événementiel).
+
 ### 22/11/2026 (suite) — « Vie du livre » : tableau de bord d'exploitation (D-074, v1)
 - Nouveau `GET /manuscripts/:id/book-life` : agrège fabrication (tirages, reçus, conformes, défectueux, remis à l'auteur), stock (vendable/déclassé), ventes (POS + CA, livraisons, retours), exemplaires d'auteur, prix public — à partir des données existantes.
 - Frontend `BookLifeSection` (rubrique repliable « Vie du livre » sur la fiche, dès la réception/mise en stock) : tuiles Fabrication / Stock / Ventes & diffusion.

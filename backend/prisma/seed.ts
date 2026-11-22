@@ -1577,6 +1577,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-etapes-non-applicables",
+      version: "2026.11",
+      title: "Nouveauté — Déclarer une étape « non applicable » à un ouvrage (cas particuliers)",
+      body: "Tous les ouvrages ne passent pas par toutes les étapes. Un ouvrage NUMÉRIQUE n'a pas de réception de stock ; un ouvrage DÉJÀ PARU repris au catalogue n'a pas de fabrication ; certains titres n'ont pas de commercialisation physique. Désormais, sur la fiche d'un ouvrage, une rubrique repliable « Étapes non applicables (cas particuliers) » permet à un responsable de déclarer une étape À VENIR comme « non applicable » à CET ouvrage, avec un motif obligatoire (ex. « ouvrage numérique », « déjà paru »). L'étape est alors SAUTÉE automatiquement : le parcours passe à la suivante sans blocage, et le voyant correspondant disparaît du fil des étapes. C'est RÉVERSIBLE à tout moment (bouton « Rétablir »). On ne peut déclarer non applicable qu'une étape encore à venir — jamais une étape déjà franchie ou en cours. Chaque décision est tracée (qui, quand, pourquoi) dans le journal d'audit.",
+      permissionModules: ["manuscripts", "stock"],
+      departmentCodes: ["STOCK", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-vie-du-livre-tableau-de-bord",
       version: "2026.11",
       title: "Nouveauté — « Vie du livre » : le tableau de bord d'exploitation de chaque ouvrage",

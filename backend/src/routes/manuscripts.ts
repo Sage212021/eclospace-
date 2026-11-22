@@ -2070,13 +2070,18 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         // Statut de l'étape sur la frise : terminée (validée) / en cours (étape
         // courante de l'ouvrage) / à venir.
         const state = status.id === manuscript.statusId ? "current" : status.stepOrder < currentOrder || step?.validatedAt ? "done" : "todo";
-        const applicable = !status.isConditional || isStepRequiredHere(status.code) || state === "done" || Boolean(step?.validatedAt);
+        // Étape déclarée « Non applicable » (D-075) par un responsable (sauf si
+        // elle a quand même été franchie dans le passé).
+        const notApplicable = Boolean(step?.notApplicableAt) && state !== "done";
+        const applicable = (!status.isConditional || isStepRequiredHere(status.code) || state === "done" || Boolean(step?.validatedAt)) && !notApplicable;
         return {
           status_code: status.code,
           label: status.label,
           step_order: status.stepOrder,
           is_conditional: status.isConditional,
           applicable,
+          not_applicable: notApplicable,
+          not_applicable_reason: notApplicable ? step?.notApplicableReason ?? null : null,
           state,
           department: status.department?.name ?? null,
           assignee: step?.responsible?.username ?? null,

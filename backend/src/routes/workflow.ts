@@ -134,23 +134,34 @@ function isStepRequired(statusCode: string, manuscript: Manuscript): boolean {
   return true;
 }
 
-async function findNextApplicableStatus(fromStepOrder: number, manuscript: Manuscript) {
-  const candidates = await prisma.workflowStatus.findMany({
-    where: { stepOrder: { gt: fromStepOrder } },
-    orderBy: { stepOrder: "asc" },
+// Identifiants des statuts déclarés « Non applicable » pour cet ouvrage (D-075) :
+// la navigation les saute, même s'ils ne sont pas conditionnels (ex. impression /
+// mise en stock pour un ouvrage numérique ou déjà paru).
+async function notApplicableStatusIds(manuscriptId: string): Promise<Set<string>> {
+  const rows = await prisma.manuscriptStep.findMany({
+    where: { manuscriptId, notApplicableAt: { not: null } },
+    select: { statusId: true },
   });
-  return candidates.find((candidate) => !candidate.isConditional || isStepRequired(candidate.code, manuscript)) ?? null;
+  return new Set(rows.map((r) => r.statusId));
+}
+
+async function findNextApplicableStatus(fromStepOrder: number, manuscript: Manuscript) {
+  const [candidates, naIds] = await Promise.all([
+    prisma.workflowStatus.findMany({ where: { stepOrder: { gt: fromStepOrder } }, orderBy: { stepOrder: "asc" } }),
+    notApplicableStatusIds(manuscript.id),
+  ]);
+  return candidates.find((candidate) => !naIds.has(candidate.id) && (!candidate.isConditional || isStepRequired(candidate.code, manuscript))) ?? null;
 }
 
 // Symétrique de findNextApplicableStatus : l'étape applicable immédiatement
-// précédente (en sautant les étapes conditionnelles non requises). Sert au
-// retour arrière (correction d'une validation faite par erreur).
+// précédente (en sautant les étapes conditionnelles non requises ou déclarées non
+// applicables). Sert au retour arrière (correction d'une validation faite par erreur).
 async function findPreviousApplicableStatus(fromStepOrder: number, manuscript: Manuscript) {
-  const candidates = await prisma.workflowStatus.findMany({
-    where: { stepOrder: { lt: fromStepOrder } },
-    orderBy: { stepOrder: "desc" },
-  });
-  return candidates.find((candidate) => !candidate.isConditional || isStepRequired(candidate.code, manuscript)) ?? null;
+  const [candidates, naIds] = await Promise.all([
+    prisma.workflowStatus.findMany({ where: { stepOrder: { lt: fromStepOrder } }, orderBy: { stepOrder: "desc" } }),
+    notApplicableStatusIds(manuscript.id),
+  ]);
+  return candidates.find((candidate) => !naIds.has(candidate.id) && (!candidate.isConditional || isStepRequired(candidate.code, manuscript))) ?? null;
 }
 
 const revertStepSchema = z.object({ reason: z.string().max(500).optional() });
@@ -1955,6 +1966,65 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       });
 
       return reply.send({ reverted: true, status: previous.code, statusLabel: previous.label });
+    },
+  );
+
+  // « Non applicable » (D-075) : déclarer (ou rétablir) une étape À VENIR comme
+  // non applicable à cet ouvrage (numérique, déjà paru, sans stock…). La
+  // navigation la saute ensuite, sans bloquer le passage à la suivante. Motif
+  // obligatoire, réversible, tracé.
+  fastify.post(
+    "/api/v1/manuscripts/:id/steps/:code/not-applicable",
+    { preHandler: requirePermission("manuscripts", "validation") },
+    async (request, reply) => {
+      const { id, code } = request.params as { id: string; code: string };
+      const parsed = z.object({ not_applicable: z.boolean(), reason: z.string().trim().max(500).optional() }).safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, include: { status: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const target = await prisma.workflowStatus.findUnique({ where: { code } });
+      if (!target) return reply.code(404).send({ code: "status_not_found", message: "Étape inconnue." });
+
+      // On ne touche qu'aux étapes À VENIR (après l'étape courante).
+      if (target.stepOrder <= manuscript.status.stepOrder) {
+        return reply.code(409).send({ code: "not_future_step", message: "Seule une étape à venir peut être déclarée non applicable." });
+      }
+      const existing = await prisma.manuscriptStep.findUnique({
+        where: { manuscriptId_statusId: { manuscriptId: id, statusId: target.id } },
+        select: { validatedAt: true },
+      });
+      if (existing?.validatedAt) {
+        return reply.code(409).send({ code: "step_done", message: "Cette étape a déjà été validée." });
+      }
+
+      if (parsed.data.not_applicable) {
+        const reason = parsed.data.reason?.trim();
+        if (!reason || reason.length < 2) {
+          return reply.code(400).send({ code: "reason_required", message: "Indiquez le motif (ex. ouvrage numérique, déjà paru…)." });
+        }
+        await prisma.manuscriptStep.upsert({
+          where: { manuscriptId_statusId: { manuscriptId: id, statusId: target.id } },
+          update: { notApplicableAt: new Date(), notApplicableBy: request.user!.id, notApplicableReason: reason },
+          create: { manuscriptId: id, statusId: target.id, notApplicableAt: new Date(), notApplicableBy: request.user!.id, notApplicableReason: reason },
+        });
+      } else {
+        await prisma.manuscriptStep.updateMany({
+          where: { manuscriptId: id, statusId: target.id },
+          data: { notApplicableAt: null, notApplicableBy: null, notApplicableReason: null },
+        });
+      }
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "manuscript_step_not_applicable",
+        entityId: id,
+        newValues: { statusCode: code, notApplicable: parsed.data.not_applicable, reason: parsed.data.reason ?? null },
+        ipAddress: request.ip,
+      });
+
+      return reply.send({ ok: true, status_code: code, not_applicable: parsed.data.not_applicable });
     },
   );
 }

@@ -300,6 +300,9 @@ export interface TimelineStep {
   // Étape applicable à CET ouvrage (D-064) : une étape conditionnelle non requise
   // (ex. commercialisation/vente/suivi pour un compte d'auteur) n'est pas affichée.
   applicable?: boolean;
+  // Étape déclarée « Non applicable » (D-075) par un responsable (numérique, déjà paru…).
+  not_applicable?: boolean;
+  not_applicable_reason?: string | null;
   state?: "done" | "current" | "todo";
   department?: string | null;
   assignee?: string | null;
@@ -531,6 +534,14 @@ export interface BookLife {
 }
 export function getBookLife(id: string) {
   return request<BookLife>(`/api/v1/manuscripts/${id}/book-life`);
+}
+
+// Déclarer (ou rétablir) une étape À VENIR comme « non applicable » (D-075).
+export function setStepNotApplicable(manuscriptId: string, code: string, notApplicable: boolean, reason?: string) {
+  return request<{ ok: true; status_code: string; not_applicable: boolean }>(
+    `/api/v1/manuscripts/${manuscriptId}/steps/${code}/not-applicable`,
+    { method: "POST", body: JSON.stringify({ not_applicable: notApplicable, reason }) },
+  );
 }
 
 // Identité de l'auteur saisie à l'enregistrement du manuscrit (facultative,

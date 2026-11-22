@@ -4,9 +4,12 @@ import type { TimelineStep } from "../api/client";
 // sur toute fiche d'ouvrage. Nœud plein or = validée, halo or = étape
 // courante, orange = validée en retard, vide = à venir.
 export function Spine({ steps, currentStatusCode }: { steps: TimelineStep[]; currentStatusCode: string }) {
+  // On n'affiche PAS les étapes non applicables à cet ouvrage (ex. pour un compte
+  // d'auteur : commercialisation / vente / suivi sautés → archivage ; D-064).
+  const visible = steps.filter((s) => s.applicable !== false);
   return (
     <div style={{ display: "flex", overflowX: "auto", gap: 4, padding: "12px 4px" }}>
-      {steps.map((step) => {
+      {visible.map((step) => {
         const isCurrent = step.status_code === currentStatusCode;
         const isValidated = Boolean(step.validated_at);
         const color = isValidated && step.late ? "var(--amber)" : "var(--eclosion)";

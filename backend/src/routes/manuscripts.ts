@@ -2050,16 +2050,32 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       const stepByStatusId = new Map(steps.map((step) => [step.statusId, step]));
       const currentOrder = allStatuses.find((s) => s.id === manuscript.statusId)?.stepOrder ?? 0;
 
+      // APPLICABILITÉ de chaque étape pour CET ouvrage (D-064) : une étape
+      // conditionnelle non requise ne fait pas partie du parcours et ne doit pas
+      // s'afficher. Mêmes règles que le moteur (workflow.ts isStepRequired) :
+      //  • « Entrée en stock » (ENTREE_STOCK) est absorbée par « Réception et mise
+      //    en stock » → jamais active (D-056) ;
+      //  • un COMPTE D'AUTEUR saute commercialisation / vente / suivi → archivage.
+      // Une étape réellement franchie dans le passé reste affichée (historique).
+      const COMPTE_AUTEUR_SKIP = new Set(["COMMERCIALISATION", "VENTE_LIVRAISON", "SUIVI_POST_PUBLICATION"]);
+      const isStepRequiredHere = (code: string): boolean => {
+        if (code === "ENTREE_STOCK") return false;
+        if (manuscript.economicModel === "compte_auteur" && COMPTE_AUTEUR_SKIP.has(code)) return false;
+        return true;
+      };
+
       const timeline = allStatuses.map((status) => {
         const step = stepByStatusId.get(status.id);
         // Statut de l'étape sur la frise : terminée (validée) / en cours (étape
         // courante de l'ouvrage) / à venir.
         const state = status.id === manuscript.statusId ? "current" : status.stepOrder < currentOrder || step?.validatedAt ? "done" : "todo";
+        const applicable = !status.isConditional || isStepRequiredHere(status.code) || state === "done" || Boolean(step?.validatedAt);
         return {
           status_code: status.code,
           label: status.label,
           step_order: status.stepOrder,
           is_conditional: status.isConditional,
+          applicable,
           state,
           department: status.department?.name ?? null,
           assignee: step?.responsible?.username ?? null,

@@ -219,24 +219,26 @@ describe("Réception et mise en stock (D-056)", () => {
     // Le stock commercial reste VIDE (rien n'entre en stock).
     expect(await stockOf(isbnId)).toBe(0);
 
-    // Clôture → on SAUTE commercialisation/vente/suivi → Archivage.
+    // Clôture → on saute commercialisation/vente (vente par l'éditeur), mais on
+    // CONSERVE le suivi post-publication (D-073) : réception → suivi → archivage.
     const validate = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/steps/CONTROLE_QUALITE_IMPRESSION/validate`, headers: { cookie: adminCookie }, payload: {} });
     expect(validate.statusCode).toBe(200);
-    expect(validate.json().status).toBe("ARCHIVAGE");
+    expect(validate.json().status).toBe("SUIVI_POST_PUBLICATION");
   });
 
-  it("timeline : pour un compte d'auteur, commercialisation / vente / suivi sont NON applicables (→ archivage)", async () => {
+  it("timeline compte d'auteur : commercialisation + vente masquées, SUIVI conservé (D-073)", async () => {
     const { manuscriptId } = await makeAuthorAccountBook();
     const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/timeline`, headers: { cookie: adminCookie } });
     expect(res.statusCode).toBe(200);
     const byCode = new Map((res.json() as { status_code: string; applicable?: boolean }[]).map((s) => [s.status_code, s]));
-    // Étapes de diffusion commerciale : masquées pour un compte d'auteur.
-    for (const code of ["COMMERCIALISATION", "VENTE_LIVRAISON", "SUIVI_POST_PUBLICATION"]) {
+    // Vente par l'éditeur : masquée pour un compte d'auteur.
+    for (const code of ["COMMERCIALISATION", "VENTE_LIVRAISON"]) {
       expect(byCode.get(code)?.applicable).toBe(false);
     }
     // L'« Entrée en stock » héritée (absorbée, D-056) est non applicable aussi.
     expect(byCode.get("ENTREE_STOCK")?.applicable).toBe(false);
-    // Les étapes du parcours et l'archivage restent applicables.
+    // Le SUIVI POST-PUBLICATION reste applicable (vie du titre : réimpressions…).
+    expect(byCode.get("SUIVI_POST_PUBLICATION")?.applicable).toBe(true);
     expect(byCode.get("CONTROLE_QUALITE_IMPRESSION")?.applicable).toBe(true);
     expect(byCode.get("ARCHIVAGE")?.applicable).toBe(true);
   });

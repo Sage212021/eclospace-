@@ -615,6 +615,11 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 22/11/2026 (suite) — Compte d'auteur : suivi post-publication conservé (D-073)
+- Ajustement de D-072 : on masque seulement commercialisation + vente/livraison (vente par l'éditeur) ; le **suivi post-publication est conservé** (réimpressions auteur, remises, bascule possible en compte d'éditeur). Parcours : réception → suivi → archivage.
+- `COMPTE_AUTEUR_SKIP` (moteur + timeline) = {COMMERCIALISATION, VENTE_LIVRAISON}. Tests 10/10 + workflow 14/14 ; tsc back au vert.
+- **Architecture de référence actée** (analyse validée) : production → clôture de production (archivage du dossier) → exploitation ouverte (commercialisation/vente/suivi en voyants d'activité) → épuisé. **Suite** : renommer/repositionner Archivage → « Clôture de production » ; « Non applicable » pilotable ; tableau de bord « Vie du livre ».
+
 ### 22/11/2026 — Compte d'auteur : parcours/voyants vers l'archivage (D-072)
 - **Constat opérateur** : pour un compte d'auteur, les voyants affichaient encore Commercialisation / Vente / Suivi, alors que l'ouvrage (remis à l'auteur) va réception → archivage. Le moteur sautait déjà ces étapes (D-064) ; seul l'affichage ne suivait pas.
 - **Correctif** : timeline backend expose `applicable` par étape (= non conditionnelle OU requise selon `isStepRequired`) ; `Spine` masque les étapes `applicable === false`. Masque aussi l'« Entrée en stock » héritée (absorbée). Compte d'éditeur/à demi inchangé. Historique préservé.

@@ -2055,9 +2055,10 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       // s'afficher. Mêmes règles que le moteur (workflow.ts isStepRequired) :
       //  • « Entrée en stock » (ENTREE_STOCK) est absorbée par « Réception et mise
       //    en stock » → jamais active (D-056) ;
-      //  • un COMPTE D'AUTEUR saute commercialisation / vente / suivi → archivage.
+      //  • un COMPTE D'AUTEUR saute la commercialisation et la vente par l'éditeur,
+      //    mais CONSERVE le suivi post-publication (D-073) : réception → suivi → archivage.
       // Une étape réellement franchie dans le passé reste affichée (historique).
-      const COMPTE_AUTEUR_SKIP = new Set(["COMMERCIALISATION", "VENTE_LIVRAISON", "SUIVI_POST_PUBLICATION"]);
+      const COMPTE_AUTEUR_SKIP = new Set(["COMMERCIALISATION", "VENTE_LIVRAISON"]);
       const isStepRequiredHere = (code: string): boolean => {
         if (code === "ENTREE_STOCK") return false;
         if (manuscript.economicModel === "compte_auteur" && COMPTE_AUTEUR_SKIP.has(code)) return false;

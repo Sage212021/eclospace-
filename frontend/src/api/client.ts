@@ -515,6 +515,24 @@ export function getManuscriptTimeline(id: string) {
   return request<TimelineStep[]>(`/api/v1/manuscripts/${id}/timeline`);
 }
 
+// « Vie du livre » (D-074) : tableau de bord d'exploitation par titre.
+export interface BookLife {
+  title: string;
+  reference: string;
+  authors: string[];
+  economic_model: string | null;
+  publication_date: string | null;
+  isbn13: string | null;
+  price: { amount: number; currency: string } | null;
+  fabrication: { print_runs: number; receptions: number; received: number; conform: number; defective: number; handed_to_author: number };
+  stock: { vendable: number; declasse: number; total: number };
+  sales: { pos_quantity: number; pos_revenue: number; delivered_quantity: number; returns_quantity: number };
+  author_copies: number;
+}
+export function getBookLife(id: string) {
+  return request<BookLife>(`/api/v1/manuscripts/${id}/book-life`);
+}
+
 // Identité de l'auteur saisie à l'enregistrement du manuscrit (facultative,
 // hors nom/prénom) : reprise en tête du contrat d'édition.
 export interface NewAuthorInput {

@@ -87,6 +87,7 @@ import { AiTrashSection } from "../components/AiTrashSection";
 import { DuplicateTitleBanner } from "../components/DuplicateTitleBanner";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
+import { BookLifeSection } from "../components/BookLifeSection";
 import { ProjectPlanSection } from "../components/ProjectPlanSection";
 import { SectionErrorBoundary } from "../components/SectionErrorBoundary";
 import { StartingProofPanel } from "../components/StartingProofPanel";
@@ -1185,6 +1186,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
           l'étape se lise dans l'ordre et que « Ajouter au stock » reste un secours. */}
       {permissions.has("stock:consultation") && show("stock") && (
         <ManuscriptStockSection manuscriptId={manuscript.id} canManage={permissions.has("stock:saisie")} />
+      )}
+
+      {/* « Vie du livre » (D-074) : tableau de bord d'exploitation du titre, dès
+          qu'il est entré en réception / mise en stock (il a une vie commerciale). */}
+      {permissions.has("manuscripts:consultation") && reachedSteps.has("CONTROLE_QUALITE_IMPRESSION") && (show("stock") || show("printing")) && (
+        <BookLifeSection manuscriptId={manuscript.id} />
       )}
 
       {/* Site vitrine : publication de l'ouvrage sur la boutique WordPress

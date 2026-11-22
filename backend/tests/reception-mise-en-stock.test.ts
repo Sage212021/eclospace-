@@ -243,6 +243,24 @@ describe("Réception et mise en stock (D-056)", () => {
     expect(byCode.get("ARCHIVAGE")?.applicable).toBe(true);
   });
 
+  it("vie du livre : consolide fabrication (reçus/conformes/défectueux) et stock (D-074)", async () => {
+    const { manuscriptId, poId } = await makePo(500);
+    const rec = await receive(poId, 500);
+    const receiptId = rec.json().id as string;
+    await qc(receiptId, "with_reserves", 480); // 480 conformes / 20 défectueux
+    await enterStock(receiptId);
+
+    const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/book-life`, headers: { cookie: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const bl = res.json();
+    expect(bl.fabrication.received).toBe(500);
+    expect(bl.fabrication.conform).toBe(480);
+    expect(bl.fabrication.defective).toBe(20);
+    expect(bl.fabrication.print_runs).toBeGreaterThanOrEqual(1);
+    expect(bl.stock.vendable).toBe(480);
+    expect(bl.stock.total).toBe(480);
+  });
+
   it("compte d'auteur → compte d'éditeur : avenant exigé si un contrat actif à compte d'auteur existe", async () => {
     const { manuscriptId } = await makeAuthorAccountBook();
     const partner = await prisma.partner.create({ data: { category: "auteur", firstName: "Aut", lastName: rnd() } });

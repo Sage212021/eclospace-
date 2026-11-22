@@ -615,6 +615,12 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 22/11/2026 (suite) — « Vie du livre » : tableau de bord d'exploitation (D-074, v1)
+- Nouveau `GET /manuscripts/:id/book-life` : agrège fabrication (tirages, reçus, conformes, défectueux, remis à l'auteur), stock (vendable/déclassé), ventes (POS + CA, livraisons, retours), exemplaires d'auteur, prix public — à partir des données existantes.
+- Frontend `BookLifeSection` (rubrique repliable « Vie du livre » sur la fiche, dès la réception/mise en stock) : tuiles Fabrication / Stock / Ventes & diffusion.
+- Test book-life (reception-mise-en-stock 11/11) ; tsc back+front + build front au vert. Note « Nouveauté » (STOCK/COM/MKT/DIRED/DG).
+- **Suite** (architecture) : renommer Archivage → « Clôture de production » ; « Non applicable » pilotable ; enrichir « Vie du livre » (réimpressions, droits d'auteur, historique événementiel, voyants commerciaux pilotés par activité).
+
 ### 22/11/2026 (suite) — Compte d'auteur : suivi post-publication conservé (D-073)
 - Ajustement de D-072 : on masque seulement commercialisation + vente/livraison (vente par l'éditeur) ; le **suivi post-publication est conservé** (réimpressions auteur, remises, bascule possible en compte d'éditeur). Parcours : réception → suivi → archivage.
 - `COMPTE_AUTEUR_SKIP` (moteur + timeline) = {COMMERCIALISATION, VENTE_LIVRAISON}. Tests 10/10 + workflow 14/14 ; tsc back au vert.

@@ -133,7 +133,7 @@ const workflowStatuses: {
   { code: "COMMERCIALISATION", label: "Commercialisation", stepOrder: 17, departmentCode: "COM", isConditional: true },
   { code: "VENTE_LIVRAISON", label: "Vente et livraison", stepOrder: 18, departmentCode: "COM", isConditional: true },
   { code: "SUIVI_POST_PUBLICATION", label: "Suivi post-publication", stepOrder: 19, departmentCode: "COM", isConditional: true },
-  { code: "ARCHIVAGE", label: "Archivage", stepOrder: 20, departmentCode: "ARCH" },
+  { code: "ARCHIVAGE", label: "Clôture de production", stepOrder: 20, departmentCode: "ARCH" },
 ];
 
 // Domaines cités en exemple au Ch. 6 §6.2 — liste de départ, à compléter par
@@ -1576,6 +1576,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-archivage-devient-cloture-de-production",
+      version: "2026.11",
+      title: "Nouveauté — L'étape « Archivage » s'appelle désormais « Clôture de production »",
+      body: "Par souci de clarté, la dernière étape du parcours d'un ouvrage change de nom : « Archivage » devient « Clôture de production ». C'est le moment où l'on clôt le dossier de fabrication de l'ouvrage. Seul le libellé affiché change — tout le reste fonctionne exactement comme avant (même position dans le parcours, mêmes droits, mêmes dossiers, le scellé du dossier inchangé). Ce nouveau nom apparaît partout : fil des étapes, tableaux de bord, écrans de stock. Rien à faire de votre côté.",
+      permissionModules: ["manuscripts"],
+      audienceAll: true,
+    },
     {
       slug: "2026-11-etapes-non-applicables",
       version: "2026.11",

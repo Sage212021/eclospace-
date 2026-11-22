@@ -47,7 +47,7 @@ export function ManuscriptsDashboard() {
   const PHASES: { label: string; min: number; max: number }[] = [
     { label: "Éditorial (réception → réécriture)", min: 1, max: 8 },
     { label: "Fabrication (mise en page → stock)", min: 9, max: 16 },
-    { label: "Diffusion (commercialisation → archivage)", min: 17, max: 20 },
+    { label: "Diffusion (commercialisation → clôture de production)", min: 17, max: 20 },
   ];
   const phases = PHASES.map((p) => {
     const steps = data.by_status.filter((s) => s.step_order >= p.min && s.step_order <= p.max).sort((a, b) => a.step_order - b.step_order);

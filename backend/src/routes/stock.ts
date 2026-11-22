@@ -431,6 +431,79 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     return reply.send({ has_isbn: isbns.length > 0, isbns: result });
   });
 
+  // ── « VIE DU LIVRE » (D-074) : tableau de bord d'EXPLOITATION par titre ───────
+  // Consolide, à partir des données existantes, le parcours commercial d'un
+  // ouvrage « de sa sortie à aujourd'hui » : fabrication (tirages, reçus,
+  // conformes, défectueux), remises à l'auteur, stock (vendable / déclassé),
+  // ventes (point de vente + livraisons), retours, et prix public. Lecture seule,
+  // ouverte à qui voit la fiche de l'ouvrage.
+  fastify.get("/api/v1/manuscripts/:id/book-life", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const manuscript = await prisma.manuscript.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true, title: true, manuscriptNumber: true, economicModel: true, publicationDate: true,
+        workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, select: { partner: { select: { firstName: true, lastName: true } } } },
+      },
+    });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+
+    const isbns = await prisma.isbn.findMany({ where: { manuscriptId: id }, select: { id: true, isbn13: true, format: true } });
+    const isbnIds = isbns.map((i) => i.id);
+    const printIsbn = isbns.find((i) => i.format === "print") ?? isbns[0] ?? null;
+
+    // Fabrication : toutes les réceptions de l'ouvrage (sur bon + directes).
+    const receipts = await prisma.goodsReceipt.findMany({
+      where: { OR: [{ manuscriptId: id }, { po: { quote: { manuscriptId: id } } }] },
+      select: { quantityReceived: true, quantityConform: true, qcVerdict: true, authorHandoverAt: true },
+    });
+    const received = receipts.reduce((s, r) => s + r.quantityReceived, 0);
+    const conform = receipts.reduce((s, r) => s + (r.quantityConform ?? 0), 0);
+    const defective = receipts.reduce((s, r) => s + (r.qcVerdict ? r.quantityReceived - (r.quantityConform ?? 0) : 0), 0);
+    const handedToAuthor = receipts.filter((r) => r.authorHandoverAt).reduce((s, r) => s + (r.quantityConform ?? 0), 0);
+    const printRuns = await prisma.purchaseOrder.count({ where: { quote: { manuscriptId: id } } });
+
+    // Stock commercialisable (vendable / déclassé).
+    const items = isbnIds.length ? await prisma.stockItem.findMany({ where: { isbnId: { in: isbnIds } }, select: { condition: true, quantityPhysical: true } }) : [];
+    let vendable = 0;
+    let declasse = 0;
+    for (const it of items) {
+      if (it.condition === "vendable") vendable += it.quantityPhysical;
+      else if (it.condition === "declasse") declasse += it.quantityPhysical;
+    }
+
+    // Ventes point de vente (non annulées) + chiffre d'affaires.
+    const pos = isbnIds.length ? await prisma.posSale.findMany({ where: { isbnId: { in: isbnIds }, cancelledAt: null }, select: { quantity: true, unitPrice: true } }) : [];
+    const posQty = pos.reduce((s, p) => s + p.quantity, 0);
+    const posRevenue = pos.reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0);
+
+    const [delivered, returns, authorCopies] = await Promise.all([
+      isbnIds.length ? prisma.deliveryLine.aggregate({ where: { isbnId: { in: isbnIds } }, _sum: { quantity: true } }) : Promise.resolve({ _sum: { quantity: null } }),
+      isbnIds.length ? prisma.returnLine.aggregate({ where: { isbnId: { in: isbnIds } }, _sum: { quantity: true } }) : Promise.resolve({ _sum: { quantity: null } }),
+      isbnIds.length ? prisma.authorCopyEntry.aggregate({ where: { isbnId: { in: isbnIds } }, _sum: { quantity: true } }) : Promise.resolve({ _sum: { quantity: null } }),
+    ]);
+
+    const price = printIsbn
+      ? await prisma.priceList.findFirst({ where: { isbnId: printIsbn.id }, orderBy: { effectiveFrom: "desc" }, select: { price: true, currency: true } })
+      : null;
+
+    const authors = manuscript.workContributors.map((c) => `${c.partner.firstName} ${c.partner.lastName}`.trim()).filter(Boolean);
+
+    return reply.send({
+      title: manuscript.title,
+      reference: manuscript.manuscriptNumber,
+      authors,
+      economic_model: manuscript.economicModel,
+      publication_date: manuscript.publicationDate ? manuscript.publicationDate.toISOString() : null,
+      isbn13: printIsbn?.isbn13 ?? null,
+      price: price ? { amount: Number(price.price), currency: price.currency } : null,
+      fabrication: { print_runs: printRuns, receptions: receipts.length, received, conform, defective, handed_to_author: handedToAuthor },
+      stock: { vendable, declasse, total: vendable + declasse },
+      sales: { pos_quantity: posQty, pos_revenue: Math.round(posRevenue), delivered_quantity: delivered._sum.quantity ?? 0, returns_quantity: returns._sum.quantity ?? 0 },
+      author_copies: authorCopies._sum.quantity ?? 0,
+    });
+  });
+
   // Rapprochement automatique de lignes « titre + quantité » (rapport d'inventaire)
   // avec les ouvrages existants (ISBN imprimés). Renvoie le meilleur ouvrage
   // apparié + un score ; les non-trouvés sont signalés pour saisie manuelle.

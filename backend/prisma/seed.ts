@@ -1577,6 +1577,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-vie-du-livre-tableau-de-bord",
+      version: "2026.11",
+      title: "Nouveauté — « Vie du livre » : le tableau de bord d'exploitation de chaque ouvrage",
+      body: "Sur la fiche d'un ouvrage entré en réception/mise en stock, une nouvelle rubrique repliable « Vie du livre » montre, en un coup d'œil, son parcours commercial de sa sortie à aujourd'hui : FABRICATION (nombre de tirages, exemplaires reçus, conformes, défectueux, remis à l'auteur), STOCK (vendable / déclassé / total), VENTES & DIFFUSION (vendus au point de vente et chiffre d'affaires, livrés sur commande, retours, exemplaires d'auteur), ainsi que l'ISBN, le modèle économique et le prix public (FCFA + €). Les données sont consolidées en temps réel à partir du stock, des ventes et des réceptions déjà saisis. C'est une première version : les réimpressions, le détail des droits d'auteur et l'historique événementiel viendront l'enrichir.",
+      permissionModules: ["stock", "commercial", "manuscripts"],
+      departmentCodes: ["STOCK", "COM", "MKT", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-compte-auteur-garde-le-suivi",
       version: "2026.11",
       title: "Nouveauté — Compte d'auteur : le suivi post-publication est conservé",

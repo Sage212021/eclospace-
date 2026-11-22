@@ -1577,6 +1577,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-compte-auteur-garde-le-suivi",
+      version: "2026.11",
+      title: "Nouveauté — Compte d'auteur : le suivi post-publication est conservé",
+      body: "Précision du parcours à compte d'auteur. On masque toujours « Commercialisation » et « Vente et livraison » (la maison ne vend pas ces exemplaires, ils sont remis à l'auteur), MAIS on garde désormais « Suivi post-publication » : un ouvrage à compte d'auteur a lui aussi une vie après parution (réimpressions à la demande de l'auteur, remises, et bascule éventuelle en compte d'éditeur). Le parcours devient : réception → suivi post-publication → archivage.",
+      permissionModules: ["manuscripts", "stock"],
+      departmentCodes: ["STOCK", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-parcours-compte-auteur-vers-archivage",
       version: "2026.11",
       title: "Nouveauté — Compte d'auteur : le parcours va directement à l'archivage (plus de commercialisation)",

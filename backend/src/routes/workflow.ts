@@ -118,9 +118,12 @@ import { myCorrectionIntegrations } from "../lib/correctionIntegrations.js";
 // est tracé sur l'étape (realizationMode / skipReason / realizationData). Les
 // anciens drapeaux requiresExpertise / requiresRewrite ne servent plus qu'à
 // pré-remplir la suggestion « à réaliser » à l'écran.
-// Étapes de diffusion commerciale, SAUTÉES pour un ouvrage à compte d'auteur
-// (exemplaires remis à l'auteur, pas de vente par l'éditeur → archivage, D-064).
-const COMPTE_AUTEUR_SKIP = new Set(["COMMERCIALISATION", "VENTE_LIVRAISON", "SUIVI_POST_PUBLICATION"]);
+// VENTE par l'éditeur, SAUTÉE pour un ouvrage à compte d'auteur (exemplaires
+// remis à l'auteur : la maison ne commercialise pas). En revanche le SUIVI
+// POST-PUBLICATION est CONSERVÉ (D-073, arbitrage opérateur) : un compte d'auteur
+// a une vie post-publication (réimpressions à la demande de l'auteur, remises,
+// bascule éventuelle en compte d'éditeur). Parcours : réception → suivi → archivage.
+const COMPTE_AUTEUR_SKIP = new Set(["COMMERCIALISATION", "VENTE_LIVRAISON"]);
 function isStepRequired(statusCode: string, manuscript: Manuscript): boolean {
   // D-056 : l'étape « Entrée en stock » est absorbée par « Réception et mise en
   // stock ». Elle est RETIRÉE du circuit actif (sautée par la navigation), mais

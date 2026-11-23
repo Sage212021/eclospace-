@@ -615,6 +615,12 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 23/11/2026 (suite) — Clôture de l'étape réception depuis la carte + correctif blocage (D-079)
+- **Retour opérateur** : « remise à l'auteur ✓ validée mais réception toujours EN COURS — incohérent ». Cause : les ✓ = sous-opérations faites ; l'étape attend la validation finale, dont le bouton est loin de la carte de réception.
+- **Correctif** : une fois le travail terminal fait (remise à l'auteur / entrée en stock), un **encadré doré « ✓ terminé — il reste à clôturer l'étape » + bouton de validation** apparaît DANS la carte de réception (`PrintingSection` `onCloseStep`/`stepCloseLabel` ; `validateStep` → confirmation → suite). Proposé seulement si l'étape courante est la réception et que l'utilisateur peut clôturer. Le panneau habituel reste disponible.
+- **Bug corrigé (D-078)** : `CLOTURE_PRODUCTION` manquait dans `GENERIC_VALIDATION_STEPS` → bouton de validation absent, étape bloquée. Ajoutée (+ libellé d'action).
+- Vérifs : tsc front + build front au vert. Note « Nouveauté » (STOCK/FIN/DIRED/DG). Purement frontend (garde-fous backend inchangés).
+
 ### 23/11/2026 (suite) — Repositionnement fin de parcours + compte d'auteur sans « stock » (D-078)
 - **Retour opérateur** : « Suivi post-publication après Clôture de production ? » + « compte d'auteur = réception · contrôle qualité · remise à l'auteur, PAS d'entrée en stock ».
 - **Découverte signalée** : l'étape terminale (code `ARCHIVAGE`) est load-bearing (refusés, scellé, planning figé, repère « terminé ») → ne pas la déplacer. D-076 avait mis le nom « Clôture de production » sur l'étape de fin, à tort.

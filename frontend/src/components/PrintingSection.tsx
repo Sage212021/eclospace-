@@ -69,12 +69,20 @@ interface PrintingSectionProps {
   receptionOnly?: boolean;
   // Ancre DOM (pour « atterrir » directement sur la rubrique depuis l'espace Stock).
   anchorId?: string;
+  // Clôture de l'étape « Réception et mise en stock » DEPUIS la carte de réception
+  // (une fois le travail fait), pour lever l'incohérence « tout est fait mais l'étape
+  // reste EN COURS ». Fourni uniquement quand l'étape courante est la réception et
+  // que l'utilisateur peut la clôturer ; déclenche la validation + le passage à la suite.
+  onCloseStep?: () => void | Promise<void>;
+  // Libellé du bouton de clôture (adapté compte d'auteur / éditeur).
+  stepCloseLabel?: string;
 }
 
 // Impression et fabrication (Ch. 15) : devis comparés, bon de commande,
 // suivi de fabrication jusqu'à la réception.
-export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [], economicModel = null, onEconomicModelChanged, defaultOpen = false, receptionOnly = false, anchorId }: PrintingSectionProps) {
+export function PrintingSection({ manuscriptId, canManage, canValidate, canManageBon = canManage, canReceiveStock = canManage, bonFunctions = [], economicModel = null, onEconomicModelChanged, defaultOpen = false, receptionOnly = false, anchorId, onCloseStep, stepCloseLabel }: PrintingSectionProps) {
   const authorAccount = economicModel === "compte_auteur";
+  const [closingStep, setClosingStep] = useState(false);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -577,6 +585,32 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
           )}
         </div>
       )}
+
+      {/* Clôture de l'étape DEPUIS la réception (D-079) : lève l'incohérence « tout
+          est fait (✓) mais l'étape reste EN COURS ». Visible une fois le travail
+          terminal fait (remise à l'auteur ou entrée en stock). */}
+      {onCloseStep && (() => {
+        const allReceipts = [...orders.flatMap((o) => o.goodsReceipts ?? []), ...directReceipts];
+        const terminalDone = allReceipts.some((r) => (authorAccount ? r.authorHandoverAt : r.stockEnteredAt));
+        if (!terminalDone) return null;
+        return (
+          <div style={{ marginTop: 14, padding: "11px 13px", border: "1px solid var(--eclosion, #D9B21A)", borderRadius: 10, background: "var(--eclosion-soft, #f6efd8)" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>
+              ✓ {authorAccount ? "Réception, contrôle qualité et remise à l'auteur terminés." : "Réception, contrôle qualité et mise en stock terminés."}
+            </div>
+            <div style={{ fontSize: 12.5, color: "#8A6D00", margin: "4px 0 9px" }}>
+              Il reste à <strong>clôturer l'étape</strong> pour la marquer terminée et passer à la suite.
+            </div>
+            <button
+              onClick={async () => { setClosingStep(true); try { await onCloseStep(); } finally { setClosingStep(false); } }}
+              disabled={closingStep}
+              style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 8, padding: "9px 16px", fontWeight: 700, fontSize: 13, cursor: closingStep ? "default" : "pointer" }}
+            >
+              {closingStep ? "Clôture…" : (stepCloseLabel ?? "Clôturer l'étape et passer à la suite")}
+            </button>
+          </div>
+        );
+      })()}
 
       {transferPo && (
         <TransferDocDialog

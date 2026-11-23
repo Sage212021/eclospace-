@@ -8,7 +8,7 @@ const { extractSessionCookie } = await import("./helpers.js");
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
 
 // Catalogue du pôle Marketing & Distribution. Règle critique : SEULS les
-// ouvrages publiés (étape ≥ commercialisation, stepOrder 17) et archivés
+// ouvrages publiés (étape ≥ commercialisation) et archivés
 // apparaissent ; jamais un manuscrit encore en cours.
 describe("Catalogue des ouvrages (Marketing & Distribution)", () => {
   let app: FastifyInstance;
@@ -28,8 +28,8 @@ describe("Catalogue des ouvrages (Marketing & Distribution)", () => {
     adminCookie = await login("admin", ADMIN_PASSWORD);
     adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
 
-    const draftStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { stepOrder: { lt: 17 } }, orderBy: { stepOrder: "asc" } });
-    const publishedStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { stepOrder: { gte: 17 } }, orderBy: { stepOrder: "asc" } });
+    const draftStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CORRECTION" } });
+    const publishedStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "COMMERCIALISATION" } });
 
     publishedTitle = `Ouvrage publié ${s}`;
     draftTitle = `Manuscrit en cours ${s}`;
@@ -59,7 +59,7 @@ describe("Catalogue des ouvrages (Marketing & Distribution)", () => {
   });
 
   it("la couverture de l'infographe (ImageAsset couverture_1 image) alimente automatiquement le catalogue", async () => {
-    const publishedStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { stepOrder: { gte: 17 } }, orderBy: { stepOrder: "asc" } });
+    const publishedStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "COMMERCIALISATION" } });
     const m = await prisma.manuscript.create({ data: { manuscriptNumber: `COV-${s}`, title: `Ouvrage avec couverture infographe ${s}`, language: "fr", statusId: publishedStatus.id, ownerId: adminId, receivedAt: new Date(), publicationDate: new Date("2026-02-01") } });
     // Aucune pièce « couverture » dédiée : seule la couverture (1ʳᵉ) de l'infographe existe.
     const doc = await prisma.document.create({ data: { entityType: "manuscript", entityId: m.id, category: "piece_etape", confidentiality: "interne", title: "[livrable:INFOGRAPHIE] couverture.png", createdBy: adminId, updatedBy: adminId } });

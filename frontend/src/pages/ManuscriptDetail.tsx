@@ -526,7 +526,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             sans détailler le processus interne de l'étape. */}
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", background: "var(--eclosion-soft, #f6efd8)", border: "1px solid var(--eclosion, #d9b21a)", borderRadius: 999, padding: "2px 11px" }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--eclosion, #d9b21a)" }} />
-          {manuscript.sealed ? "Dossier archivé" : manuscript.status.label}
+          {manuscript.sealed
+            ? "Dossier clôturé (scellé)"
+            : manuscript.economicModel === "compte_auteur" && manuscript.status.code === "CONTROLE_QUALITE_IMPRESSION"
+              ? "Réception et remise à l'auteur"
+              : manuscript.status.label}
         </span>
       </div>
       <p style={{ fontSize: 13 }}>
@@ -921,6 +925,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             <GenericStepValidation
               manuscriptId={manuscript.id}
               stepCode={manuscript.status.code}
+              authorAccount={manuscript.economicModel === "compte_auteur"}
               reloadToken={reloadToken}
               confirm={confirm}
               onValidated={(_status, opts) => advanceAfterValidation(opts?.confided ?? false)}
@@ -1191,7 +1196,9 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
       {/* Stock de l'ouvrage (table + mise en stock directe de secours) : placé
           APRÈS la réception / contrôle qualité / entrée en stock (D-061), pour que
           l'étape se lise dans l'ordre et que « Ajouter au stock » reste un secours. */}
-      {permissions.has("stock:consultation") && show("stock") && (
+      {/* Masqué pour un compte d'auteur : les exemplaires sont remis à l'auteur,
+          l'ouvrage n'entre jamais en stock (retour opérateur). */}
+      {permissions.has("stock:consultation") && show("stock") && manuscript.economicModel !== "compte_auteur" && (
         <ManuscriptStockSection manuscriptId={manuscript.id} canManage={permissions.has("stock:saisie")} />
       )}
 
@@ -2122,6 +2129,7 @@ const STEP_ACTION_LABELS: Record<string, string> = {
   ATTRIBUTION_REFERENCES: "Valider l'attribution des références",
   VALIDATION_BAT: "Valider le BAT",
   IMPRESSION: "Valider l'impression",
+  CLOTURE_PRODUCTION: "Valider la clôture de production",
   CONTROLE_QUALITE_IMPRESSION: "Valider la réception et mise en stock",
   ENTREE_STOCK: "Valider l'entrée en stock",
   COMMERCIALISATION: "Valider la commercialisation",
@@ -2277,6 +2285,7 @@ function StepAttachments({
 function GenericStepValidation({
   manuscriptId,
   stepCode,
+  authorAccount = false,
   reloadToken = 0,
   confirm,
   onValidated,
@@ -2289,6 +2298,7 @@ function GenericStepValidation({
 }: {
   manuscriptId: string;
   stepCode: string;
+  authorAccount?: boolean;
   reloadToken?: number;
   confirm: (opts: { title: string; message: string; detail?: string; confirmLabel?: string }) => Promise<boolean>;
   onValidated: (status: string | null, opts?: { confided?: boolean }) => void;
@@ -2329,7 +2339,10 @@ function GenericStepValidation({
         : !batState.pre_validated
           ? `Valider ${doubleNoun} (1re signature)`
           : `Contre-valider ${doubleNoun} (Direction générale)`;
-  const label = isDouble ? doubleLabel : (STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape");
+  // Compte d'auteur : la « réception et mise en stock » est en réalité une remise
+  // à l'auteur (pas de stock) → libellé adapté.
+  const authorStepLabel = authorAccount && stepCode === "CONTROLE_QUALITE_IMPRESSION" ? "Valider la réception et remise à l'auteur" : null;
+  const label = isDouble ? doubleLabel : (authorStepLabel ?? STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape");
 
   // Qui pourra prendre le dossier à l'étape SUIVANTE (maquettiste, infographe,
   // correcteur…) : on propose de le confier nommément à l'un d'eux.

@@ -373,9 +373,10 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     const statuses = await app.inject({ method: "GET", url: "/api/v1/workflow-statuses", headers: { cookie: adminCookie } });
     expect(statuses.statusCode).toBe(200);
     const steps = statuses.json();
-    expect(steps.length).toBe(20);
+    // D-078 : 21 étapes (ajout de « Clôture de production » après l'Impression).
+    expect(steps.length).toBe(21);
     expect(steps[0].stepOrder).toBe(1);
-    expect(steps[steps.length - 1].stepOrder).toBe(20);
+    expect(steps[steps.length - 1].stepOrder).toBe(21);
 
     const tracking = await app.inject({ method: "GET", url: "/api/v1/production-tracking", headers: { cookie: adminCookie } });
     expect(tracking.statusCode).toBe(200);

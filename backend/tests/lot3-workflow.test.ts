@@ -315,7 +315,12 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     // a l'autorité finale → une seule signature fait avancer l'ouvrage.
     const validatedImpression = await validate(manuscript.id, "IMPRESSION");
     expect(validatedImpression.statusCode).toBe(200);
-    expect(validatedImpression.json().status).toBe("CONTROLE_QUALITE_IMPRESSION");
+    // D-078 : après l'impression, étape « Clôture de production » (fin de
+    // fabrication), puis « Réception et mise en stock ».
+    expect(validatedImpression.json().status).toBe("CLOTURE_PRODUCTION");
+    const validatedCloture = await validate(manuscript.id, "CLOTURE_PRODUCTION");
+    expect(validatedCloture.statusCode).toBe(200);
+    expect(validatedCloture.json().status).toBe("CONTROLE_QUALITE_IMPRESSION");
 
     // D-056 : étape unique « Réception et mise en stock ». Bloquée tant qu'aucune
     // réception n'a de verdict acceptable.

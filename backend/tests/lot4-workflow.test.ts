@@ -214,7 +214,8 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "sent" } });
     // IMPRESSION à double validation, assouplie pour la DG (12/11) : l'admin a
     // l'autorité finale → une seule signature fait avancer l'ouvrage.
-    await validate(manuscript.id, "IMPRESSION"); // → CONTROLE_QUALITE_IMPRESSION
+    await validate(manuscript.id, "IMPRESSION"); // → CLOTURE_PRODUCTION (D-078)
+    await validate(manuscript.id, "CLOTURE_PRODUCTION"); // → CONTROLE_QUALITE_IMPRESSION
 
     const receipt = await app.inject({
       method: "POST",

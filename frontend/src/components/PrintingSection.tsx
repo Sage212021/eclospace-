@@ -270,7 +270,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
 
   return (
     <CollapsibleSection
-      title={receptionOnly ? "Réception · contrôle qualité · mise en stock" : "Impression et fabrication"}
+      title={receptionOnly ? (authorAccount ? "Réception · contrôle qualité · remise à l'auteur" : "Réception · contrôle qualité · mise en stock") : "Impression et fabrication"}
       storageKey={receptionOnly ? "fiche:reception" : "fiche:impression"}
       forceOpen={defaultOpen}
       id={anchorId}
@@ -298,7 +298,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
         </div>
         {authorAccount ? (
           <p style={{ fontSize: 12, color: "#8A6D00", margin: "6px 0 0" }}>
-            Compte d'auteur : après contrôle qualité, les exemplaires conformes sont <strong>remis à l'auteur</strong> (pas d'entrée en stock), puis l'ouvrage va à la clôture de production.
+            Compte d'auteur : après contrôle qualité, les exemplaires conformes sont <strong>remis à l'auteur</strong> (pas d'entrée en stock), puis l'ouvrage passe au suivi post-publication.
             Le passage en compte d'éditeur exige un <strong>avenant au contrat</strong> validé.
           </p>
         ) : (
@@ -494,7 +494,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
             <div style={{ marginTop: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                  Réception · contrôle qualité · mise en stock
+                  {authorAccount ? "Réception · contrôle qualité · remise à l'auteur" : "Réception · contrôle qualité · mise en stock"}
                 </div>
                 {/* Procès-verbal de réception (D-057) : document officiel récapitulatif, imprimable / PDF. */}
                 <DocPrintMenu
@@ -507,11 +507,14 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
                 const recs = po.goodsReceipts ?? [];
                 const received = recs.reduce((s, r) => s + r.quantityReceived, 0);
                 const inStock = recs.filter((r) => r.stockEnteredAt).reduce((s, r) => s + (r.quantityConform ?? 0), 0);
+                const handed = recs.filter((r) => r.authorHandoverAt).reduce((s, r) => s + (r.quantityConform ?? 0), 0);
                 return (
                   <div style={{ fontSize: 11.5, color: "var(--muted)", margin: "2px 0 2px" }}>
                     Cumul reçu <b style={{ fontFamily: "var(--font-mono)" }}>{received}</b> / {po.orderedQuantity} commandés
                     {received < po.orderedQuantity && <> · reste {po.orderedQuantity - received}</>}
-                    {" "}· en stock <b style={{ fontFamily: "var(--font-mono)", color: "#2F7D4A" }}>{inStock}</b> conforme(s)
+                    {authorAccount
+                      ? <> · remis à l'auteur <b style={{ fontFamily: "var(--font-mono)", color: "#2F7D4A" }}>{handed}</b></>
+                      : <> · en stock <b style={{ fontFamily: "var(--font-mono)", color: "#2F7D4A" }}>{inStock}</b> conforme(s)</>}
                   </div>
                 );
               })()}
@@ -538,10 +541,12 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
           réceptionner (ou qu'une réception directe existe déjà). */}
       {canReceiveStock && (!hasReceivablePo || directReceipts.length > 0) && (
         <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700 }}>Réception et mise en stock — sans bon de commande</div>
+          <div style={{ fontSize: 12, fontWeight: 700 }}>{authorAccount ? "Réception et remise à l'auteur — sans bon de commande" : "Réception et mise en stock — sans bon de commande"}</div>
           <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 8px" }}>
             Cet ouvrage n'a pas de bon de commande (livre déjà paru ou importé sans passer par l'impression).
-            Enregistrez la réception des exemplaires, puis le contrôle qualité, puis l'entrée en stock — comme pour une fabrication normale.
+            {authorAccount
+              ? " Enregistrez la réception des exemplaires, puis le contrôle qualité, puis la remise à l'auteur (pas d'entrée en stock)."
+              : " Enregistrez la réception des exemplaires, puis le contrôle qualité, puis l'entrée en stock — comme pour une fabrication normale."}
           </p>
           <ReceptionEntry
             ordered={null}
@@ -554,7 +559,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate, canManag
           {directReceipts.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                Réception · contrôle qualité · mise en stock
+                {authorAccount ? "Réception · contrôle qualité · remise à l'auteur" : "Réception · contrôle qualité · mise en stock"}
               </div>
               {directReceipts.map((r) => (
                 <ReceiptCard

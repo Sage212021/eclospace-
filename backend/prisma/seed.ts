@@ -119,21 +119,31 @@ const workflowStatuses: {
   { code: "VALIDATION_BAT", label: "Validation du BAT Final", stepOrder: 12, departmentCode: "CQ" },
   { code: "CONTRACTUALISATION", label: "Contractualisation", stepOrder: 13, departmentCode: "JURID" },
   { code: "IMPRESSION", label: "Impression", stepOrder: 14, departmentCode: "IMPR" },
+  // D-078 : « CLÔTURE DE PRODUCTION » — fin de la FABRICATION. Une fois le livre
+  // imprimé, on clôt et archive le dossier de production, puis le livre entre dans
+  // sa vie commerciale (réception → stock → commercialisation → vente → suivi).
+  // Placée JUSTE APRÈS l'Impression, conformément à l'architecture de référence
+  // validée par l'opérateur (production → clôture de production → exploitation).
+  { code: "CLOTURE_PRODUCTION", label: "Clôture de production", stepOrder: 15, departmentCode: "ARCH" },
   // D-056 : fin de production regroupée en UNE étape, pilotée par le pôle Stock.
   // L'étape garde son code (CONTROLE_QUALITE_IMPRESSION) pour préserver références
   // et historique, mais devient « Réception et mise en stock » (réception + contrôle
   // qualité + entrée en stock, comme sous-opérations internes).
-  { code: "CONTROLE_QUALITE_IMPRESSION", label: "Réception et mise en stock", stepOrder: 15, departmentCode: "STOCK" },
+  { code: "CONTROLE_QUALITE_IMPRESSION", label: "Réception et mise en stock", stepOrder: 16, departmentCode: "STOCK" },
   // Ancienne étape « Entrée en stock » RETIRÉE du circuit actif (absorbée ci-dessus) :
   // conditionnelle → sautée par la navigation. Ligne conservée pour l'historique.
-  { code: "ENTREE_STOCK", label: "Entrée en stock", stepOrder: 16, departmentCode: "STOCK", isConditional: true },
+  { code: "ENTREE_STOCK", label: "Entrée en stock", stepOrder: 17, departmentCode: "STOCK", isConditional: true },
   // Commercialisation → Vente → Suivi : CONDITIONNELLES depuis D-064 — SAUTÉES pour
   // un ouvrage à COMPTE D'AUTEUR (exemplaires remis à l'auteur, pas de vente par
-  // l'éditeur → directement l'archivage). Requises pour compte d'éditeur / à demi.
-  { code: "COMMERCIALISATION", label: "Commercialisation", stepOrder: 17, departmentCode: "COM", isConditional: true },
-  { code: "VENTE_LIVRAISON", label: "Vente et livraison", stepOrder: 18, departmentCode: "COM", isConditional: true },
-  { code: "SUIVI_POST_PUBLICATION", label: "Suivi post-publication", stepOrder: 19, departmentCode: "COM", isConditional: true },
-  { code: "ARCHIVAGE", label: "Clôture de production", stepOrder: 20, departmentCode: "ARCH" },
+  // l'éditeur). Le SUIVI POST-PUBLICATION reste la dernière phase VIVANTE du livre.
+  { code: "COMMERCIALISATION", label: "Commercialisation", stepOrder: 18, departmentCode: "COM", isConditional: true },
+  { code: "VENTE_LIVRAISON", label: "Vente et livraison", stepOrder: 19, departmentCode: "COM", isConditional: true },
+  { code: "SUIVI_POST_PUBLICATION", label: "Suivi post-publication", stepOrder: 20, departmentCode: "COM", isConditional: true },
+  // D-078 : état TERMINAL « Dossier clôturé » — fin de vie du titre (épuisé/retiré)
+  // OU manuscrit refusé/abandonné. Le dossier y est figé et peut être scellé.
+  // (Anciennement « Archivage » puis mal nommé « Clôture de production » en D-076 ;
+  // le code ARCHIVAGE est conservé pour ne déplacer aucune donnée ni référence.)
+  { code: "ARCHIVAGE", label: "Dossier clôturé", stepOrder: 21, departmentCode: "ARCH" },
 ];
 
 // Domaines cités en exemple au Ch. 6 §6.2 — liste de départ, à compléter par
@@ -1576,6 +1586,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-11-cloture-production-et-compte-auteur",
+      version: "2026.11",
+      title: "Nouveauté — Clôture de production repositionnée + compte d'auteur sans « stock »",
+      body: "Deux mises au point sur le parcours d'un ouvrage. 1) L'ÉTAPE « CLÔTURE DE PRODUCTION » est désormais à sa vraie place : JUSTE APRÈS l'impression (fin de fabrication, le dossier de production est clos), et non plus à la toute fin. Le « Suivi post-publication » redevient la dernière phase vivante du livre ; l'état tout à la fin s'appelle maintenant « Dossier clôturé » (fin de vie, ou manuscrit refusé). Le parcours lit : … impression → clôture de production → réception et mise en stock → commercialisation → vente → suivi post-publication → dossier clôturé. 2) COMPTE D'AUTEUR : partout où il était écrit « mise en stock » / « en stock », on lit désormais « remise à l'auteur » — car un ouvrage à compte d'auteur n'entre JAMAIS en stock (tous les exemplaires sont remis à l'auteur). Le bloc « Stock de l'ouvrage » n'apparaît plus pour ces ouvrages. Rien à ressaisir de votre côté.",
+      permissionModules: ["manuscripts", "stock", "production"],
+      audienceAll: true,
+    },
     {
       slug: "2026-11-vie-du-livre-enrichie",
       version: "2026.11",
@@ -4215,7 +4233,13 @@ async function main() {
   // l'ouvrage, on attribue quantité/prix). Idempotent : manuscrit repéré par son
   // numéro, ISBN par (manuscrit, format), prix créé s'il manque. Les ISBN sont
   // provisoires (préfixe interne) tant que les ISBN officiels ne sont pas fournis.
-  const catStatus = (await prisma.workflowStatus.findFirst({ orderBy: { stepOrder: "desc" } })) ?? (await prisma.workflowStatus.findFirst());
+  // Ouvrages déjà parus importés au catalogue : positionnés en SUIVI POST-PUBLICATION
+  // (vie commerciale active, au catalogue) — PAS à l'état terminal « Dossier clôturé »
+  // (D-078), cohérent avec la route d'import (manuscripts.ts).
+  const catStatus =
+    (await prisma.workflowStatus.findUnique({ where: { code: "SUIVI_POST_PUBLICATION" } })) ??
+    (await prisma.workflowStatus.findFirst({ orderBy: { stepOrder: "desc" } })) ??
+    (await prisma.workflowStatus.findFirst());
   if (catStatus) {
     const ean13 = (base12: string): string => {
       let sum = 0;

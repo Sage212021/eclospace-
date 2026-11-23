@@ -414,8 +414,13 @@ export default async function marketingRoutes(fastify: FastifyInstance) {
     const in7 = new Date(startOfToday.getTime() + 7 * 86_400_000);
     const openStatuts: MarketingActionStatus[] = ["a_faire", "en_cours"];
 
+    // Seuil « au catalogue » = ordre de COMMERCIALISATION, lu par code (résiste à la
+    // renumérotation des étapes, D-078).
+    const commStatus = await prisma.workflowStatus.findUnique({ where: { code: "COMMERCIALISATION" }, select: { stepOrder: true } });
+    const catalogueMinOrder = commStatus?.stepOrder ?? 18;
+
     const [catalogue, campaignsActive, partnersActive, actions, campaigns, plansCount, publishedCount] = await Promise.all([
-      prisma.manuscript.count({ where: { deletedAt: null, status: { stepOrder: { gte: 17 } } } }),
+      prisma.manuscript.count({ where: { deletedAt: null, status: { stepOrder: { gte: catalogueMinOrder } } } }),
       prisma.marketingCampaign.count({ where: { deletedAt: null, statut: "en_cours" } }),
       prisma.marketingPartner.count({ where: { deletedAt: null, active: true } }),
       prisma.marketingAction.findMany({
@@ -424,7 +429,7 @@ export default async function marketingRoutes(fastify: FastifyInstance) {
       }),
       prisma.marketingCampaign.findMany({ where: { deletedAt: null, statut: { not: "annulee" } }, select: { budgetEngage: true } }),
       prisma.marketingPlan.count({ where: { deletedAt: null } }),
-      prisma.manuscript.count({ where: { deletedAt: null, status: { stepOrder: { gte: 17 } } } }),
+      prisma.manuscript.count({ where: { deletedAt: null, status: { stepOrder: { gte: catalogueMinOrder } } } }),
     ]);
 
     const actionsWeek = actions.filter((a) => a.echeance && a.echeance >= startOfToday && a.echeance < in7 && openStatuts.includes(a.statut));

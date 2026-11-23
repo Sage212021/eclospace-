@@ -50,7 +50,7 @@ const CORRECTION_TASK_TYPE_CODES = ["correction", "correction_ortho", "correctio
 // Étapes qu'un opérateur AFFECTÉ (sans droit de validation large) peut clôturer
 // lui-même : la correction par le correcteur, la mise en page par le maquettiste,
 // l'infographie par l'infographe, l'attribution des références par le secrétariat.
-const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES", "CONTROLE_QUALITE_IMPRESSION", "COMMERCIALISATION"]);
+const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES", "CLOTURE_PRODUCTION", "CONTROLE_QUALITE_IMPRESSION", "COMMERCIALISATION"]);
 
 // L'opérateur AFFECTÉ à l'étape courante : responsable de l'étape OU (pour la
 // correction) porteur d'une tâche de correction assignée. Sert à l'autoriser à
@@ -80,6 +80,9 @@ const STEP_SAISIE_PERM: Record<string, string> = {
   MISE_EN_PAGE: "production:saisie",
   INFOGRAPHIE: "production:saisie",
   ATTRIBUTION_REFERENCES: "isbn:saisie",
+  // « Clôture de production » (D-078) : la fabrication terminée, le pôle production
+  // clôt et archive le dossier de production avant la réception/mise en stock.
+  CLOTURE_PRODUCTION: "production:saisie",
   // « Réception et mise en stock » (D-056) : pilotée par le pôle Stock & magasin —
   // le magasinier (stock:saisie) peut clôturer l'étape lui-même.
   CONTROLE_QUALITE_IMPRESSION: "stock:saisie",

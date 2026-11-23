@@ -615,6 +615,15 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 23/11/2026 (suite) — Repositionnement fin de parcours + compte d'auteur sans « stock » (D-078)
+- **Retour opérateur** : « Suivi post-publication après Clôture de production ? » + « compte d'auteur = réception · contrôle qualité · remise à l'auteur, PAS d'entrée en stock ».
+- **Découverte signalée** : l'étape terminale (code `ARCHIVAGE`) est load-bearing (refusés, scellé, planning figé, repère « terminé ») → ne pas la déplacer. D-076 avait mis le nom « Clôture de production » sur l'étape de fin, à tort.
+- **Solution** (validée) : **nouvelle étape** `CLOTURE_PRODUCTION` « Clôture de production » juste **après l'Impression** (stepOrder 15, dép. ARCH, auto-clôturable `production:saisie`) ; renumérotation 15→16…20→21 ; l'ancienne terminale renommée **« Dossier clôturé »** (code `ARCHIVAGE` conservé). Ordre : Impression → **Clôture de production** → Réception/mise en stock → Commercialisation → Vente → **Suivi post-publication** → **Dossier clôturé**.
+- Migration `20261123120000_cloture_production_reposition` (insert + renum + renommage, idempotente). Seuils « publié » rendus **dynamiques** (lookup COMMERCIALISATION par code) dans `catalogue.ts` + `marketing.ts`. Ouvrages catalogue déjà parus positionnés en `SUIVI_POST_PUBLICATION`. Scellé : message « Dossier clôturé ».
+- **Compte d'auteur** : « mise en stock »/« en stock » → « remise à l'auteur » partout (bandeau, sous-titres, compteur, bouton de validation) ; section « Stock de l'ouvrage » masquée ; badge « Réception et remise à l'auteur ».
+- Vérifs : tests de navigation adaptés (lot3/lot4-workflow + nouvelle étape ; `manuscripts` 21 étapes ; `marketing-catalogue` par code) ; suite backend au vert ; tsc back+front + build front au vert. Note « Nouveauté » (tous).
+- **Clôt l'architecture de référence** (D-073 → D-078).
+
 ### 23/11/2026 — « Vie du livre » enrichie v2 : tirages, droits, historique (D-077)
 - Suite de D-074. `GET /manuscripts/:id/book-life` étendu (lecture seule, données existantes) :
   - **Tirages & réimpressions** `reprints[]` : chaque bon d'impression (tirage initial puis réimpressions) — quantité, date, imprimeur, n° de bon, statut.

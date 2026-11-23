@@ -16,7 +16,17 @@ import { writeAuditLog } from "../lib/audit.js";
 // sur la fiche ouvrage (infographie) ; le prix et la disponibilité viennent de
 // la fiche commerciale (work_metadata). Un ouvrage retiré du commerce reste au
 // catalogue avec le statut « épuisé / arrêté » — son historique n'est pas perdu.
-const COMMERCIALISATION_STEP_ORDER = 17;
+// Seuil « publié » = ordre de l'étape COMMERCIALISATION, lu DYNAMIQUEMENT par code
+// (et mémorisé) pour résister à toute renumérotation des étapes (D-078). Un ouvrage
+// est au catalogue dès qu'il atteint la commercialisation.
+let _commercialisationStepOrder: number | null = null;
+async function commercialisationStepOrder(): Promise<number> {
+  if (_commercialisationStepOrder == null) {
+    const s = await prisma.workflowStatus.findUnique({ where: { code: "COMMERCIALISATION" }, select: { stepOrder: true } });
+    _commercialisationStepOrder = s?.stepOrder ?? 18;
+  }
+  return _commercialisationStepOrder;
+}
 
 const DEFAULT_SORT_KEY = "catalogue_default_sort";
 const SORTS = ["recent", "oldest", "az", "za", "author", "collection", "genre"] as const;
@@ -74,8 +84,9 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
     const defaultSort: Sort = (SORTS as readonly string[]).includes(String(cfgRow?.value)) ? (cfgRow!.value as Sort) : "recent";
     const sort: Sort = (SORTS as readonly string[]).includes(String(q.sort)) ? (q.sort as Sort) : defaultSort;
 
+    const minStepOrder = await commercialisationStepOrder();
     const works = await prisma.manuscript.findMany({
-      where: { deletedAt: null, status: { stepOrder: { gte: COMMERCIALISATION_STEP_ORDER } } },
+      where: { deletedAt: null, status: { stepOrder: { gte: minStepOrder } } },
       select: {
         id: true,
         manuscriptNumber: true,
@@ -220,7 +231,7 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
   // (couverture publique), et bornée aux ouvrages publiés/archivés.
   fastify.get("/api/v1/catalogue/:id/cover", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const published = await prisma.manuscript.findFirst({ where: { id, deletedAt: null, status: { stepOrder: { gte: COMMERCIALISATION_STEP_ORDER } } }, select: { id: true } });
+    const published = await prisma.manuscript.findFirst({ where: { id, deletedAt: null, status: { stepOrder: { gte: await commercialisationStepOrder() } } }, select: { id: true } });
     if (!published) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable au catalogue." });
     const doc = await prisma.document.findFirst({
       where: { entityType: "manuscript", entityId: id, category: "couverture", deletedAt: null, versions: { some: { mimeType: { startsWith: "image/" } } } },

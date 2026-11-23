@@ -46,7 +46,7 @@ export const HELP_CONTENT: HelpPole[] = [
         title: "Comprendre le circuit d'un ouvrage",
         purpose: "Beaucoup d'écrans ne sont pas des dossiers séparés, mais des ÉTAPES par lesquelles passe chaque ouvrage, du manuscrit au livre fini.",
         procedure: [
-          "Un ouvrage avance étape par étape : comité de lecture → décision → contrat → correction → maquette → infographie → ISBN → BAT Final → impression → stock → vente → clôture de production.",
+          "Un ouvrage avance étape par étape : comité de lecture → décision → contrat → correction → maquette → infographie → ISBN → BAT Final → impression → clôture de production → réception & stock → commercialisation → vente → suivi post-publication → dossier clôturé.",
           "Chaque rubrique d'étape (Comité, Correction, Maquette, BAT…) affiche les ouvrages ACTUELLEMENT à cette étape.",
           "Pour travailler : ouvrez l'ouvrage dans la liste, faites le travail de l'étape (déposer un fichier, remplir une info…), puis cliquez « Valider cette étape ».",
           "L'ouvrage passe alors à l'étape suivante et la personne concernée est prévenue par une notification.",

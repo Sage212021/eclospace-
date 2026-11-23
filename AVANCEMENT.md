@@ -615,6 +615,15 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 23/11/2026 — « Vie du livre » enrichie v2 : tirages, droits, historique (D-077)
+- Suite de D-074. `GET /manuscripts/:id/book-life` étendu (lecture seule, données existantes) :
+  - **Tirages & réimpressions** `reprints[]` : chaque bon d'impression (tirage initial puis réimpressions) — quantité, date, imprimeur, n° de bon, statut.
+  - **Droits d'auteur** `royalties` : acquis (somme `royalty_entries`), versés (somme `royalty_payments`), reste dû, nb de relevés — sur le(s) contrat(s) du titre ; `has_contract:false` sinon.
+  - **Historique** `events[]` : chronologie triée (parution, tirages, réceptions, entrées en stock, remises à l'auteur, première vente, relevés & paiements de droits).
+- Frontend `BookLifeSection` : liste tirages/réimpressions, groupe droits d'auteur, frise « Historique » (date · icône · libellé · détail).
+- Vérifs : `reception-mise-en-stock` **15/15** (reprints, royalties.has_contract=false, events triés) ; tsc back+front + build front au vert. Note « Nouveauté » (STOCK/COM/MKT/FIN/DIRED/DG).
+- **Clôt** l'enrichissement « Vie du livre » prévu par l'architecture de référence.
+
 ### 22/11/2026 (suite) — « Archivage » → « Clôture de production » (D-076, renommage)
 - **Demande opérateur** : « Renomme Archivage en Clôture de production ». Périmètre = **renommage du libellé seul** (pas de repositionnement de l'étape, qui resterait un chantier structurant).
 - **Ce qui change** : le libellé affiché de l'étape (`stepOrder` 20). **Inchangés** : code technique `ARCHIVAGE`, position, département `ARCH`, droits, scellé du dossier.

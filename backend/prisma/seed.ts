@@ -1577,6 +1577,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-vie-du-livre-enrichie",
+      version: "2026.11",
+      title: "Nouveauté — « Vie du livre » s'enrichit : tirages, droits d'auteur et historique",
+      body: "La rubrique « Vie du livre » (sur la fiche d'un ouvrage) va plus loin. Trois nouveautés : 1) TIRAGES & RÉIMPRESSIONS — la liste de chaque tirage (le tirage initial puis les réimpressions), avec la quantité, la date, l'imprimeur et le bon de commande. 2) DROITS D'AUTEUR — droits acquis, déjà versés et reste dû (en FCFA), plus le nombre de relevés, dès qu'un contrat de droits est rattaché à l'ouvrage. 3) HISTORIQUE — la chronologie de la vie du livre, du plus ancien au plus récent : parution, tirages, réceptions, entrées en stock, remises à l'auteur, première vente, relevés et paiements de droits. Tout est consolidé en temps réel à partir des données déjà saisies — rien de plus à renseigner.",
+      permissionModules: ["stock", "commercial", "manuscripts", "royalties"],
+      departmentCodes: ["STOCK", "COM", "MKT", "FIN", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-archivage-devient-cloture-de-production",
       version: "2026.11",
       title: "Nouveauté — L'étape « Archivage » s'appelle désormais « Clôture de production »",

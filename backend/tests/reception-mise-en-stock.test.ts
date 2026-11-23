@@ -259,6 +259,22 @@ describe("Réception et mise en stock (D-056)", () => {
     expect(bl.fabrication.print_runs).toBeGreaterThanOrEqual(1);
     expect(bl.stock.vendable).toBe(480);
     expect(bl.stock.total).toBe(480);
+
+    // Enrichissements (D-077) : réimpressions détaillées, droits, historique.
+    expect(Array.isArray(bl.reprints)).toBe(true);
+    expect(bl.reprints.length).toBe(1);
+    expect(bl.reprints[0].label).toBe("Tirage initial");
+    expect(bl.reprints[0].quantity).toBe(500);
+    // Pas de contrat rattaché à cet ouvrage de test.
+    expect(bl.royalties.has_contract).toBe(false);
+    expect(bl.royalties.earned).toBe(0);
+    // L'historique contient au moins le tirage initial, la réception et l'entrée en stock, triés dans le temps.
+    const types = (bl.events as { type: string; date: string }[]).map((e) => e.type);
+    expect(types).toContain("print_run");
+    expect(types).toContain("reception");
+    expect(types).toContain("stock_entry");
+    const dates = (bl.events as { date: string }[]).map((e) => e.date);
+    expect(dates).toEqual([...dates].sort());
   });
 
   it("compte d'auteur → compte d'éditeur : avenant exigé si un contrat actif à compte d'auteur existe", async () => {

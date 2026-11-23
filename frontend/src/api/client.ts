@@ -528,9 +528,12 @@ export interface BookLife {
   isbn13: string | null;
   price: { amount: number; currency: string } | null;
   fabrication: { print_runs: number; receptions: number; received: number; conform: number; defective: number; handed_to_author: number };
+  reprints: { number: number; label: string; po_number: string; quantity: number; date: string; printer: string | null; status: string }[];
   stock: { vendable: number; declasse: number; total: number };
   sales: { pos_quantity: number; pos_revenue: number; delivered_quantity: number; returns_quantity: number };
   author_copies: number;
+  royalties: { has_contract: boolean; earned: number; paid: number; balance_due: number; statements: number };
+  events: { date: string; type: string; label: string; detail?: string }[];
 }
 export function getBookLife(id: string) {
   return request<BookLife>(`/api/v1/manuscripts/${id}/book-life`);

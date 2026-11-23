@@ -455,13 +455,31 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     // Fabrication : toutes les réceptions de l'ouvrage (sur bon + directes).
     const receipts = await prisma.goodsReceipt.findMany({
       where: { OR: [{ manuscriptId: id }, { po: { quote: { manuscriptId: id } } }] },
-      select: { quantityReceived: true, quantityConform: true, qcVerdict: true, authorHandoverAt: true },
+      orderBy: { receivedAt: "asc" },
+      select: { quantityReceived: true, quantityConform: true, qcVerdict: true, authorHandoverAt: true, receivedAt: true, stockEnteredAt: true },
     });
     const received = receipts.reduce((s, r) => s + r.quantityReceived, 0);
     const conform = receipts.reduce((s, r) => s + (r.quantityConform ?? 0), 0);
     const defective = receipts.reduce((s, r) => s + (r.qcVerdict ? r.quantityReceived - (r.quantityConform ?? 0) : 0), 0);
     const handedToAuthor = receipts.filter((r) => r.authorHandoverAt).reduce((s, r) => s + (r.quantityConform ?? 0), 0);
-    const printRuns = await prisma.purchaseOrder.count({ where: { quote: { manuscriptId: id } } });
+
+    // Réimpressions : chaque bon de commande d'impression = un tirage (le 1ᵉʳ est
+    // le tirage initial, les suivants des réimpressions), le plus ancien d'abord.
+    const orders = await prisma.purchaseOrder.findMany({
+      where: { quote: { manuscriptId: id } },
+      orderBy: { createdAt: "asc" },
+      select: { poNumber: true, orderedQuantity: true, createdAt: true, status: true, printer: { select: { partner: { select: { firstName: true, lastName: true } } } } },
+    });
+    const printRuns = orders.length;
+    const reprints = orders.map((o, idx) => ({
+      number: idx + 1,
+      label: idx === 0 ? "Tirage initial" : `Réimpression ${idx}`,
+      po_number: o.poNumber,
+      quantity: o.orderedQuantity,
+      date: o.createdAt.toISOString(),
+      printer: `${o.printer.partner.firstName ?? ""} ${o.printer.partner.lastName ?? ""}`.trim() || null,
+      status: o.status,
+    }));
 
     // Stock commercialisable (vendable / déclassé).
     const items = isbnIds.length ? await prisma.stockItem.findMany({ where: { isbnId: { in: isbnIds } }, select: { condition: true, quantityPhysical: true } }) : [];
@@ -473,9 +491,10 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     }
 
     // Ventes point de vente (non annulées) + chiffre d'affaires.
-    const pos = isbnIds.length ? await prisma.posSale.findMany({ where: { isbnId: { in: isbnIds }, cancelledAt: null }, select: { quantity: true, unitPrice: true } }) : [];
+    const pos = isbnIds.length ? await prisma.posSale.findMany({ where: { isbnId: { in: isbnIds }, cancelledAt: null }, select: { quantity: true, unitPrice: true, soldAt: true } }) : [];
     const posQty = pos.reduce((s, p) => s + p.quantity, 0);
     const posRevenue = pos.reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0);
+    const firstSaleAt = pos.reduce<Date | null>((min, p) => (!min || p.soldAt < min ? p.soldAt : min), null);
 
     const [delivered, returns, authorCopies] = await Promise.all([
       isbnIds.length ? prisma.deliveryLine.aggregate({ where: { isbnId: { in: isbnIds } }, _sum: { quantity: true } }) : Promise.resolve({ _sum: { quantity: null } }),
@@ -486,6 +505,49 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     const price = printIsbn
       ? await prisma.priceList.findFirst({ where: { isbnId: printIsbn.id }, orderBy: { effectiveFrom: "desc" }, select: { price: true, currency: true } })
       : null;
+
+    // Droits d'auteur : calculés au niveau du/des contrat(s) de l'ouvrage (Lot 5).
+    // earned = somme des lignes de droits (ventes − retours) ; paid = somme des
+    // paiements versés ; balance = reste dû.
+    const contracts = await prisma.contract.findMany({ where: { manuscriptId: id }, select: { id: true } });
+    const contractIds = contracts.map((c) => c.id);
+    let royalties = { has_contract: false, earned: 0, paid: 0, balance_due: 0, statements: 0 };
+    let royaltyStatements: { periodStart: Date; periodEnd: Date; balanceDue: unknown; status: string; createdAt: Date }[] = [];
+    let royaltyPayments: { paidAt: Date; amount: unknown }[] = [];
+    if (contractIds.length) {
+      const [entryAgg, stmts, pays] = await Promise.all([
+        prisma.royaltyEntry.aggregate({ where: { contractId: { in: contractIds } }, _sum: { amount: true } }),
+        prisma.royaltyStatement.findMany({ where: { contractId: { in: contractIds } }, orderBy: { periodEnd: "asc" }, select: { periodStart: true, periodEnd: true, balanceDue: true, status: true, createdAt: true } }),
+        prisma.royaltyPayment.findMany({ where: { statement: { contractId: { in: contractIds } } }, orderBy: { paidAt: "asc" }, select: { paidAt: true, amount: true } }),
+      ]);
+      royaltyStatements = stmts;
+      royaltyPayments = pays;
+      const earned = Number(entryAgg._sum.amount ?? 0);
+      const paid = pays.reduce((s, p) => s + Number(p.amount), 0);
+      royalties = { has_contract: true, earned: Math.round(earned), paid: Math.round(paid), balance_due: Math.round(earned - paid), statements: stmts.length };
+    }
+
+    // Historique événementiel : la « vie » de l'ouvrage, du plus ancien au plus
+    // récent, synthétisée à partir des données datées existantes.
+    const events: { date: string; type: string; label: string; detail?: string }[] = [];
+    if (manuscript.publicationDate) events.push({ date: manuscript.publicationDate.toISOString(), type: "publication", label: "Parution de l'ouvrage" });
+    orders.forEach((o, idx) => {
+      events.push({ date: o.createdAt.toISOString(), type: "print_run", label: idx === 0 ? "Tirage initial" : `Réimpression ${idx}`, detail: `${o.orderedQuantity} ex.` });
+    });
+    for (const r of receipts) {
+      events.push({ date: r.receivedAt.toISOString(), type: "reception", label: "Réception", detail: `${r.quantityReceived} ex. reçus` });
+      if (r.stockEnteredAt) events.push({ date: r.stockEnteredAt.toISOString(), type: "stock_entry", label: "Entrée en stock", detail: `${r.quantityConform ?? 0} ex. conformes` });
+      if (r.authorHandoverAt) events.push({ date: r.authorHandoverAt.toISOString(), type: "author_handover", label: "Remise à l'auteur", detail: `${r.quantityConform ?? 0} ex.` });
+    }
+    if (firstSaleAt) events.push({ date: firstSaleAt.toISOString(), type: "first_sale", label: "Première vente enregistrée" });
+    for (const s of royaltyStatements) {
+      const period = `${s.periodStart.toISOString().slice(0, 10)} → ${s.periodEnd.toISOString().slice(0, 10)}`;
+      events.push({ date: s.createdAt.toISOString(), type: "royalty_statement", label: "Relevé de droits d'auteur", detail: period });
+    }
+    for (const p of royaltyPayments) {
+      events.push({ date: p.paidAt.toISOString(), type: "royalty_payment", label: "Paiement de droits d'auteur", detail: `${Math.round(Number(p.amount)).toLocaleString("fr-FR")} FCFA` });
+    }
+    events.sort((a, b) => a.date.localeCompare(b.date));
 
     const authors = manuscript.workContributors.map((c) => `${c.partner.firstName} ${c.partner.lastName}`.trim()).filter(Boolean);
 
@@ -498,9 +560,12 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       isbn13: printIsbn?.isbn13 ?? null,
       price: price ? { amount: Number(price.price), currency: price.currency } : null,
       fabrication: { print_runs: printRuns, receptions: receipts.length, received, conform, defective, handed_to_author: handedToAuthor },
+      reprints,
       stock: { vendable, declasse, total: vendable + declasse },
       sales: { pos_quantity: posQty, pos_revenue: Math.round(posRevenue), delivered_quantity: delivered._sum.quantity ?? 0, returns_quantity: returns._sum.quantity ?? 0 },
       author_copies: authorCopies._sum.quantity ?? 0,
+      royalties,
+      events,
     });
   });
 

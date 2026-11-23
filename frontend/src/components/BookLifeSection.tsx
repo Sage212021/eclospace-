@@ -17,6 +17,22 @@ function fmt(n: number): string {
   return n.toLocaleString("fr-FR");
 }
 
+function dateFr(iso: string): string {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+const EVENT_ICON: Record<string, string> = {
+  publication: "📖",
+  print_run: "🖨",
+  reception: "📦",
+  stock_entry: "🏷",
+  author_handover: "✍",
+  first_sale: "🛒",
+  royalty_statement: "📄",
+  royalty_payment: "💰",
+};
+
 // Montant FCFA + équivalent euros (parité fixe 655,957).
 function money(n: number, currency: string): string {
   const cur = currency === "XAF" ? "FCFA" : currency;
@@ -71,7 +87,7 @@ function BookLifeContent({ manuscriptId }: { manuscriptId: string }) {
   return (
     <>
       <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 4px" }}>
-        Le parcours de l'ouvrage, de sa sortie à aujourd'hui : fabrication, stock, ventes, retours et prix.
+        Le parcours de l'ouvrage, de sa sortie à aujourd'hui : fabrication, tirages & réimpressions, stock, ventes, droits d'auteur et historique.
       </p>
       {loading && <div style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</div>}
       {err && <div style={{ background: "#F6E2DE", color: "#B23A2E", borderRadius: 8, padding: "9px 12px", fontSize: 12.5 }}>{err}</div>}
@@ -105,8 +121,54 @@ function BookLifeContent({ manuscriptId }: { manuscriptId: string }) {
             {data.author_copies > 0 && <Tile value={fmt(data.author_copies)} label="exemplaires d'auteur" />}
           </Group>
 
+          {data.reprints.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--eclosion-dark, #9a7a12)", marginBottom: 7 }}>Tirages & réimpressions</div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {data.reprints.map((r) => (
+                  <div key={r.po_number} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "7px 10px", display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap", background: r.number === 1 ? "var(--paper, #FAF8F2)" : "#fff" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)", minWidth: 120 }}>{r.label}</span>
+                    <span style={{ fontSize: 13, fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{fmt(r.quantity)} ex.</span>
+                    <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{dateFr(r.date)}{r.printer ? ` · ${r.printer}` : ""} · bon {r.po_number}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Group title="Droits d'auteur">
+            {data.royalties.has_contract ? (
+              <>
+                <Tile value={fmt(data.royalties.earned)} label="droits acquis (FCFA)" />
+                <Tile value={fmt(data.royalties.paid)} label="versés (FCFA)" color="#2F7D4A" />
+                <Tile value={fmt(data.royalties.balance_due)} label="reste dû (FCFA)" color={data.royalties.balance_due > 0 ? "#B87400" : "#2F7D4A"} />
+                <Tile value={fmt(data.royalties.statements)} label="relevé(s)" />
+              </>
+            ) : (
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>Aucun contrat de droits rattaché à cet ouvrage (ex. compte d'auteur, ou contrat non encore enregistré).</p>
+            )}
+          </Group>
+
+          {data.events.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--eclosion-dark, #9a7a12)", marginBottom: 7 }}>Historique</div>
+              <div style={{ display: "grid", gap: 2, borderLeft: "2px solid var(--line)", paddingLeft: 12 }}>
+                {data.events.map((e, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "4px 0", fontSize: 12.5 }}>
+                    <span style={{ width: 86, flexShrink: 0, color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 11.5 }}>{dateFr(e.date)}</span>
+                    <span style={{ flexShrink: 0 }}>{EVENT_ICON[e.type] ?? "•"}</span>
+                    <span style={{ color: "var(--ink)" }}>
+                      <b style={{ fontWeight: 600 }}>{e.label}</b>
+                      {e.detail ? <span style={{ color: "var(--muted)" }}> — {e.detail}</span> : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p style={{ fontSize: 11, color: "var(--muted)", margin: "12px 0 0", fontStyle: "italic" }}>
-            Données consolidées en temps réel. Les réimpressions, droits d'auteur détaillés et l'historique événementiel viendront enrichir cette vue.
+            Données consolidées en temps réel à partir de la fabrication, du stock, des ventes et des droits d'auteur déjà enregistrés.
           </p>
         </div>
       )}

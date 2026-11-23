@@ -1189,6 +1189,22 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             // contrôle qualité / entrée en stock (ou remise à l'auteur) est visible
             // sans avoir à déplier (D-066).
             defaultOpen={activeFocus === "stock" || manuscript.status.code === "CONTROLE_QUALITE_IMPRESSION"}
+            // Clôture de l'étape DEPUIS la carte de réception (D-079) : proposée
+            // seulement quand l'étape courante EST la réception et que l'utilisateur
+            // peut la clôturer. Lève l'incohérence « tout est fait mais EN COURS ».
+            onCloseStep={
+              manuscript.status.code === "CONTROLE_QUALITE_IMPRESSION" && (canValidate || manuscript.canSelfClose)
+                ? () =>
+                    confirmThenAdvance(
+                      {
+                        title: "Clôturer l'étape",
+                        message: `Clôturer « ${manuscript.economicModel === "compte_auteur" ? "Réception et remise à l'auteur" : "Réception et mise en stock"} » et passer à la suite ?`,
+                      },
+                      () => validateStep(manuscript.id, "CONTROLE_QUALITE_IMPRESSION", {}),
+                    )
+                : undefined
+            }
+            stepCloseLabel={manuscript.economicModel === "compte_auteur" ? "Valider la réception et remise à l'auteur" : "Valider la réception et mise en stock"}
           />
         </>
       )}
@@ -2170,6 +2186,7 @@ const GENERIC_VALIDATION_STEPS = [
   "VALIDATION_BAT",
   "CONTRACTUALISATION",
   "IMPRESSION",
+  "CLOTURE_PRODUCTION",
   "CONTROLE_QUALITE_IMPRESSION",
   "ENTREE_STOCK",
   "COMMERCIALISATION",

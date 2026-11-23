@@ -1587,6 +1587,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-11-cloturer-etape-depuis-reception",
+      version: "2026.11",
+      title: "Nouveauté — Clôturer l'étape réception directement depuis la carte",
+      body: "Correction d'une incohérence signalée : à l'étape « Réception et mise en stock », une fois la réception, le contrôle qualité et la remise à l'auteur (ou l'entrée en stock) tous faits (✓), l'étape restait affichée « EN COURS » sans qu'on comprenne pourquoi. En réalité il manquait la validation finale de l'étape (pour la clôturer et passer à la suite), et ce bouton était loin de là où on venait de travailler. Désormais, dès que le travail est terminé, un encadré doré apparaît DANS la carte de réception : « ✓ terminé — il reste à clôturer l'étape », avec un bouton « Valider … » directement sous la main. Un clic clôture l'étape et passe à la suite. (Le panneau de validation habituel, plus haut sur la fiche, reste disponible aussi.)",
+      permissionModules: ["stock", "manuscripts"],
+      departmentCodes: ["STOCK", "FIN", "DIRED", "DG"],
+    },
+    {
       slug: "2026-11-cloture-production-et-compte-auteur",
       version: "2026.11",
       title: "Nouveauté — Clôture de production repositionnée + compte d'auteur sans « stock »",
